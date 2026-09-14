@@ -6,8 +6,15 @@ AdBlocker::AdBlocker(QObject *parent)
 {
 }
 
+void AdBlocker::setEnabled(bool enabled)
+{
+    enabled_ = enabled;
+}
+
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
+    if (!enabled_) return;
+
     const QString host = info.requestUrl().host().toLower();
     static const QStringList blocked = {
         "doubleclick.net", "googlesyndication.com", "googleadservices.com",
