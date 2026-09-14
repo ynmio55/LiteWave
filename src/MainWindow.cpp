@@ -8,6 +8,7 @@
 #include <QToolBar>
 #include <QWebEngineFullScreenRequest>
 #include <QWebEnginePage>
+#include <QWebEngineSettings>
 #include <QLineEdit>
 #include <QProgressBar>
 #include <QStandardPaths>
@@ -108,6 +109,8 @@ QWebEngineView *MainWindow::currentView() const
 QWebEngineView *MainWindow::createView(const QUrl &url)
 {
     auto *view = new QWebEngineView(tabs_);
+    view->settings()->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
+    view->settings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
     const int index = tabs_->addTab(view, "LiteWave");
     tabs_->setCurrentIndex(index);
     tabs_->tabBar()->setVisible(tabs_->count() > 1);
