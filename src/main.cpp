@@ -3,7 +3,7 @@
 
 int main(int argc, char *argv[])
 {
-    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", "--ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy --enable-features=VaapiVideoDecoder,CanvasOopRasterization,DnsOverHttps --doh-templates=https://cloudflare-dns.com/dns-query");
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", "--ignore-gpu-blocklist --enable-gpu-rasterization --enable-zero-copy --enable-async-dns --enable-features=VaapiVideoDecoder,CanvasOopRasterization,DnsOverHttps --doh-templates=https://chrome.cloudflare-dns.com/dns-query --disable-safebrowsing --safebrowsing-disable-auto-update");
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 
     QApplication app(argc, argv);
