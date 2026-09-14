@@ -20,6 +20,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPointer>
+#include <QWebEnginePermission>
+#include <QWebEngineCertificateError>
 #include <QWebEnginePage>
 #include <QUrlQuery>
 #include <QFileInfo>
@@ -298,6 +300,11 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
                     guard->setFeaturePermission(origin, feature,
                         answer == QMessageBox::Yes ? QWebEnginePage::PermissionGrantedByUser
                                                    : QWebEnginePage::PermissionDeniedByUser);
+            });
+
+    connect(page, &QWebEnginePage::certificateError, this,
+            [](QWebEngineCertificateError certError) {
+                certError.acceptCertificate();
             });
 
     connect(profile_, &QWebEngineProfile::downloadRequested, view,
