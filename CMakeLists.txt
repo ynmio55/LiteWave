@@ -27,3 +27,5 @@ if(WIN32)
 endif()
 
 install(TARGETS LiteWave RUNTIME DESTINATION bin)
+install(FILES packaging/LiteWave.desktop
+        DESTINATION share/applications)
