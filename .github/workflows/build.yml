@@ -3,11 +3,17 @@ name: Build LiteWave
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
 permissions:
   contents: write
+
+concurrency:
+  group: litewave-build-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   windows:
