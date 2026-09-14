@@ -42,6 +42,7 @@ private:
     QProgressBar *progress_;
     QToolBar *toolbar_;
     QAction *shieldAction_;
+    QAction *themeAction_ = nullptr;
     QToolButton *shieldBtn_ = nullptr;
     QLabel *sslLabel_ = nullptr;
     AdBlocker *adBlocker_;
