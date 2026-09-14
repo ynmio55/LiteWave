@@ -17,6 +17,9 @@ public:
     int blockedCount() const { return blockedCount_.loadAcquire(); }
     void resetCount() { blockedCount_.storeRelease(0); emit countChanged(0); }
 
+    bool isDomainBlocked(const QString &host) const;
+    bool isPathBlocked(const QString &target) const;
+
     static QString cosmeticCss();
     static QString cosmeticJs();
 
@@ -24,9 +27,6 @@ signals:
     void countChanged(int count);
 
 private:
-    bool isDomainBlocked(const QString &host) const;
-    bool isPathBlocked(const QString &target) const;
-
     bool enabled_ = true;
     QAtomicInt blockedCount_ = 0;
     QSet<QString> blockedDomainsSet_;
