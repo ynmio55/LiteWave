@@ -304,7 +304,8 @@ void MainWindow::openUrl(const QString &text)
         return;
     }
 
-    url = QUrl("https://www.google.com/search?q=" + QUrl::toPercentEncoding(input));
+    // Default search engine: DuckDuckGo (Private, fast, 100% free of Google CAPTCHA/bot checks)
+    url = QUrl("https://duckduckgo.com/?q=" + QUrl::toPercentEncoding(input));
     currentView()->setUrl(url);
 }
 
@@ -689,7 +690,7 @@ body {
 
 <div class="search-container">
   <form class="search-box" onsubmit="go(event)">
-    <input id="q" autofocus placeholder="พิมพ์คำค้นหา Google หรือระบุที่อยู่เว็บไซต์..." autocomplete="off">
+    <input id="q" autofocus placeholder="พิมพ์สิ่งที่ต้องการค้นหา หรือระบุที่อยู่เว็บไซต์..." autocomplete="off">
     <button type="submit">ค้นหา</button>
   </form>
 </div>
@@ -743,7 +744,7 @@ function go(e) {
   const x = document.getElementById('q').value.trim();
   if (!x) return;
   const isUrl = x.indexOf('://') > 0 || x.startsWith('www.') || (x.indexOf('.') > 0 && x.indexOf(' ') < 0);
-  window.location.href = isUrl ? (x.indexOf('://') > 0 ? x : 'https://' + x) : 'https://www.google.com/search?q=' + encodeURIComponent(x);
+  window.location.href = isUrl ? (x.indexOf('://') > 0 ? x : 'https://' + x) : 'https://duckduckgo.com/?q=' + encodeURIComponent(x);
 }
 </script>
 </body>
