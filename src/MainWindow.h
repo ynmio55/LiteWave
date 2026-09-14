@@ -26,6 +26,7 @@ public:
     void loadHome(QWebEngineView *view);
     void handleHomeNavigation(const QUrl &url, QWebEngineView *view);
     void reloadCurrentView();
+    void configurePageShield(QWebEngineView *view, const QUrl &url, bool applyNow = false);
 
 private slots:
     void navigate();
@@ -44,6 +45,8 @@ private:
     QProgressBar *progress_;
     QToolBar *toolbar_;
     QAction *shieldAction_;
+    QAction *siteShieldAction_ = nullptr;
+    QAction *filterInfoAction_ = nullptr;
     QAction *themeAction_ = nullptr;
     QToolButton *shieldBtn_ = nullptr;
     QLabel *sslLabel_ = nullptr;
@@ -55,7 +58,7 @@ private:
     QString findQuery_;
 
     void setupShortcuts();
-    void setupUserScripts();
+    void refreshShield();
     QWebEngineView *currentView() const;
     void openUrl(const QString &text);
     void applyTheme();

@@ -2,6 +2,9 @@
 #include "AdBlocker.h"
 
 #include <QAction>
+#include <QMenu>
+#include <QTimer>
+#include <QSignalBlocker>
 #include <QApplication>
 #include <QIcon>
 #include <QShortcut>
@@ -44,16 +47,8 @@ public:
         : QWebEnginePage(profile, parent), mw_(mw), view_(view) {}
 
 protected:
-    QWebEnginePage *createWindow(WebWindowType type) override {
-        Q_UNUSED(type);
-        if (mw_) {
-            auto *newView = mw_->createView(QUrl());
-            return newView->page();
-        }
-        return nullptr;
-    }
-
     bool acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) override {
+        if (isMainFrame && mw_ && view_) mw_->configurePageShield(view_, url);
         if (url.scheme() == "litewave") {
             if (isMainFrame && mw_ && view_) {
                 MainWindow *mw = mw_;
@@ -112,13 +107,10 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
         profile_->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
     }
 
-    // Register cosmetic CSS & YouTube ad auto-skip script
-    setupUserScripts();
-
     // Profile request interceptor setup
     adBlocker_ = static_cast<AdBlocker *>(profile_->findChild<QObject *>("shield"));
     if (!adBlocker_) {
-        adBlocker_ = new AdBlocker(profile_);
+        adBlocker_ = new AdBlocker(profile_, !privateMode_);
         adBlocker_->setObjectName("shield");
         profile_->setUrlRequestInterceptor(adBlocker_);
     }
@@ -166,11 +158,46 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     bookmark->setToolTip("บันทึกหน้าเว็บนี้ (Ctrl+D)");
     connect(bookmark, &QAction::triggered, this, &MainWindow::addBookmark);
 
-    shieldAction_ = addButton("Shield: เปิด (0)");
+    auto *shieldMenu = new QMenu(this);
+    shieldAction_ = shieldMenu->addAction("เปิด Shield");
     shieldAction_->setCheckable(true);
-    shieldAction_->setChecked(true);
+    shieldAction_->setChecked(adBlocker_->isEnabled());
     connect(shieldAction_, &QAction::toggled, this, &MainWindow::toggleShield);
-    connect(adBlocker_, &AdBlocker::countChanged, this, &MainWindow::updateShieldBadge);
+    siteShieldAction_ = shieldMenu->addAction("ป้องกันเว็บนี้");
+    siteShieldAction_->setCheckable(true);
+    connect(siteShieldAction_, &QAction::toggled, this, [this](bool enabled) {
+        if (!currentView()) return;
+        adBlocker_->setSiteAllowed(currentView()->url(), !enabled);
+        reloadCurrentView(); // All subresource requests now use the same site exception.
+    });
+    shieldMenu->addSeparator();
+    filterInfoAction_ = shieldMenu->addAction(adBlocker_->filterStatus());
+    filterInfoAction_->setEnabled(false);
+    auto *updateFilters = shieldMenu->addAction("อัปเดตรายการบล็อก…");
+    connect(updateFilters, &QAction::triggered, this, [this] {
+        if (adBlocker_->isUpdating()) return;
+        const auto answer = QMessageBox::question(this, "อัปเดต Shield",
+            "ดาวน์โหลดรายการ AdAway ผ่าน HTTPS จาก GitHub?\n"
+            "GitHub จะเห็น IP ของการเชื่อมต่อ แต่ไม่มีการส่งประวัติหรือ URL ที่คุณเปิด\n"
+            "รายการเดิมจะยังใช้งานได้หากอัปเดตไม่สำเร็จ",
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+        if (answer == QMessageBox::Yes) adBlocker_->updateFilters();
+    });
+    connect(adBlocker_, &AdBlocker::filtersUpdated, this, [this](bool, const QString &message) {
+        statusBar()->showMessage(message, 10000);
+        updateShieldBadge(adBlocker_->blockedCount());
+    });
+    shieldBtn_ = new QToolButton(this);
+    shieldBtn_->setObjectName("shieldButton");
+    shieldBtn_->setPopupMode(QToolButton::InstantPopup);
+    shieldBtn_->setMenu(shieldMenu);
+    toolbar->addWidget(shieldBtn_);
+    connect(shieldMenu, &QMenu::aboutToShow, this, [this] { updateShieldBadge(adBlocker_->blockedCount()); });
+    connect(adBlocker_, &AdBlocker::configurationChanged, this, &MainWindow::refreshShield);
+    auto *badgeTimer = new QTimer(this);
+    badgeTimer->setInterval(500); // Coalesce counts: no signal/UI repaint on every request.
+    connect(badgeTimer, &QTimer::timeout, this, [this] { updateShieldBadge(adBlocker_->blockedCount()); });
+    badgeTimer->start();
 
     themeAction_ = addButton(darkMode_ ? "โหมดสว่าง" : "โหมดมืด");
     themeAction_->setToolTip("สลับโหมดมืด/สว่าง");
@@ -234,6 +261,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
     auto *view = new QWebEngineView(tabs_);
     auto *page = new WebPage(profile_, this, view, view);
     view->setPage(page);
+    configurePageShield(view, url);
     auto *s = view->settings();
     s->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
     s->setAttribute(QWebEngineSettings::LocalStorageEnabled, true);
@@ -271,7 +299,12 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
             });
 
     connect(page, &QWebEnginePage::newWindowRequested, this,
-            [this](QWebEngineNewWindowRequest &request) {
+            [this, page](QWebEngineNewWindowRequest &request) {
+                if (adBlocker_->shouldBlockPopup(request.requestedUrl(), page->url(), request.isUserInitiated())) {
+                    adBlocker_->recordBlocked();
+                    statusBar()->showMessage("Shield บล็อกป๊อปอัป — ปิดเฉพาะเว็บนี้ได้จากเมนู Shield", 3500);
+                    return;
+                }
                 auto *newView = createView(QUrl());
                 request.openIn(newView->page());
             });
@@ -517,43 +550,49 @@ void MainWindow::openUrl(const QString &text)
     currentView()->setUrl(url);
 }
 
-void MainWindow::setupUserScripts()
+void MainWindow::configurePageShield(QWebEngineView *view, const QUrl &url, bool applyNow)
 {
-    if (!profile_) return;
+    if (!view || !adBlocker_) return;
+    auto &scripts = view->page()->scripts();
+    const auto old = scripts.find("LiteWaveShield");
+    for (const auto &script : old) scripts.remove(script);
+    QWebEngineScript script;
+    script.setName("LiteWaveShield");
+    script.setSourceCode(AdBlocker::cosmeticScript(adBlocker_->isEnabledForUrl(url)));
+    script.setInjectionPoint(QWebEngineScript::DocumentReady);
+    script.setWorldId(QWebEngineScript::ApplicationWorld);
+    // The top-page owns cosmetic state; subframe requests are still network-filtered.
+    script.setRunsOnSubFrames(false);
+    scripts.insert(script);
+    if (applyNow) view->page()->runJavaScript(script.sourceCode(), QWebEngineScript::ApplicationWorld);
+}
 
-    if (profile_->scripts()->find("LiteWaveCosmeticCss").isEmpty()) {
-        QWebEngineScript cssScript;
-        cssScript.setName("LiteWaveCosmeticCss");
-        const QString cssJson = QString::fromUtf8(
-            QJsonDocument(QJsonArray{AdBlocker::cosmeticCss()}).toJson(QJsonDocument::Compact));
-        cssScript.setSourceCode("(() => { const s = document.createElement('style'); "
-            "s.id = 'litewave-ad-style'; s.textContent = " + cssJson +
-            "[0]; (document.head || document.documentElement).appendChild(s); })();");
-        cssScript.setInjectionPoint(QWebEngineScript::DocumentReady);
-        cssScript.setWorldId(QWebEngineScript::ApplicationWorld);
-        cssScript.setRunsOnSubFrames(true);
-        profile_->scripts()->insert(cssScript);
+void MainWindow::refreshShield()
+{
+    for (int i = 0; i < tabs_->count(); ++i) {
+        auto *view = qobject_cast<QWebEngineView *>(tabs_->widget(i));
+        if (view) configurePageShield(view, view->url(), true);
     }
-
-    if (profile_->scripts()->find("LiteWaveCosmeticJs").isEmpty()) {
-        QWebEngineScript jsScript;
-        jsScript.setName("LiteWaveCosmeticJs");
-        jsScript.setSourceCode(AdBlocker::cosmeticJs());
-        jsScript.setInjectionPoint(QWebEngineScript::DocumentReady);
-        jsScript.setWorldId(QWebEngineScript::ApplicationWorld);
-        jsScript.setRunsOnSubFrames(true);
-        profile_->scripts()->insert(jsScript);
-    }
+    updateShieldBadge(adBlocker_->blockedCount());
 }
 
 void MainWindow::updateShieldBadge(int count)
 {
-    if (shieldAction_) {
-        const QString state = adBlocker_->isEnabled()
-            ? "Shield: เปิด (" + QString::number(count) + ")"
-            : "Shield: ปิด";
-        shieldAction_->setText(state);
-    }
+    if (!shieldBtn_ || !adBlocker_) return;
+    const auto url = currentView() ? currentView()->url() : QUrl();
+    const bool enabled = adBlocker_->isEnabledForUrl(url);
+    const QString label = enabled ? QString("Shield · %1").arg(count)
+        : adBlocker_->isEnabled() ? "Shield · ปิดเว็บนี้" : "Shield · ปิด";
+    if (shieldBtn_->text() != label) shieldBtn_->setText(label);
+    shieldBtn_->setToolTip("จำนวนคำขอ/ป๊อปอัปที่บล็อกในโปรไฟล์นี้ (ไม่รวมการซ่อนด้วย CSS)");
+    const QSignalBlocker globalGuard(shieldAction_);
+    const QSignalBlocker siteGuard(siteShieldAction_);
+    shieldAction_->setChecked(adBlocker_->isEnabled());
+    siteShieldAction_->setChecked(!adBlocker_->isSiteAllowed(url));
+    siteShieldAction_->setEnabled(adBlocker_->isEnabled() &&
+        (url.scheme() == "http" || url.scheme() == "https") && url.host() != "litewave.home");
+    siteShieldAction_->setText("ป้องกันเว็บนี้: " + url.host());
+    filterInfoAction_->setText(adBlocker_->isUpdating() ? "กำลังอัปเดตรายการ…" : adBlocker_->filterStatus());
 }
 
 void MainWindow::updateCurrentUrl(const QUrl &url)
@@ -598,10 +637,9 @@ void MainWindow::addBookmark()
 
 void MainWindow::toggleShield(bool enabled)
 {
-    adBlocker_->setEnabled(enabled);
-    updateShieldBadge(adBlocker_->blockedCount());
-    statusBar()->showMessage(enabled ? "เปิดการบล็อกโฆษณาแล้ว" : "ปิดการบล็อกโฆษณาแล้ว", 2500);
-    if (currentView()) currentView()->reload();
+    adBlocker_->setEnabled(enabled); // refreshShield immediately stops CSS/observers in every tab.
+    statusBar()->showMessage(enabled ? "เปิด Shield แล้ว" : "ปิด Shield ทุกส่วนแล้ว", 3000);
+    reloadCurrentView();
 }
 
 void MainWindow::toggleTheme()
@@ -1083,7 +1121,7 @@ body {
 <div class="brand">
   <span class="c-blue">Lite</span><span class="c-red">W</span><span class="c-yellow">a</span><span class="c-green">v</span><span class="c-red">e</span>
 </div>
-<div class="subtitle">ระบบค้นหาและท่องเว็บความเร็วสูง · ปลอดภัย ไร้โฆษณารบกวน</div>
+<div class="subtitle">ค้นหาและท่องเว็บ · ควบคุมโฆษณาและตัวติดตามด้วย Shield</div>
 
 <div class="search-container">
   <form class="search-box" onsubmit="return submitSearch(event)">
@@ -1119,7 +1157,7 @@ body {
   </div>
 </div>
 
-<div class="footer-note">Shield Active · บล็อกโฆษณาแล้ว %6 รายการ</div>
+<div class="footer-note">Shield · บล็อกคำขอแล้ว %6 รายการ</div>
 
 <script>
 function submitSearch(event) {

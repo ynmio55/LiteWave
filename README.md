@@ -16,9 +16,50 @@
 * **Linux:** กด **`Download Linux (.tar.gz)`** (สร้างบน Ubuntu 24.04 / Qt 6)
 
 ### ตัวเลือกที่ 2: ดาวน์โหลดจากหน้า Releases บน GitHub
-1. มองไปที่แถบขวามือของหน้า GitHub นี้ ตรงหัวข้อ **`Releases`** (จะเห็นคำว่า **`LiteWave v0.8.1`**)
+1. มองไปที่แถบขวามือของหน้า GitHub นี้ ตรงหัวข้อ **`Releases`** (จะเห็นคำว่า **`LiteWave v0.9.0`**)
 2. คลิกที่ชื่อ **`LiteWave Latest`** หรือคลิกที่ลิงก์ 👉 **[ไปที่หน้าดาวน์โหลด Releases](https://github.com/ynmio55/LiteWave/releases/latest)**
 3. เลื่อนลงมาใต้หัวข้อ **Assets** แล้วกดดาวน์โหลดไฟล์ `.exe` หรือ `.zip` ได้ทันที! (ไม่ต้อง Login ก็โหลดได้)
+
+
+## Shield 0.9.0
+
+- รายการ AdAway 6,540 โดเมนแนบมาในโปรแกรม + กฎโดเมน/เส้นทางของ LiteWave
+- เมนู **Shield → ป้องกันเว็บนี้** เปิด/ปิดเฉพาะ hostname ปัจจุบันได้; ปิดทั้งหมดจะหยุดทั้งการบล็อกคำขอ การซ่อน CSS และตัวสังเกตหน้าเว็บ
+- **อัปเดตรายการบล็อก…** ดาวน์โหลด AdAway ผ่าน HTTPS หลังคุณกดยืนยันเท่านั้น (GitHub เห็น IP แต่ไม่ได้รับประวัติ/URL ที่ท่องเว็บ); ไม่เปลี่ยน DNS/hosts ของระบบ
+- อัปเดตตรวจรูปแบบและขนาด เขียนไฟล์แบบ atomic; เมื่อเครือข่ายล้มเหลวหรือรายการผิดรูปแบบจะใช้รายการเดิมต่อ
+- โหมด Private ไม่บันทึกข้อยกเว้นหรือรายการอัปเดตลงดิสก์
+- ป้องกันป๊อปอัปที่เปิดเอง และปลายทางโฆษณาที่รู้จัก; ถ้าหน้าล็อกอิน/ชำระเงินเปิดไม่ได้ ให้ปิด Shield เฉพาะเว็บแล้วลองใหม่
+- ซ่อนช่องโฆษณาที่โหลดตามหลัง และช่วยกด **ปุ่มข้ามที่มองเห็นได้** บน YouTube; ไม่เร่งวิดีโอ ไม่ปิดเสียง ไม่เปลี่ยนเวลา
+- ตัวนับคือคำขอ/ป๊อปอัปที่ถูกบล็อกทั้งโปรไฟล์ในรอบเปิดโปรแกรม ไม่ใช่จำนวนโฆษณาหรือจำนวนที่ซ่อนด้วย CSS
+- ไม่ใช่ตัวประมวลผล EasyList/uBlock เต็มรูปแบบ โฆษณาที่รวมมากับสตรีม, โฆษณาฝังในคลิป, anti-adblock และเนื้อหาในบาง iframe ยังบล็อกไม่ได้
+- กฎ AdAway ใช้แบบ exact hostname; เฉพาะโดเมนเครือข่ายโฆษณาที่ LiteWave ระบุเองเท่านั้นที่รวม subdomain ไม่บล็อกตามหมวดเว็บผู้ใหญ่
+- [ที่มาและเครดิตรายการ](THIRD_PARTY_NOTICES.md)
+
+### อัปเดต Fedora ที่ติดตั้งจากซอร์ส
+
+ปิด LiteWave ทุกหน้าต่างก่อน แล้วรัน (หยุดทันทีหากขั้นตอนใดผิดพลาด):
+
+```bash
+cd ~/LiteWave &&
+git pull --ff-only origin main &&
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release &&
+cmake --build build -j2 &&
+sudo cmake --install build &&
+LiteWave
+```
+
+### ทดสอบ Shield
+
+```bash
+node tests/shield-script.test.cjs
+cmake -S . -B build -DBUILD_TESTING=ON
+cmake --build build -j2
+ctest --test-dir build --output-on-failure
+```
+
+CI ทดสอบตัวกรอง C++ ทั้ง Windows/Qt 6.8 และ Linux/Qt 6.4 รวมถึงการซ่อน/คืน DOM,
+การบล็อกคำขอจริง, toggle และค่าความเร็ว/เสียงวิดีโอบน Qt WebEngine ของ Linux
+ผลนี้ไม่ใช่การรับรองว่าใช้งานทุกเว็บไซต์ได้
 
 ## ความเข้ากันได้ของเว็บไซต์และวิดีโอ
 
@@ -94,8 +135,8 @@ cmake --build build --config Release
 ## สร้าง Release
 
 ```bash
-git tag v0.7.0
-git push origin v0.7.0
+git tag v0.9.0
+git push origin v0.9.0
 ```
 
 GitHub Actions จะสร้างไฟล์ Windows Installer และ Linux package ให้อัตโนมัติ

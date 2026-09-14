@@ -1,1 +1,9 @@
-<RCC><qresource prefix="/icons"><file alias="litewave.svg">assets/litewave.svg</file></qresource></RCC>
+<RCC>
+  <qresource prefix="/icons">
+    <file alias="litewave.svg">assets/litewave.svg</file>
+  </qresource>
+  <qresource prefix="/shield">
+    <file alias="shield.js">assets/shield.js</file>
+    <file alias="adaway-hosts.txt">assets/filters/adaway-hosts.txt</file>
+  </qresource>
+</RCC>
