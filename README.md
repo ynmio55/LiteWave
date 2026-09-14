@@ -6,20 +6,33 @@ LiteWave เป็นเว็บเบราว์เซอร์ขนาด�
 
 - ค้นหาด้วยคำปกติ ไม่ต้องพิมพ์ URL
 - เปิด URL โดยตรงเมื่อพิมพ์โดเมนหรือ `https://`
-- แท็บหลายหน้า
+- แท็บหลายหน้า และซ่อนแถบแท็บเมื่อมีแท็บเดียว
+- Fullscreen สำหรับวิดีโอ
 - ย้อนกลับ ถัดไป รีเฟรช และหน้าแรก
 - Bookmark บันทึกถาวร
 - Shield เปิด/ปิดได้
 - บล็อกโดเมนโฆษณา ตัวติดตาม และ URL โฆษณาที่พบบ่อย
 - โหมดมืด/สว่าง
 - Cookies และ Cache ถาวร
-- สร้างไฟล์ดาวน์โหลด Windows/Linux ผ่าน GitHub Actions
+- ไอคอน LiteWave ของตัวเอง
+- GitHub Actions สร้างตัวติดตั้ง Windows และแพ็กเกจ Linux
 
 > ไม่มี AdBlock ใดรับประกันบล็อกโฆษณาได้ 100% โดยเฉพาะโฆษณาใน YouTube ซึ่งเปลี่ยนระบบอยู่เสมอ หากบล็อกมากเกินไปอาจทำให้เว็บหรือวิดีโอเล่นไม่ได้
 
-## ติดตั้ง Fedora
+## ดาวน์โหลด Windows
 
-### วิธีเปิดจากไฟล์ที่ Build เอง
+เข้า GitHub ของโปรเจกต์ แล้วเลือก:
+
+**Actions → Build LiteWave → Run workflow → เลือก workflow ล่าสุด**
+
+ดาวน์โหลดไฟล์:
+
+- `LiteWave-Setup-Windows-x64.exe` — ดับเบิลคลิกเพื่อติดตั้ง
+- `LiteWave-Windows-x64-portable.zip` — แตกไฟล์แล้วเปิดใช้งาน
+
+ถ้าสร้าง Release จาก tag แล้ว ให้ดาวน์โหลดตัวติดตั้งจาก **Releases → Assets**
+
+## ติดตั้ง Fedora จากซอร์ส
 
 ```bash
 sudo dnf install gcc-c++ cmake qt6-qtbase-devel qt6-qtwebengine-devel
@@ -31,45 +44,35 @@ cmake --build build -j$(nproc)
 ./build/LiteWave
 ```
 
-### ติดตั้งเข้าเครื่องและเมนู Applications
+ติดตั้งเข้าเมนู Applications:
 
 ```bash
 sudo cmake --install build
-sudo cp packaging/LiteWave.desktop /usr/share/applications/
 sudo update-desktop-database /usr/share/applications 2>/dev/null || true
 ```
 
-เปิดจาก Terminal:
+เปิดภายหลังได้ด้วย:
 
 ```bash
 LiteWave
 ```
 
-ถ้าเมนูยังไม่พบ ให้ Logout แล้ว Login ใหม่
+## ดาวน์โหลดแพ็กเกจ Linux
 
-### ดาวน์โหลดแพ็กเกจ Linux
-
-เข้าแท็บ **Actions** หรือ **Releases** ของ GitHub แล้วดาวน์โหลด `LiteWave-Linux-x64.tar.gz`
+ดาวน์โหลด `LiteWave-Linux-x64.tar.gz` จาก **Actions** หรือ **Releases** แล้วรัน:
 
 ```bash
 tar -xzf LiteWave-Linux-x64.tar.gz
 cd LiteWave
 sudo install -Dm755 LiteWave /usr/local/bin/LiteWave
 sudo install -Dm644 LiteWave.desktop /usr/share/applications/LiteWave.desktop
+sudo update-desktop-database /usr/share/applications 2>/dev/null || true
 LiteWave
 ```
 
-## Windows
+## Build Windows เอง
 
-### ดาวน์โหลดไฟล์พร้อมใช้
-
-เข้า GitHub ที่แท็บ **Actions > Build LiteWave > Artifacts** แล้วดาวน์โหลด `LiteWave-Windows-x64.zip` จากนั้นแตกไฟล์และดับเบิลคลิก `LiteWave.exe`
-
-ถ้ามี GitHub Release ให้ดาวน์โหลดไฟล์เดียวกันจากส่วน **Assets**
-
-### Build เอง
-
-ติดตั้ง Qt 6 พร้อม Qt WebEngine และ CMake แล้วรัน:
+ติดตั้ง Qt 6 พร้อม Qt WebEngine, Visual Studio 2022 และ CMake:
 
 ```powershell
 cmake -S . -B build
@@ -78,13 +81,11 @@ cmake --build build --config Release
 
 ไฟล์อยู่ที่ `build/Release/LiteWave.exe`
 
-## สร้างไฟล์ดาวน์โหลดด้วย GitHub
-
-Workflow จะทำงานเมื่อกด **Actions > Build LiteWave > Run workflow** หรือเมื่อสร้าง tag เช่น:
+## สร้าง Release
 
 ```bash
-git tag v0.6.0
-git push origin v0.6.0
+git tag v0.7.0
+git push origin v0.7.0
 ```
 
-เมื่อใช้ tag จะสร้าง GitHub Release พร้อมไฟล์ Windows และ Linux อัตโนมัติ
+GitHub Actions จะสร้างไฟล์ Windows Installer และ Linux package ให้อัตโนมัติ
