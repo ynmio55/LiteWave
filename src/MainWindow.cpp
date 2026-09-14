@@ -149,7 +149,7 @@ void MainWindow::openUrl(const QString &text)
         const QString address = input.contains("://") ? input : "https://" + input;
         url = QUrl(address);
     } else {
-        url = QUrl("https://www.google.com/search?q=" + QUrl::toPercentEncoding(input));
+        url = QUrl("https://search.brave.com/search?q=" + QUrl::toPercentEncoding(input));
     }
 
     if (!url.isValid()) return;
@@ -225,7 +225,7 @@ h2{font-size:18px;font-weight:500;margin:42px 0 15px}.sites{display:grid;grid-te
 <div class="site" onclick="openSite('https://www.youtube.com')"><div class="icon">▶</div><span>YouTube</span></div>
 <div class="site" onclick="openSite('https://github.com')"><div class="icon">⌘</div><span>GitHub</span></div>
 <div class="site" onclick="help()"><div class="icon">?</div><span>AI ช่วยค้นหา</span></div>
-</div><div class="note">LiteWave 0.4 · Shield บล็อกตัวติดตามและโฆษณาจากโดเมนที่รู้จัก</div></main>
+</div><div class="note">LiteWave 0.5 · Brave Search + Shield บล็อกตัวติดตามและโฆษณาจากโดเมนที่รู้จัก</div></main>
 <script>
 function openSite(u){window.location.href=u}
 function help(){document.getElementById('q').value='ช่วยค้นหา ';document.getElementById('q').focus()}
@@ -234,7 +234,7 @@ function go(e){
   const x=document.getElementById('q').value.trim();
   if(!x)return;
   const isUrl=x.indexOf('://')>0 || x.startsWith('www.') || (x.indexOf('.')>0 && x.indexOf(' ')<0);
-  window.location.href=isUrl?(x.indexOf('://')>0?x:'https://'+x):'https://www.google.com/search?q='+encodeURIComponent(x);
+  window.location.href=isUrl?(x.indexOf('://')>0?x:'https://'+x):'https://search.brave.com/search?q='+encodeURIComponent(x);
 }
 </script></body></html>
 )HTML");
