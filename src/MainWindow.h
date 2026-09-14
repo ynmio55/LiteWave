@@ -22,6 +22,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr, bool privateMode = false);
     ~MainWindow() override;
     void loadHome(QWebEngineView *view);
+    void handleHomeNavigation(const QUrl &url, QWebEngineView *view);
     void reloadCurrentView();
 
 private slots:
