@@ -80,6 +80,13 @@ bool AdBlocker::isPathBlocked(const QString &target) const
 
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
+    // Override request headers to prevent QtWebEngine bot detection & fingerprinting
+    info.setHttpHeader("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+    info.setHttpHeader("Sec-CH-UA", "\"Chromium\";v=\"128\", \"Not;A=Brand\";v=\"24\", \"Google Chrome\";v=\"128\"");
+    info.setHttpHeader("Sec-CH-UA-Mobile", "?0");
+    info.setHttpHeader("Sec-CH-UA-Platform", "\"Linux\"");
+    info.setHttpHeader("Accept-Language", "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
+
     if (!enabled_) return;
 
     const QUrl request = info.requestUrl();
@@ -117,6 +124,10 @@ QString AdBlocker::cosmeticJs()
 {
     return QStringLiteral(R"JS(
         (function() {
+            try {
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            } catch(e) {}
+
             function cleanAds() {
                 try {
                     var video = document.querySelector('video');
@@ -142,4 +153,5 @@ QString AdBlocker::cosmeticJs()
         })();
     )JS");
 }
+
 

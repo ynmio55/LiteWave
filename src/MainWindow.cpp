@@ -46,10 +46,16 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     resize(1320, 840);
 
     privateMode_ = privateMode;
+    const QString storagePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/Storage";
+    const QString cachePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/Cache";
+
     static QWebEngineProfile *normalProfile = new QWebEngineProfile("LiteWave", qApp);
     profile_ = privateMode_ ? new QWebEngineProfile(this) : normalProfile;
     profile_->setHttpUserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+    profile_->setHttpAcceptLanguage("th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
     if (!privateMode_) {
+        profile_->setPersistentStoragePath(storagePath);
+        profile_->setCachePath(cachePath);
         profile_->setPersistentCookiesPolicy(QWebEngineProfile::AllowPersistentCookies);
         profile_->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
     }
