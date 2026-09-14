@@ -272,14 +272,6 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
 
     connect(page, &QWebEnginePage::newWindowRequested, this,
             [this](QWebEngineNewWindowRequest &request) {
-                const QUrl targetUrl = request.requestedUrl();
-                if (adBlocker_ && adBlocker_->isEnabled() && targetUrl.isValid()) {
-                    const QString host = targetUrl.host().toLower();
-                    const QString target = (targetUrl.path() + "?" + targetUrl.query()).toLower();
-                    if (adBlocker_->isDomainBlocked(host) || adBlocker_->isPathBlocked(target)) {
-                        return; // Block ad popup window!
-                    }
-                }
                 auto *newView = createView(QUrl());
                 request.openIn(newView->page());
             });

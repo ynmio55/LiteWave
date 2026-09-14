@@ -10,9 +10,7 @@ AdBlocker::AdBlocker(QObject *parent)
         "adservice.google.com", "pagead2.googlesyndication.com", "ad.doubleclick.net",
         "securepubads.g.doubleclick.net", "stats.g.doubleclick.net", "video-stats.l.google.com",
         "tpc.googlesyndication.com", "ads.yahoo.com", "adnxs.com", "adform.net",
-        "taboola.com", "outbrain.com", "popads.net", "popcash.net", "exoclick.com",
-        "juicyads.com", "trafficjunky.com", "syndicatedsearch.goog", "realsrv.com",
-        "exosrv.com", "trafficfactory.biz", "clickadu.com", "monetag.com",
+        "taboola.com", "outbrain.com",
         "scorecardresearch.com", "zedo.com", "moatads.com", "criteo.com",
         "rubiconproject.com", "pubmatic.com", "openx.net", "casalemedia.com",
         "contextweb.com", "advertising.com", "turn.com", "33across.com",
@@ -23,7 +21,8 @@ AdBlocker::AdBlocker(QObject *parent)
         "hotjar.com", "mouseflow.com", "fullstory.com", "mixpanel.com",
         "app-measurement.com", "segment.io", "amplitude.com", "umeng.com",
         "analytics.yahoo.com", "amazon-adsystem.com", "adsterra.com",
-        "propellerads.com", "a-ads.com", "hilltopads.com", "adstriker.com",
+        "propellerads.com", "a-ads.com",
+        "hilltopads.com", "clickadu.com", "monetag.com", "adstriker.com",
         "adcash.com", "adtrue.com", "exponential.com", "yieldmo.com",
         "spotxchange.com", "teads.tv", "admanmedia.com", "bebi.com",
         "clksite.com", "coinhive.com", "luckyorange.com", "crazyegg.com",
@@ -42,15 +41,9 @@ AdBlocker::AdBlocker(QObject *parent)
     }
 
     blockedPathParts_ = {
-        "/pagead/", "/pagead2.", "/adsystem/", "/adservice/",
-        "/advertising/", "/advertisement/", "/adserver/",
-        "/prebid/", "/bidrequest", "/tracking/", "/tracker/",
-        "/telemetry/", "/doubleclick/", "/api/stats/ads",
-        "googlesyndication", "googleadservices", "ad_click",
-        "adservice.google", "/gampad/ads", "/pcs/activeview",
-        "exoclick", "juicyads", "popads", "popcash", "adsterra",
-        "trafficjunky", "propellerads", "monetag", "clickadu",
-        "/popunder", "/pop_up", "/ad_banner"
+        "/pagead/js/", "/pagead/conversion/", "/pagead/gen_204",
+        "/pagead2.googlesyndication", "/adservice.google",
+        "/gampad/ads", "/pcs/activeview", "/doubleclick/pagead"
     };
 }
 
@@ -83,22 +76,14 @@ bool AdBlocker::isPathBlocked(const QString &target) const
 
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
-    // Standardize User-Agent header to latest stable Windows 10 Chrome
-    info.setHttpHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
-    info.setHttpHeader("Sec-CH-UA", "\"Chromium\";v=\"128\", \"Not;A=Brand\";v=\"24\", \"Google Chrome\";v=\"128\"");
-    info.setHttpHeader("Sec-CH-UA-Mobile", "?0");
-    info.setHttpHeader("Sec-CH-UA-Platform", "\"Windows\"");
-    info.setHttpHeader("Accept-Language", "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
-
     if (!enabled_) return;
 
     const QUrl request = info.requestUrl();
     const QString host = request.host().toLower();
     const QString target = (request.path() + "?" + request.query()).toLower();
 
-    // Never block reCAPTCHA, hCaptcha, or Google verification URLs
-    if (host.contains("recaptcha") || target.contains("recaptcha") ||
-        host.contains("hcaptcha") || target.contains("sorry/index")) {
+    // Never block reCAPTCHA or Google verification URLs
+    if (host.contains("recaptcha") || target.contains("recaptcha") || target.contains("sorry/index")) {
         return;
     }
 
@@ -113,15 +98,11 @@ QString AdBlocker::cosmeticCss()
 {
     return QStringLiteral(R"CSS(
         iframe[src*="doubleclick"], iframe[src*="googlesyndication"], iframe[src*="adservice"], iframe[src*="adsystem"],
-        iframe[src*="exoclick"], iframe[src*="juicyads"], iframe[src*="popads"], iframe[src*="popcash"], iframe[src*="adsterra"],
-        iframe[src*="trafficjunky"], iframe[src*="propellerads"], iframe[src*="monetag"], iframe[src*="clickadu"],
         .adsbygoogle, .a-ad, [id*="google_ads"], [id*="div-gpt-ad"], [class*="google-auto-placed"],
         ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, ytd-statement-banner-renderer,
         ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer, .ytd-action-companion-ad-renderer,
-        #player-ads, .video-ads, .ytp-ad-module, .ytp-ad-overlay-container, .ytp-ad-message-container,
-        ytd-ad-slot-renderer, ytd-promoted-video-renderer, .ytp-ad-button, .ytp-ad-text,
-        .popunder, [class*="popunder"], [id*="popunder"], [class*="ad-box"], [id*="ad-box"],
-        div[class*="ad-banner"], div[id*="ad-banner"], [class*="ad-container"], [id*="ad-container"]
+        #player-ads, .ytp-ad-overlay-container, .ytp-ad-message-container,
+        ytd-ad-slot-renderer, ytd-promoted-video-renderer, .ytp-ad-button, .ytp-ad-text
         { display: none !important; visibility: hidden !important; width: 0px !important; height: 0px !important; pointer-events: none !important; opacity: 0 !important; }
     )CSS");
 }
@@ -130,39 +111,16 @@ QString AdBlocker::cosmeticJs()
 {
     return QStringLiteral(R"JS(
 (() => {
-    try {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    } catch(e) {}
-
+    // Only touch YouTube's visible skip buttons; never seek, mute or speed up content.
     const host = location.hostname;
-
-    function cleanGlobalAds() {
-        try {
-            // YouTube Fast Ad-Skipper
-            if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
-                const video = document.querySelector('video');
-                const adPlaying = document.querySelector('.ad-interrupting, .html5-ad-state, .ytp-ad-player-overlay, .ytp-ad-module');
-                if (video && adPlaying) {
-                    if (!isNaN(video.duration) && video.duration > 0 && isFinite(video.duration)) {
-                        video.currentTime = video.duration - 0.1;
-                    }
-                    video.playbackRate = 16.0;
-                    video.muted = true;
-                }
-                const skipBtns = document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-ad-overlay-close-button, .ytp-ad-skip-button-slot, .ytp-ad-skip-button-container');
-                skipBtns.forEach(btn => { if (btn && typeof btn.click === 'function') btn.click(); });
-            }
-
-            // Remove ad elements globally
-            const adNodes = document.querySelectorAll('ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, #player-ads, .ytd-in-feed-ad-layout-renderer, .adsbygoogle, [id*="google_ads"], iframe[src*="exoclick"], iframe[src*="popads"], iframe[src*="juicyads"], iframe[src*="adsterra"]');
-            adNodes.forEach(node => {
-                if (node && node.parentNode) { node.parentNode.removeChild(node); }
+    if (host !== 'youtube.com' && !host.endsWith('.youtube.com')) return;
+    setInterval(() => {
+        if (document.hidden) return;
+        document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-ad-overlay-close-button')
+            .forEach(button => {
+                if (button.getClientRects().length && !button.disabled) button.click();
             });
-        } catch(e) {}
-    }
-
-    setInterval(cleanGlobalAds, 500);
-    document.addEventListener('DOMContentLoaded', cleanGlobalAds);
+    }, 1000);
 })();
 )JS");
 }
