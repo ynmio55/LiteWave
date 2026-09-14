@@ -1,5 +1,5 @@
 
-# LiteWave 🌊 — เว็บเบราว์เซอร์ความเร็วสูง
+# LiteWave — เว็บเบราว์เซอร์ความเร็วสูง
 
 [![Download Windows Installer](https://img.shields.io/badge/Download_Windows-Installer_.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Setup-Windows-x64.exe)
 [![Download Windows Portable](https://img.shields.io/badge/Download_Windows-Portable_.zip-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Windows-x64-portable.zip)
@@ -8,14 +8,14 @@
 
 ---
 
-## ⚡ วิธีดาวน์โหลดติดตั้งง่ายๆ (สำหรับผู้ใช้ทั่วไป)
+##  วิธีดาวน์โหลดติดตั้งง่ายๆ (สำหรับผู้ใช้ทั่วไป)
 
-### 📥 ตัวเลือกที่ 1: กดปุ่มดาวน์โหลดโดยตรงข้างบนนี้
+### ตัวเลือกที่ 1: กดปุ่มดาวน์โหลดโดยตรงข้างบนนี้
 * **Windows (แนะนำ):** กดปุ่ม **`Download Windows Installer (.exe)`** แล้วกดรันเพื่อติดตั้งได้ทันที
 * **Windows ไม่ต้องติดตั้ง:** กด **`Download Windows Portable (.zip)`** แตกไฟล์แล้วเปิด `LiteWave.exe` เล่นได้เลย
 * **Linux:** กด **`Download Linux (.tar.gz)`** (สร้างบน Ubuntu 24.04 / Qt 6)
 
-### 📌 ตัวเลือกที่ 2: ดาวน์โหลดจากหน้า Releases บน GitHub
+### ตัวเลือกที่ 2: ดาวน์โหลดจากหน้า Releases บน GitHub
 1. มองไปที่แถบขวามือของหน้า GitHub นี้ ตรงหัวข้อ **`Releases`** (จะเห็นคำว่า **`LiteWave Latest (v0.8.0)`**)
 2. คลิกที่ชื่อ **`LiteWave Latest`** หรือคลิกที่ลิงก์ 👉 **[ไปที่หน้าดาวน์โหลด Releases](https://github.com/ynmio55/LiteWave/releases/latest)**
 3. เลื่อนลงมาใต้หัวข้อ **Assets** แล้วกดดาวน์โหลดไฟล์ `.exe` หรือ `.zip` ได้ทันที! (ไม่ต้อง Login ก็โหลดได้)
