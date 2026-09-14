@@ -16,10 +16,13 @@ private slots:
     void navigate();
     void updateUrl(const QUrl &url);
     void updateTitle(const QString &title);
+    void toggleTheme();
 
 private:
     QLineEdit *urlBar_;
     QWebEngineView *webView_;
+    bool darkMode_ = false;
 
     void openUrl(const QString &text);
+    void applyTheme();
 };
