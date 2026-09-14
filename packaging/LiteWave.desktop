@@ -1,9 +1,14 @@
 [Desktop Entry]
+Version=1.0
 Type=Application
 Name=LiteWave
-Comment=Lightweight web browser
-Exec=/usr/local/bin/LiteWave
+GenericName=Web Browser
+Comment=Fast and private web browser
+Exec=/usr/local/bin/LiteWave %U
+TryExec=/usr/local/bin/LiteWave
 Icon=web-browser
 Terminal=false
 Categories=Network;WebBrowser;
+MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
 StartupWMClass=LiteWave
