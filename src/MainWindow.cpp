@@ -16,7 +16,9 @@
 #include <QTabBar>
 #include <QToolBar>
 #include <QWebEngineFullScreenRequest>
+#include <QWebEngineNewWindowRequest>
 #include <QWebEnginePage>
+#include <QFileInfo>
 #include <QWebEngineSettings>
 #include <QLineEdit>
 #include <QProgressBar>
@@ -156,6 +158,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     tabs_->setTabsClosable(true);
     tabs_->setDocumentMode(true);
     tabs_->setMovable(true);
+    tabs_->setTabBarAutoHide(true);
     setCentralWidget(tabs_);
 
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int) {
@@ -194,12 +197,38 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
                 if (request.toggleOn()) {
                     toolbar_->hide();
                     tabs_->tabBar()->hide();
+                    statusBar()->hide();
                     showFullScreen();
                 } else {
                     showNormal();
                     toolbar_->show();
+                    statusBar()->show();
                     tabs_->tabBar()->setVisible(tabs_->count() > 1);
                 }
+            });
+
+    connect(page, &QWebEnginePage::newWindowRequested, this,
+            [this](QWebEngineNewWindowRequest &request) {
+                auto *newView = createView(QUrl());
+                request.openIn(newView->page());
+            });
+
+    connect(profile_, &QWebEngineProfile::downloadRequested, this,
+            [this](QWebEngineDownloadRequest *download) {
+                if (!download) return;
+                const QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+                const QString name = download->downloadFileName().isEmpty()
+                    ? QStringLiteral("LiteWave-download") : download->downloadFileName();
+                download->setDownloadDirectory(dir);
+                download->setDownloadFileName(name);
+                connect(download, &QWebEngineDownloadRequest::finished, this,
+                        [this, download] {
+                            const bool ok = download->state() == QWebEngineDownloadRequest::DownloadCompleted;
+                            statusBar()->showMessage(ok ? "ดาวน์โหลดเสร็จแล้ว: " + download->downloadFileName()
+                                                        : "ดาวน์โหลดไม่สำเร็จ", 5000);
+                        });
+                download->accept();
+                statusBar()->showMessage("กำลังดาวน์โหลด: " + name, 2500);
             });
 
     connect(view, &QWebEngineView::urlChanged, this, &MainWindow::updateCurrentUrl);
@@ -297,13 +326,13 @@ void MainWindow::setupShortcuts()
     key("F11", [this]{
         if(isFullScreen()) {
             if(currentView()) currentView()->triggerPageAction(QWebEnginePage::ExitFullScreen);
-            showNormal(); toolbar_->show(); tabs_->tabBar()->setVisible(tabs_->count()>1);
+            showNormal(); toolbar_->show(); statusBar()->show(); tabs_->tabBar()->setVisible(tabs_->count()>1);
         } else { toolbar_->hide(); tabs_->tabBar()->hide(); statusBar()->hide(); showFullScreen(); }
     });
     key("Escape", [this]{
         if(!isFullScreen()) return;
         if(currentView()) currentView()->triggerPageAction(QWebEnginePage::ExitFullScreen);
-        showNormal(); toolbar_->show(); tabs_->tabBar()->setVisible(tabs_->count()>1);
+        showNormal(); toolbar_->show(); statusBar()->show(); tabs_->tabBar()->setVisible(tabs_->count()>1);
     });
 }
 
@@ -356,8 +385,8 @@ void MainWindow::openUrl(const QString &text)
         }
     }
 
-    // Default search engine: Brave Search (Private, fast, 100% free of CAPTCHA/bot checks)
-    url = QUrl("https://search.brave.com/search?q=" + QUrl::toPercentEncoding(input));
+    // Default search engine: Google. URLs and normal words are handled separately above.
+    url = QUrl("https://www.google.com/search?q=" + QUrl::toPercentEncoding(input));
     currentView()->setUrl(url);
 }
 
@@ -767,9 +796,9 @@ body {
 
 <div class="search-container">
   <form class="search-box" onsubmit="go(event)">
-    <select id="engine">
-      <option value="brave">Brave Search</option>
+    <select id="engine" aria-label="เครื่องมือค้นหา">
       <option value="google">Google Search</option>
+      <option value="brave">Brave Search</option>
       <option value="duckduckgo">DuckDuckGo</option>
     </select>
     <input id="q" autofocus placeholder="ค้นหา หรือป้อนที่อยู่เว็บไซต์..." autocomplete="off">
@@ -831,7 +860,7 @@ function go(e) {
     return;
   }
   const engine = document.getElementById('engine').value;
-  let targetUrl = 'https://search.brave.com/search?q=' + encodeURIComponent(x);
+  let targetUrl = 'https://www.google.com/search?q=' + encodeURIComponent(x);
   if (engine === 'google') {
     targetUrl = 'https://www.google.com/search?q=' + encodeURIComponent(x);
   } else if (engine === 'duckduckgo') {
