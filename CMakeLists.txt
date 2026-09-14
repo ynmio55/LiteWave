@@ -30,3 +30,6 @@ endif()
 install(TARGETS LiteWave RUNTIME DESTINATION bin)
 install(FILES packaging/LiteWave.desktop
         DESTINATION /usr/share/applications)
+install(FILES assets/litewave.svg
+        DESTINATION /usr/share/icons/hicolor/scalable/apps
+        RENAME litewave.svg)
