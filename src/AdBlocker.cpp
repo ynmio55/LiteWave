@@ -1,5 +1,6 @@
 #include "AdBlocker.h"
 #include <QUrl>
+#include <QStringList>
 
 AdBlocker::AdBlocker(QObject *parent)
     : QWebEngineUrlRequestInterceptor(parent)
