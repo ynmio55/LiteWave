@@ -9,11 +9,11 @@ class QProgressBar;
 class QTabWidget;
 class QWebEngineView;
 class QAction;
+class QNetworkAccessManager;
 
 class MainWindow final : public QMainWindow
 {
     Q_OBJECT
-
 public:
     explicit MainWindow(QWidget *parent = nullptr);
 
@@ -33,11 +33,13 @@ private:
     QProgressBar *progress_;
     QAction *shieldAction_;
     AdBlocker *adBlocker_;
+    QNetworkAccessManager *network_;
     bool darkMode_ = false;
 
     QWebEngineView *currentView() const;
     QWebEngineView *createView(const QUrl &url);
     void openUrl(const QString &text);
+    void searchGoogleApi(const QString &query);
     void applyTheme();
     void loadHome(QWebEngineView *view);
 };
