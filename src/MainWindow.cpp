@@ -1,10 +1,13 @@
 #include "MainWindow.h"
+#include "AdBlocker.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QLineEdit>
 #include <QProgressBar>
 #include <QToolBar>
 #include <QUrl>
+#include <QWebEngineProfile>
 #include <QWebEngineView>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -13,31 +16,46 @@ MainWindow::MainWindow(QWidget *parent)
       webView_(new QWebEngineView(this))
 {
     setWindowTitle("LiteWave");
-    resize(1200, 780);
+    resize(1280, 820);
 
-    auto *toolbar = addToolBar("Navigation");
+    auto *profile = QWebEngineProfile::defaultProfile();
+    profile->setHttpUserAgent(profile->httpUserAgent() + " LiteWave/0.2");
+    profile->setUrlRequestInterceptor(new AdBlocker(profile));
+
+    auto *toolbar = addToolBar("LiteWave");
     toolbar->setMovable(false);
+    toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
 
-    auto *back = toolbar->addAction("←");
-    back->setToolTip("ย้อนกลับ");
+    auto *back = toolbar->addAction("ย้อนกลับ");
     connect(back, &QAction::triggered, webView_, &QWebEngineView::back);
 
-    auto *forward = toolbar->addAction("→");
-    forward->setToolTip("ไปข้างหน้า");
+    auto *forward = toolbar->addAction("ถัดไป");
     connect(forward, &QAction::triggered, webView_, &QWebEngineView::forward);
 
     auto *reload = toolbar->addAction("รีเฟรช");
     connect(reload, &QAction::triggered, webView_, &QWebEngineView::reload);
 
-    urlBar_->setPlaceholderText("พิมพ์ที่อยู่เว็บไซต์หรือคำค้นหา...");
+    urlBar_->setPlaceholderText("ค้นหาเว็บหรือใส่ URL...");
     urlBar_->setClearButtonEnabled(true);
     toolbar->addWidget(urlBar_);
     connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
 
+    auto *shield = toolbar->addAction("Shield: เปิด");
+    shield->setCheckable(true);
+    shield->setChecked(true);
+    connect(shield, &QAction::toggled, this, [shield](bool enabled) {
+        shield->setText(enabled ? "Shield: เปิด" : "Shield: ปิด");
+        if (auto *interceptor = QWebEngineProfile::defaultProfile()->urlRequestInterceptor()) {
+            interceptor->setParent(enabled ? QWebEngineProfile::defaultProfile() : nullptr);
+        }
+    });
+
+    auto *theme = toolbar->addAction("โทนมืด");
+    connect(theme, &QAction::triggered, this, &MainWindow::toggleTheme);
+
     auto *progress = new QProgressBar(this);
-    progress->setMaximumWidth(120);
+    progress->setMaximumWidth(100);
     progress->setTextVisible(false);
-    progress->setRange(0, 100);
     toolbar->addWidget(progress);
 
     connect(webView_, &QWebEngineView::urlChanged, this, &MainWindow::updateUrl);
@@ -47,75 +65,31 @@ MainWindow::MainWindow(QWidget *parent)
     setCentralWidget(webView_);
 
     const QString homePage = QStringLiteral(R"HTML(
-<!doctype html>
-<html lang="th">
-<head>
-<meta charset="utf-8">
-<title>LiteWave</title>
+<!doctype html><html lang="th"><head><meta charset="utf-8"><title>LiteWave</title>
 <style>
-*{box-sizing:border-box}
-body{margin:0;background:#f3f5f7;color:#20252b;font-family:Arial,sans-serif}
-.top{height:64px;background:#fff;border-bottom:1px solid #dfe3e7;display:flex;align-items:center;padding:0 34px;gap:20px}
-.brand{font-size:23px;font-weight:700;color:#1688c0;letter-spacing:-.5px}
-.menu{margin-left:auto;color:#69747e;font-size:14px}
-main{max-width:920px;margin:70px auto;padding:0 28px}
-h1{font-size:30px;font-weight:500;margin:0 0 8px;color:#20252b}
-.desc{color:#69747e;margin:0 0 28px}
+*{box-sizing:border-box}body{margin:0;background:#f2f4f6;color:#20252b;font-family:Arial,sans-serif}
+.top{height:64px;background:#fff;border-bottom:1px solid #dfe3e7;display:flex;align-items:center;padding:0 34px}
+.brand{font-size:24px;font-weight:700;color:#1688c0}.wrap{max-width:920px;margin:75px auto;padding:0 28px}
+h1{font-size:31px;font-weight:500;margin:0 0 8px}.desc{color:#69747e;margin:0 0 28px}
 .search{display:flex;background:#fff;border:1px solid #cbd3d9;border-radius:7px;padding:5px;box-shadow:0 2px 7px #17212b12}
-input{flex:1;border:0;outline:0;font-size:16px;padding:13px 14px;color:#20252b}
-button{border:0;border-radius:5px;padding:0 22px;background:#1688c0;color:white;font-size:15px;cursor:pointer}
-.section{display:flex;align-items:center;justify-content:space-between;margin:38px 0 14px}
-.section h2{font-size:18px;font-weight:500;margin:0}
-.add{background:transparent;color:#1688c0;border:1px solid #b7c7d1;padding:8px 13px}
-.sites{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-.site{position:relative;background:#fff;border:1px solid #e0e5e9;border-radius:7px;padding:20px 14px;text-align:center;cursor:pointer;min-height:102px}
-.site:hover{border-color:#79b8d4;background:#fbfdfe}
-.icon{font-size:25px;color:#1688c0;margin-bottom:9px}
-.site span{display:block;font-size:14px;color:#37424b}
-.pin{position:absolute;right:8px;top:7px;color:#1688c0;font-size:13px}
-.help{margin-top:34px;border-top:1px solid #dfe3e7;padding-top:18px;color:#69747e;font-size:14px}
-.help a{color:#1688c0;text-decoration:none;margin-left:8px}
-@media(max-width:650px){main{margin:35px auto}.sites{grid-template-columns:repeat(2,1fr)}.top{padding:0 18px}.menu{display:none}}
-</style>
-</head>
-<body>
-<header class="top"><div class="brand">LiteWave</div><div class="menu">เบราว์เซอร์ของคุณ · Windows + Fedora</div></header>
-<main>
-  <h1>เริ่มต้นใช้งาน</h1>
-  <p class="desc">ค้นหาเว็บหรือเปิดเว็บไซต์ที่คุณต้องการ</p>
-  <form class="search" onsubmit="go(event)">
-    <input id="q" autofocus placeholder="ค้นหาหรือพิมพ์ที่อยู่เว็บไซต์">
-    <button type="submit">ค้นหา</button>
-  </form>
-  <div class="section"><h2>เว็บที่ปักหมุด</h2><button class="add" onclick="addSite()">+ เพิ่มเว็บ</button></div>
-  <div class="sites">
-    <div class="site" onclick="openSite('https://www.google.com')"><div class="pin">📌</div><div class="icon">G</div><span>Google</span></div>
-    <div class="site" onclick="openSite('https://www.youtube.com')"><div class="pin">📌</div><div class="icon">▶</div><span>YouTube</span></div>
-    <div class="site" onclick="openSite('https://github.com')"><div class="pin">📌</div><div class="icon">⌘</div><span>GitHub</span></div>
-    <div class="site" onclick="askAI()"><div class="icon">?</div><span>AI ช่วยค้นหา</span></div>
-  </div>
-  <div class="help">ต้องการความช่วยเหลือหรือไม่?<a href="https://github.com/ynmio55/LiteWave">ดูคู่มือ LiteWave</a></div>
-</main>
+input{flex:1;border:0;outline:0;font-size:16px;padding:13px}.search button{border:0;border-radius:5px;padding:0 22px;background:#1688c0;color:white;font-size:15px}
+h2{font-size:18px;font-weight:500;margin:38px 0 14px}.sites{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.site{background:#fff;border:1px solid #e0e5e9;border-radius:7px;padding:22px 14px;text-align:center;cursor:pointer;min-height:105px}
+.site:hover{border-color:#79b8d4}.icon{font-size:25px;color:#1688c0;margin-bottom:9px}.site span{display:block;font-size:14px}
+.note{color:#69747e;font-size:13px;margin-top:30px}
+</style></head><body><header class="top"><div class="brand">LiteWave</div></header>
+<main class="wrap"><h1>เริ่มต้นใช้งาน</h1><p class="desc">ค้นหาเว็บได้เร็วขึ้น พร้อม Shield ช่วยลดโฆษณารบกวน</p>
+<form class="search" onsubmit="go(event)"><input id="q" autofocus placeholder="ค้นหาหรือพิมพ์ที่อยู่เว็บไซต์"><button>ค้นหา</button></form>
+<h2>เว็บที่ปักหมุด</h2><div class="sites">
+<div class="site" onclick="openSite('https://www.google.com')"><div class="icon">G</div><span>Google</span></div>
+<div class="site" onclick="openSite('https://www.youtube.com')"><div class="icon">▶</div><span>YouTube</span></div>
+<div class="site" onclick="openSite('https://github.com')"><div class="icon">⌘</div><span>GitHub</span></div>
+<div class="site" onclick="ask()"><div class="icon">?</div><span>AI ช่วยค้นหา</span></div>
+</div><div class="note">LiteWave 0.2 · Windows + Fedora · Chrome engine + Brave-style Shield</div></main>
 <script>
-function openSite(url){location.href=url}
-function go(e){
-  e.preventDefault();
-  const q=document.getElementById('q').value.trim();
-  if(!q)return;
-  const looksLikeUrl=/^(https?:\\/\\/|localhost|[a-z0-9-]+\\.[a-z]{2,})/i.test(q);
-  location.href=looksLikeUrl?(q.match(/^https?:\\/\\//i)?q:'https://'+q):'https://www.google.com/search?q='+encodeURIComponent(q);
-}
-function askAI(){
-  document.getElementById('q').value='ช่วยค้นหา ';
-  document.getElementById('q').focus();
-}
-function addSite(){
-  const url=prompt('ใส่ URL เว็บไซต์ที่ต้องการปักหมุด');
-  if(url) openSite(url);
-}
-</script>
-</body>
-</html>
+function openSite(u){location.href=u}function ask(){q.value='ช่วยค้นหา ';q.focus()}
+function go(e){e.preventDefault();let x=q.value.trim();if(!x)return;let u=/^(https?:\\/\\/|localhost|[a-z0-9-]+\\.[a-z]{2,})/i.test(x)?(x.match(/^https?:\\/\\//i)?x:'https://'+x):'https://www.google.com/search?q='+encodeURIComponent(x);location.href=u}
+</script></body></html>
 )HTML");
     webView_->setHtml(homePage, QUrl("https://litewave.home/"));
 }
@@ -132,11 +106,8 @@ void MainWindow::openUrl(const QString &text)
 
     QUrl url = QUrl::fromUserInput(input);
     if (!url.isValid()) return;
-
-    if (url.scheme().isEmpty() || url.scheme() == "search") {
+    if (url.scheme().isEmpty() || url.scheme() == "search")
         url = QUrl("https://www.google.com/search?q=" + QUrl::toPercentEncoding(input));
-    }
-
     webView_->setUrl(url);
 }
 
@@ -149,4 +120,19 @@ void MainWindow::updateUrl(const QUrl &url)
 void MainWindow::updateTitle(const QString &title)
 {
     setWindowTitle(title.isEmpty() ? "LiteWave" : title + " - LiteWave");
+}
+
+void MainWindow::toggleTheme()
+{
+    darkMode_ = !darkMode_;
+    applyTheme();
+}
+
+void MainWindow::applyTheme()
+{
+    if (darkMode_) {
+        qApp->setStyleSheet("QToolBar{background:#18222d;color:#fff;border:0;padding:5px} QLineEdit{background:#273544;color:#fff;border:1px solid #506070;padding:6px;border-radius:5px} QMainWindow{background:#111820} QToolButton{color:#fff;padding:5px}");
+    } else {
+        qApp->setStyleSheet("");
+    }
 }
