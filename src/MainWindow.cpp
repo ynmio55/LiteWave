@@ -843,8 +843,8 @@ body {
 <div class="search-container">
   <form class="search-box" action="litewave://search" method="get">
     <select id="engine" name="engine" aria-label="เครื่องมือค้นหา">
+      <option value="brave" selected>Brave Search</option>
       <option value="google">Google Search</option>
-      <option value="brave">Brave Search</option>
       <option value="duckduckgo">DuckDuckGo</option>
     </select>
     <input id="q" name="q" type="search" autofocus placeholder="ค้นหา หรือป้อนที่อยู่เว็บไซต์..." autocomplete="off">
