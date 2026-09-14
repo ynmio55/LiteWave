@@ -7,6 +7,7 @@
 #include <QLineEdit>
 #include <QProgressBar>
 #include <QSettings>
+#include <QStatusBar>
 #include <QTabWidget>
 #include <QToolBar>
 #include <QToolButton>
