@@ -5,6 +5,14 @@
 #include <QApplication>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QUrlQuery>
+#include <QProcessEnvironment>
 #include <QProgressBar>
 #include <QStandardPaths>
 #include <QRegularExpression>
@@ -22,7 +30,8 @@ MainWindow::MainWindow(QWidget *parent)
       tabs_(new QTabWidget(this)),
       progress_(new QProgressBar(this)),
       shieldAction_(nullptr),
-      adBlocker_(new AdBlocker(QWebEngineProfile::defaultProfile()))
+      adBlocker_(new AdBlocker(QWebEngineProfile::defaultProfile())),
+      network_(new QNetworkAccessManager(this))
 {
     setWindowTitle("LiteWave");
     resize(1320, 840);
@@ -148,12 +157,50 @@ void MainWindow::openUrl(const QString &text)
     if (urlPattern.match(input).hasMatch()) {
         const QString address = input.contains("://") ? input : "https://" + input;
         url = QUrl(address);
-    } else {
-        url = QUrl("https://search.brave.com/search?q=" + QUrl::toPercentEncoding(input));
+        if (!url.isValid()) return;
+        currentView()->setUrl(url);
+        return;
     }
 
-    if (!url.isValid()) return;
+    const auto env = QProcessEnvironment::systemEnvironment();
+    if (!env.value("GOOGLE_API_KEY").isEmpty() && !env.value("GOOGLE_CSE_ID").isEmpty()) {
+        searchGoogleApi(input);
+        return;
+    }
+
+    url = QUrl("https://www.google.com/search?q=" + QUrl::toPercentEncoding(input));
     currentView()->setUrl(url);
+}
+
+void MainWindow::searchGoogleApi(const QString &query)
+{
+    const auto env = QProcessEnvironment::systemEnvironment();
+    QUrl url("https://www.googleapis.com/customsearch/v1");
+    QUrlQuery params;
+    params.addQueryItem("key", env.value("GOOGLE_API_KEY"));
+    params.addQueryItem("cx", env.value("GOOGLE_CSE_ID"));
+    params.addQueryItem("q", query);
+    url.setQuery(params);
+
+    currentView()->setHtml("<h2 style='padding:40px;font-family:sans-serif'>กำลังค้นหาด้วย Google...</h2>");
+    auto *reply = network_->get(QNetworkRequest(url));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, query] {
+        const auto data = QJsonDocument::fromJson(reply->readAll()).object();
+        reply->deleteLater();
+
+        QString html = "<html><meta charset='utf-8'><style>body{font-family:Arial;max-width:850px;margin:40px auto;color:#20252b}h1{font-size:24px;color:#1688c0}.result{padding:18px 0;border-bottom:1px solid #e4e8eb}.result a{font-size:18px;color:#1769aa;text-decoration:none}.result p{color:#59656e;line-height:1.5}</style><h1>ผลการค้นหา Google</h1>";
+        const auto items = data.value("items").toArray();
+        if (items.isEmpty()) html += "<p>ไม่พบผลการค้นหา หรือ API ยังไม่ได้เปิดใช้งาน</p>";
+        for (const auto &value : items) {
+            const auto item = value.toObject();
+            const QString title = item.value("title").toString().toHtmlEscaped();
+            const QString link = item.value("link").toString();
+            const QString snippet = item.value("snippet").toString().toHtmlEscaped();
+            html += "<div class='result'><a href='" + link + "'>" + title + "</a><p>" + snippet + "</p></div>";
+        }
+        html += "<p style='color:#89959d'>ค้นหา: " + query.toHtmlEscaped() + "</p></html>";
+        currentView()->setHtml(html, QUrl("https://litewave.search/"));
+    });
 }
 
 void MainWindow::updateCurrentUrl(const QUrl &url)
