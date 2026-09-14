@@ -79,3 +79,31 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: LiteWave-Linux-x64.tar.gz
+
+  release:
+    name: Publish easy downloads
+    needs: [windows, linux]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download Windows package
+        uses: actions/download-artifact@v4
+        with:
+          name: LiteWave-Windows-x64
+          path: release/windows
+      - name: Download Linux package
+        uses: actions/download-artifact@v4
+        with:
+          name: LiteWave-Linux-x64
+          path: release/linux
+      - name: Publish latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: LiteWave latest
+          prerelease: true
+          make_latest: true
+          files: |
+            release/windows/dist/LiteWave-Setup-Windows-x64.exe
+            release/windows/LiteWave-Windows-x64-portable.zip
+            release/linux/LiteWave-Linux-x64.tar.gz
