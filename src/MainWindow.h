@@ -2,6 +2,7 @@
 
 #include <QMainWindow>
 
+class AdBlocker;
 class QLineEdit;
 class QWebEngineView;
 
@@ -21,6 +22,7 @@ private slots:
 private:
     QLineEdit *urlBar_;
     QWebEngineView *webView_;
+    AdBlocker *adBlocker_;
     bool darkMode_ = false;
 
     void openUrl(const QString &text);
