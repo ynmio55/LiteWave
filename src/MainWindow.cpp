@@ -304,8 +304,18 @@ void MainWindow::openUrl(const QString &text)
         return;
     }
 
-    // Default search engine: DuckDuckGo (Private, fast, 100% free of Google CAPTCHA/bot checks)
-    url = QUrl("https://duckduckgo.com/?q=" + QUrl::toPercentEncoding(input));
+    // Allow prefix "g " or "google " to force search on Google Search
+    if (input.startsWith("g ") || input.startsWith("google ")) {
+        const QString query = input.section(' ', 1).trimmed();
+        if (!query.isEmpty()) {
+            url = QUrl("https://www.google.com/search?q=" + QUrl::toPercentEncoding(query));
+            currentView()->setUrl(url);
+            return;
+        }
+    }
+
+    // Default search engine: Brave Search (Private, fast, 100% free of CAPTCHA/bot checks)
+    url = QUrl("https://search.brave.com/search?q=" + QUrl::toPercentEncoding(input));
     currentView()->setUrl(url);
 }
 
@@ -616,6 +626,20 @@ body {
   border-radius: 8px;
   padding: 4px;
 }
+.search-box select {
+  background-color: transparent;
+  color: %3;
+  border: none;
+  border-right: 1px solid %5;
+  padding: 0 12px;
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+}
+.search-box select option {
+  background-color: %2;
+  color: %3;
+}
 .search-box input {
   flex: 1;
   border: none;
@@ -690,6 +714,11 @@ body {
 
 <div class="search-container">
   <form class="search-box" onsubmit="go(event)">
+    <select id="engine">
+      <option value="brave">🦁 Brave</option>
+      <option value="google">🔍 Google</option>
+      <option value="duckduckgo">🦆 DuckDuckGo</option>
+    </select>
     <input id="q" autofocus placeholder="พิมพ์สิ่งที่ต้องการค้นหา หรือระบุที่อยู่เว็บไซต์..." autocomplete="off">
     <button type="submit">ค้นหา</button>
   </form>
@@ -744,7 +773,18 @@ function go(e) {
   const x = document.getElementById('q').value.trim();
   if (!x) return;
   const isUrl = x.indexOf('://') > 0 || x.startsWith('www.') || (x.indexOf('.') > 0 && x.indexOf(' ') < 0);
-  window.location.href = isUrl ? (x.indexOf('://') > 0 ? x : 'https://' + x) : 'https://duckduckgo.com/?q=' + encodeURIComponent(x);
+  if (isUrl) {
+    window.location.href = x.indexOf('://') > 0 ? x : 'https://' + x;
+    return;
+  }
+  const engine = document.getElementById('engine').value;
+  let targetUrl = 'https://search.brave.com/search?q=' + encodeURIComponent(x);
+  if (engine === 'google') {
+    targetUrl = 'https://www.google.com/search?q=' + encodeURIComponent(x);
+  } else if (engine === 'duckduckgo') {
+    targetUrl = 'https://duckduckgo.com/?q=' + encodeURIComponent(x);
+  }
+  window.location.href = targetUrl;
 }
 </script>
 </body>
