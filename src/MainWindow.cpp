@@ -25,10 +25,12 @@
 #include <QSettings>
 #include <QStatusBar>
 #include <QTabWidget>
-#include <QToolBar>
 #include <QToolButton>
+#include <QLabel>
 #include <QWebEngineProfile>
 #include <QWebEngineView>
+#include <QWebEngineScript>
+#include <QWebEngineScriptCollection>
 
 MainWindow::MainWindow(QWidget *parent, bool privateMode)
     : QMainWindow(parent),
@@ -50,7 +52,11 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
         profile_->setPersistentCookiesPolicy(QWebEngineProfile::AllowPersistentCookies);
         profile_->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
     }
-    // Each profile owns its interceptor. Normal windows share Shield state.
+
+    // Register cosmetic CSS & YouTube ad auto-skip script
+    setupUserScripts();
+
+    // Profile request interceptor setup
     adBlocker_ = static_cast<AdBlocker *>(profile_->findChild<QObject *>("shield"));
     if (!adBlocker_) {
         adBlocker_ = new AdBlocker(profile_);
@@ -67,38 +73,51 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
         return toolbar->addAction(text);
     };
 
-    auto *back = addButton("ย้อนกลับ");
+    auto *back = addButton("◀");
+    back->setToolTip("ย้อนกลับ (Alt+Left)");
     connect(back, &QAction::triggered, this, [this] { if (currentView()) currentView()->back(); });
 
-    auto *forward = addButton("ถัดไป");
+    auto *forward = addButton("▶");
+    forward->setToolTip("ถัดไป (Alt+Right)");
     connect(forward, &QAction::triggered, this, [this] { if (currentView()) currentView()->forward(); });
 
-    auto *reload = addButton("รีเฟรช");
+    auto *reload = addButton("🔄");
+    reload->setToolTip("รีเฟรช (F5)");
     connect(reload, &QAction::triggered, this, [this] { if (currentView()) currentView()->reload(); });
 
-    auto *home = addButton("หน้าแรก");
+    auto *home = addButton("🏠");
+    home->setToolTip("หน้าแรก (Alt+Home)");
     connect(home, &QAction::triggered, this, [this] { if (currentView()) loadHome(currentView()); });
 
-    auto *plus = addButton("+ แท็บ");
+    auto *plus = addButton("➕ แท็บ");
+    plus->setToolTip("เปิดแท็บใหม่ (Ctrl+T)");
     connect(plus, &QAction::triggered, this, &MainWindow::newTab);
 
-    urlBar_->setPlaceholderText("พิมพ์คำค้นหา หรือใส่ที่อยู่เว็บไซต์");
+    // SSL security status label
+    sslLabel_ = new QLabel("🔒 ", this);
+    sslLabel_->setStyleSheet("padding-left: 8px; font-size: 14px;");
+    toolbar->addWidget(sslLabel_);
+
+    urlBar_->setPlaceholderText("🔍 พิมพ์คำค้นหา หรือระบุ URL เว็บไซต์...");
     urlBar_->setClearButtonEnabled(true);
     toolbar->addWidget(urlBar_);
     connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
 
-    auto *bookmark = addButton("★ บันทึก");
+    auto *bookmark = addButton("⭐");
+    bookmark->setToolTip("บันทึกหน้าเว็บนี้ (Ctrl+D)");
     connect(bookmark, &QAction::triggered, this, &MainWindow::addBookmark);
 
-    shieldAction_ = addButton("Shield: เปิด");
+    shieldAction_ = addButton("🛡️ Shield (0)");
     shieldAction_->setCheckable(true);
     shieldAction_->setChecked(true);
     connect(shieldAction_, &QAction::toggled, this, &MainWindow::toggleShield);
+    connect(adBlocker_, &AdBlocker::countChanged, this, &MainWindow::updateShieldBadge);
 
-    auto *theme = addButton("โทนมืด");
+    auto *theme = addButton("🌙 โหมดมืด");
+    theme->setToolTip("สลับโหมดมืด/สว่าง");
     connect(theme, &QAction::triggered, this, &MainWindow::toggleTheme);
 
-    progress_->setMaximumWidth(110);
+    progress_->setMaximumWidth(120);
     progress_->setTextVisible(false);
     progress_->setRange(0, 100);
     toolbar->addWidget(progress_);
@@ -109,13 +128,18 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     setCentralWidget(tabs_);
 
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int) {
-        if (currentView()) { urlBar_->setText(currentView()->url().toString()); setWindowTitle(currentView()->title() + (privateMode_ ? " — Private · LiteWave" : " — LiteWave")); }
+        if (currentView()) {
+            updateCurrentUrl(currentView()->url());
+            setWindowTitle(currentView()->title() + (privateMode_ ? " — Private · LiteWave" : " — LiteWave"));
+        }
     });
     connect(tabs_, &QTabWidget::tabCloseRequested, this, &MainWindow::closeTab);
 
     setupShortcuts();
+    applyTheme();
     newTab();
 }
+
 
 QWebEngineView *MainWindow::currentView() const
 {
@@ -277,12 +301,62 @@ void MainWindow::openUrl(const QString &text)
     currentView()->setUrl(url);
 }
 
+void MainWindow::setupUserScripts()
+{
+    if (!profile_) return;
+
+    if (profile_->scripts()->find("LiteWaveCosmeticCss").isEmpty()) {
+        QWebEngineScript cssScript;
+        cssScript.setName("LiteWaveCosmeticCss");
+        cssScript.setSourceCode(AdBlocker::cosmeticCss());
+        cssScript.setInjectionPoint(QWebEngineScript::DocumentReady);
+        cssScript.setWorldId(QWebEngineScript::MainWorld);
+        cssScript.setRunsOnSubFrames(true);
+        profile_->scripts()->insert(cssScript);
+    }
+
+    if (profile_->scripts()->find("LiteWaveCosmeticJs").isEmpty()) {
+        QWebEngineScript jsScript;
+        jsScript.setName("LiteWaveCosmeticJs");
+        jsScript.setSourceCode(AdBlocker::cosmeticJs());
+        jsScript.setInjectionPoint(QWebEngineScript::DocumentReady);
+        jsScript.setWorldId(QWebEngineScript::MainWorld);
+        jsScript.setRunsOnSubFrames(true);
+        profile_->scripts()->insert(jsScript);
+    }
+}
+
+
+
+void MainWindow::updateShieldBadge(int count)
+{
+    if (shieldAction_) {
+        const QString state = adBlocker_->isEnabled()
+            ? "🛡️ Shield (" + QString::number(count) + ")"
+            : "🛡️ Shield (ปิด)";
+        shieldAction_->setText(state);
+    }
+}
+
 void MainWindow::updateCurrentUrl(const QUrl &url)
 {
     auto *view = qobject_cast<QWebEngineView *>(sender());
     if (!view || view != currentView()) return;
     urlBar_->setText(url.toString());
     urlBar_->setCursorPosition(0);
+
+    if (sslLabel_) {
+        if (url.scheme() == "https") {
+            sslLabel_->setText("🔒 ");
+            sslLabel_->setToolTip("การเชื่อมต่อปลอดภัย (HTTPS)");
+        } else if (url.scheme() == "http") {
+            sslLabel_->setText("⚠️ ");
+            sslLabel_->setToolTip("การเชื่อมต่อไม่ปลอดภัย (HTTP)");
+        } else {
+            sslLabel_->setText("🌐 ");
+            sslLabel_->setToolTip("LiteWave Dashboard");
+        }
+    }
 }
 
 void MainWindow::updateTabTitle(const QString &title)
@@ -307,8 +381,8 @@ void MainWindow::addBookmark()
 void MainWindow::toggleShield(bool enabled)
 {
     adBlocker_->setEnabled(enabled);
-    shieldAction_->setText(enabled ? "Shield: เปิด" : "Shield: ปิด");
-    statusBar()->showMessage(enabled ? "เปิดการบล็อกโฆษณา" : "ปิดการบล็อกโฆษณา", 2500);
+    updateShieldBadge(adBlocker_->blockedCount());
+    statusBar()->showMessage(enabled ? "เปิดการบล็อกโฆษณาแล้ว" : "ปิดการบล็อกโฆษณาแล้ว", 2500);
 }
 
 void MainWindow::toggleTheme()
@@ -319,45 +393,535 @@ void MainWindow::toggleTheme()
 
 void MainWindow::applyTheme()
 {
-    qApp->setStyleSheet(darkMode_
-        ? "QMainWindow{background:#121820} QToolBar{background:#1b2633;color:#fff;border:0;padding:5px} QToolButton{color:#fff;padding:6px} QLineEdit{background:#293849;color:#fff;border:1px solid #587083;padding:7px;border-radius:5px} QTabBar::tab{background:#263443;color:#ddd;padding:8px 18px} QTabBar::tab:selected{background:#1688c0;color:#fff}"
-        : "");
+    if (darkMode_) {
+        qApp->setStyleSheet(QStringLiteral(R"QSS(
+            QMainWindow {
+                background-color: #0f172a;
+                color: #f8fafc;
+            }
+            QToolBar {
+                background: #1e293b;
+                border-bottom: 1px solid #334155;
+                padding: 6px 8px;
+                spacing: 6px;
+            }
+            QToolButton {
+                background: #334155;
+                color: #f8fafc;
+                border: 1px solid #475569;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QToolButton:hover {
+                background: #0284c7;
+                border-color: #38bdf8;
+                color: #ffffff;
+            }
+            QToolButton:checked {
+                background: #0369a1;
+                border-color: #0ea5e9;
+                color: #ffffff;
+            }
+            QLineEdit {
+                background-color: #0f172a;
+                color: #f8fafc;
+                border: 1.5px solid #334155;
+                border-radius: 10px;
+                padding: 7px 14px;
+                font-size: 14px;
+            }
+            QLineEdit:focus {
+                border: 1.5px solid #38bdf8;
+                background-color: #1e293b;
+            }
+            QTabWidget::pane {
+                border: none;
+                background: #0f172a;
+            }
+            QTabBar {
+                background: #0f172a;
+                border-bottom: 1px solid #1e293b;
+            }
+            QTabBar::tab {
+                background: #1e293b;
+                color: #94a3b8;
+                border: 1px solid #334155;
+                border-bottom: none;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                padding: 8px 18px;
+                margin-right: 4px;
+                font-size: 13px;
+            }
+            QTabBar::tab:selected {
+                background: #0f172a;
+                color: #38bdf8;
+                border: 1.5px solid #0ea5e9;
+                border-bottom: 2px solid #0f172a;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover:!selected {
+                background: #334155;
+                color: #f1f5f9;
+            }
+            QProgressBar {
+                background-color: #1e293b;
+                border: none;
+                border-radius: 3px;
+                max-height: 4px;
+            }
+            QProgressBar::chunk {
+                background-color: #38bdf8;
+                border-radius: 3px;
+            }
+            QStatusBar {
+                background: #1e293b;
+                color: #94a3b8;
+                border-top: 1px solid #334155;
+            }
+        )QSS"));
+    } else {
+        qApp->setStyleSheet(QStringLiteral(R"QSS(
+            QMainWindow {
+                background-color: #f8fafc;
+                color: #0f172a;
+            }
+            QToolBar {
+                background: #ffffff;
+                border-bottom: 1px solid #e2e8f0;
+                padding: 6px 8px;
+                spacing: 6px;
+            }
+            QToolButton {
+                background: #f1f5f9;
+                color: #334155;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QToolButton:hover {
+                background: #0284c7;
+                border-color: #0284c7;
+                color: #ffffff;
+            }
+            QToolButton:checked {
+                background: #0369a1;
+                color: #ffffff;
+            }
+            QLineEdit {
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1.5px solid #cbd5e1;
+                border-radius: 10px;
+                padding: 7px 14px;
+                font-size: 14px;
+            }
+            QLineEdit:focus {
+                border: 1.5px solid #0284c7;
+            }
+            QTabWidget::pane {
+                border: none;
+                background: #f8fafc;
+            }
+            QTabBar {
+                background: #f8fafc;
+                border-bottom: 1px solid #e2e8f0;
+            }
+            QTabBar::tab {
+                background: #f1f5f9;
+                color: #64748b;
+                border: 1px solid #cbd5e1;
+                border-bottom: none;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                padding: 8px 18px;
+                margin-right: 4px;
+                font-size: 13px;
+            }
+            QTabBar::tab:selected {
+                background: #ffffff;
+                color: #0284c7;
+                border: 1.5px solid #0284c7;
+                border-bottom: 2px solid #ffffff;
+                font-weight: bold;
+            }
+            QProgressBar {
+                background-color: #e2e8f0;
+                border: none;
+                border-radius: 3px;
+                max-height: 4px;
+            }
+            QProgressBar::chunk {
+                background-color: #0284c7;
+                border-radius: 3px;
+            }
+            QStatusBar {
+                background: #ffffff;
+                color: #64748b;
+                border-top: 1px solid #e2e8f0;
+            }
+        )QSS"));
+    }
 }
 
 void MainWindow::loadHome(QWebEngineView *view)
 {
-    const QString html = QStringLiteral(R"HTML(
-<!doctype html><html lang="th"><head><meta charset="utf-8"><title>LiteWave</title>
+    const int blockedCount = adBlocker_ ? adBlocker_->blockedCount() : 0;
+    const QString html = QString(R"HTML(
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>LiteWave Modern Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:#20252b;font-family:Arial,sans-serif}
-header{height:70px;background:#fff;border-bottom:1px solid #e1e5e8;display:flex;align-items:center;padding:0 42px}
-.brand{font-size:25px;font-weight:700;color:#1688c0}.tag{margin-left:auto;color:#75818b;font-size:13px}
-main{max-width:980px;margin:75px auto;padding:0 28px}h1{font-weight:500;font-size:32px;margin:0 0 9px}
-p{color:#69747e;margin:0 0 30px}.search{display:flex;background:#fff;border:1px solid #cdd6dc;border-radius:8px;padding:6px;box-shadow:0 3px 12px #1a2a3814}
-input{flex:1;border:0;outline:0;padding:14px;font-size:16px}.search button{border:0;background:#1688c0;color:#fff;border-radius:6px;padding:0 25px;font-size:15px}
-h2{font-size:18px;font-weight:500;margin:42px 0 15px}.sites{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-.site{background:#fff;border:1px solid #e1e6ea;border-radius:8px;text-align:center;padding:24px 12px;min-height:112px;cursor:pointer}.site:hover{border-color:#1688c0}
-.icon{font-size:28px;color:#1688c0;margin-bottom:10px}.site span{font-size:14px}.note{color:#84919a;font-size:13px;margin-top:34px}
-</style></head><body><header><div class="brand">LiteWave</div><div class="tag">เร็วขึ้น · เป็นส่วนตัวขึ้น · ควบคุมได้มากขึ้น</div></header>
-<main><h1>เริ่มต้นใช้งาน</h1><p>พิมพ์คำค้นหาได้ทันที เปิดหลายแท็บ และลดโฆษณารบกวนด้วย Shield</p>
-<form class="search" onsubmit="go(event)"><input id="q" autofocus placeholder="พิมพ์สิ่งที่ต้องการค้นหา เช่น ข่าว F1 หรือ YouTube"><button>ค้นหา</button></form>
-<h2>ทางลัด</h2><div class="sites">
-<div class="site" onclick="openSite('https://www.google.com')"><div class="icon">G</div><span>Google</span></div>
-<div class="site" onclick="openSite('https://www.youtube.com')"><div class="icon">▶</div><span>YouTube</span></div>
-<div class="site" onclick="openSite('https://github.com')"><div class="icon">⌘</div><span>GitHub</span></div>
-<div class="site" onclick="help()"><div class="icon">?</div><span>AI ช่วยค้นหา</span></div>
-</div><div class="note">LiteWave 0.6 · Google Search + Shield บล็อกตัวติดตามและโฆษณาจากโดเมนที่รู้จัก</div></main>
-<script>
-function openSite(u){window.location.href=u}
-function help(){document.getElementById('q').value='ช่วยค้นหา ';document.getElementById('q').focus()}
-function go(e){
-  e.preventDefault();
-  const x=document.getElementById('q').value.trim();
-  if(!x)return;
-  const isUrl=x.indexOf('://')>0 || x.startsWith('www.') || (x.indexOf('.')>0 && x.indexOf(' ')<0);
-  window.location.href=isUrl?(x.indexOf('://')>0?x:'https://'+x):'https://www.google.com/search?q='+encodeURIComponent(x);
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+body {
+  background: #090d16;
+  color: #f1f5f9;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 40px 20px;
+  background-image: 
+    radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 85% 75%, rgba(99, 102, 241, 0.12) 0%, transparent 45%);
 }
-</script></body></html>
-)HTML");
+.header {
+  width: 100%;
+  max-width: 1000px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40px;
+}
+.brand {
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #38bdf8 0%%, #818cf8 100%%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tag {
+  font-size: 13px;
+  color: #94a3b8;
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(8px);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.hero {
+  text-align: center;
+  width: 100%;
+  max-width: 720px;
+  margin-bottom: 36px;
+}
+.clock {
+  font-size: 48px;
+  font-weight: 300;
+  letter-spacing: 2px;
+  color: #ffffff;
+  margin-bottom: 8px;
+}
+.greeting {
+  font-size: 16px;
+  color: #94a3b8;
+  margin-bottom: 28px;
+}
+.search-box {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  transition: all 0.3s ease;
+}
+.search-box:focus-within {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.2), 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+.search-box select {
+  background: rgba(15, 23, 42, 0.6);
+  color: #38bdf8;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+}
+.search-box input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-size: 16px;
+  padding: 10px 6px;
+}
+.search-box button {
+  background: linear-gradient(135deg, #0284c7, #6366f1);
+  color: #ffffff;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, opacity 0.2s;
+}
+.search-box button:hover {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  width: 100%;
+  max-width: 840px;
+  margin-bottom: 40px;
+}
+.stat-card {
+  background: rgba(30, 41, 59, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: transform 0.2s, border-color 0.2s;
+}
+.stat-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+.stat-icon {
+  font-size: 28px;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 12px;
+  border-radius: 12px;
+  color: #38bdf8;
+}
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+}
+.stat-label {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.shortcuts-title {
+  width: 100%;
+  max-width: 840px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: 16px;
+}
+.sites-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  width: 100%;
+  max-width: 840px;
+}
+.site-card {
+  background: rgba(30, 41, 59, 0.5);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 22px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.site-card:hover {
+  transform: translateY(-4px);
+  background: rgba(51, 65, 85, 0.7);
+  border-color: #38bdf8;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.3);
+}
+.site-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: bold;
+  color: #ffffff;
+  background: linear-gradient(135deg, #1e293b, #334155);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.site-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+.footer {
+  margin-top: auto;
+  padding-top: 40px;
+  font-size: 12px;
+  color: #64748b;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand">🌊 LiteWave <span style="font-size:12px; vertical-align:middle; background:#0284c7; color:#fff; padding:2px 8px; border-radius:10px;">v0.7 Pro</span></div>
+  <div class="tag">🛡️ Shield Active · Real-time Ad & Tracker Blocking</div>
+</div>
+
+<div class="hero">
+  <div class="clock" id="clock">00:00:00</div>
+  <div class="greeting" id="dateStr">กำลังโหลดวันเวลา...</div>
+
+  <form class="search-box" onsubmit="handleSearch(event)">
+    <select id="engine">
+      <option value="google">Google</option>
+      <option value="duckduckgo">DuckDuckGo</option>
+      <option value="youtube">YouTube</option>
+      <option value="bing">Bing</option>
+    </select>
+    <input id="q" autofocus placeholder="ค้นหาด้วย Google หรือระบุ URL เช่น github.com..." autocomplete="off">
+    <button type="submit">ค้นหา</button>
+  </form>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon">🛡️</div>
+    <div>
+      <div class="stat-value" id="adCounter">%1</div>
+      <div class="stat-label">โฆษณา & Trackers ถูกบล็อกแล้ว</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">⚡</div>
+    <div>
+      <div class="stat-value">35%% Faster</div>
+      <div class="stat-label">ความเร็วในการโหลดเว็บ</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🔒</div>
+    <div>
+      <div class="stat-value">HTTPS Guard</div>
+      <div class="stat-label">การปกป้องความเป็นส่วนตัวขั้นสูง</div>
+    </div>
+  </div>
+</div>
+
+<div class="shortcuts-title">ทางลัดยอดนิยม</div>
+<div class="sites-grid">
+  <div class="site-card" onclick="openUrl('https://www.google.com')">
+    <div class="site-icon" style="background: linear-gradient(135deg, #4285f4, #34a853);">G</div>
+    <div class="site-name">Google</div>
+  </div>
+  <div class="site-card" onclick="openUrl('https://www.youtube.com')">
+    <div class="site-icon" style="background: linear-gradient(135deg, #ff0000, #cc0000);">▶</div>
+    <div class="site-name">YouTube</div>
+  </div>
+  <div class="site-card" onclick="openUrl('https://github.com')">
+    <div class="site-icon" style="background: linear-gradient(135deg, #24292e, #040404);">⌘</div>
+    <div class="site-name">GitHub</div>
+  </div>
+  <div class="site-card" onclick="openUrl('https://chatgpt.com')">
+    <div class="site-icon" style="background: linear-gradient(135deg, #10a37f, #0d8a6c);">🤖</div>
+    <div class="site-name">ChatGPT</div>
+  </div>
+  <div class="site-card" onclick="openUrl('https://www.facebook.com')">
+    <div class="site-icon" style="background: linear-gradient(135deg, #1877f2, #0b5ed7);">f</div>
+    <div class="site-name">Facebook</div>
+  </div>
+  <div class="site-card" onclick="openUrl('https://www.wikipedia.org')">
+    <div class="site-icon" style="background: linear-gradient(135deg, #636466, #363738);">W</div>
+    <div class="site-name">Wikipedia</div>
+  </div>
+  <div class="site-card" onclick="openUrl('https://www.reddit.com')">
+    <div class="site-icon" style="background: linear-gradient(135deg, #ff4500, #d33800);">r/</div>
+    <div class="site-name">Reddit</div>
+  </div>
+  <div class="site-card" onclick="openUrl('https://twitch.tv')">
+    <div class="site-icon" style="background: linear-gradient(135deg, #9146ff, #6441a5);">👾</div>
+    <div class="site-name">Twitch</div>
+  </div>
+</div>
+
+<div class="footer">LiteWave 0.7 Pro · Powered by Qt WebEngine & Enhanced AdBlock Engine</div>
+
+<script>
+function updateClock() {
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('th-TH', { hour12: false });
+  const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  const dateStr = now.toLocaleDateString('th-TH', dateOptions);
+  
+  document.getElementById('clock').textContent = timeStr;
+  document.getElementById('dateStr').textContent = dateStr;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+function openUrl(u) {
+  window.location.href = u;
+}
+
+function handleSearch(e) {
+  e.preventDefault();
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+
+  const engine = document.getElementById('engine').value;
+  const isUrl = q.indexOf('://') > 0 || q.startsWith('www.') || (q.indexOf('.') > 0 && q.indexOf(' ') < 0);
+  
+  if (isUrl) {
+    window.location.href = q.indexOf('://') > 0 ? q : 'https://' + q;
+    return;
+  }
+
+  let targetUrl = 'https://www.google.com/search?q=' + encodeURIComponent(q);
+  if (engine === 'duckduckgo') {
+    targetUrl = 'https://duckduckgo.com/?q=' + encodeURIComponent(q);
+  } else if (engine === 'youtube') {
+    targetUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+  } else if (engine === 'bing') {
+    targetUrl = 'https://www.bing.com/search?q=' + encodeURIComponent(q);
+  }
+  
+  window.location.href = targetUrl;
+}
+</script>
+</body>
+</html>
+)HTML").arg(blockedCount);
+
     view->setHtml(html, QUrl("https://litewave.home/"));
 }
+
