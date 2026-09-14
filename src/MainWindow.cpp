@@ -32,6 +32,30 @@
 #include <QWebEngineScript>
 #include <QWebEngineScriptCollection>
 
+class WebPage : public QWebEnginePage {
+public:
+    WebPage(QWebEngineProfile *profile, MainWindow *mw, QWebEngineView *view, QObject *parent = nullptr)
+        : QWebEnginePage(profile, parent), mw_(mw), view_(view) {}
+
+protected:
+    bool acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) override {
+        if (url.host() == "litewave.home" || url.scheme() == "litewave") {
+            if (isMainFrame && mw_ && view_) {
+                QWebEngineView *v = view_;
+                QMetaObject::invokeMethod(mw_, [this, v]{
+                    mw_->loadHome(v);
+                }, Qt::QueuedConnection);
+            }
+            return false;
+        }
+        return QWebEnginePage::acceptNavigationRequest(url, type, isMainFrame);
+    }
+
+private:
+    MainWindow *mw_ = nullptr;
+    QWebEngineView *view_ = nullptr;
+};
+
 MainWindow::MainWindow(QWidget *parent, bool privateMode)
     : QMainWindow(parent),
       urlBar_(new QLineEdit(this)),
@@ -90,7 +114,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 
     auto *reload = addButton("↻");
     reload->setToolTip("รีเฟรชหน้าเว็บ");
-    connect(reload, &QAction::triggered, this, [this] { if (currentView()) currentView()->reload(); });
+    connect(reload, &QAction::triggered, this, [this] { reloadCurrentView(); });
 
     auto *home = addButton("หน้าแรก");
     home->setToolTip("ไปยังหน้าแรก");
@@ -155,7 +179,9 @@ QWebEngineView *MainWindow::currentView() const
 
 QWebEngineView *MainWindow::createView(const QUrl &url)
 {
-    auto *view = new QWebEngineView(profile_, tabs_);
+    auto *view = new QWebEngineView(tabs_);
+    auto *page = new WebPage(profile_, this, view);
+    view->setPage(page);
     view->settings()->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
     view->settings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
     const int index = tabs_->addTab(view, "LiteWave");
@@ -227,9 +253,9 @@ void MainWindow::setupShortcuts()
     for (int i=1;i<=8;++i) key("Ctrl+"+QString::number(i), [this,i]{ if(i<=tabs_->count()) tabs_->setCurrentIndex(i-1); });
     key("Ctrl+9", [this]{ tabs_->setCurrentIndex(tabs_->count()-1); });
     key("Ctrl+L", [this]{ urlBar_->setFocus(); urlBar_->selectAll(); });
-    auto reload = [this]{ if(currentView()) currentView()->reload(); };
+    auto reload = [this]{ reloadCurrentView(); };
     key("Ctrl+R",reload); key("F5",reload);
-    auto hard = [this]{ if(currentView()) currentView()->triggerPageAction(QWebEnginePage::ReloadAndBypassCache); };
+    auto hard = [this]{ reloadCurrentView(); };
     key("Ctrl+Shift+R",hard); key("Shift+F5",hard);
     key("Ctrl+D", [this]{ addBookmark(); });
     key("Ctrl+Shift+D", [this]{
@@ -281,6 +307,17 @@ void MainWindow::setupShortcuts()
     });
 }
 
+void MainWindow::reloadCurrentView()
+{
+    auto *view = currentView();
+    if (!view) return;
+    if (view->url().host() == "litewave.home" || view->url().isEmpty() || view->url().toString().contains("litewave.home")) {
+        loadHome(view);
+    } else {
+        view->reload();
+    }
+}
+
 void MainWindow::navigate()
 {
     openUrl(urlBar_->text());
@@ -290,6 +327,11 @@ void MainWindow::openUrl(const QString &text)
 {
     const QString input = text.trimmed();
     if (input.isEmpty() || !currentView()) return;
+
+    if (input.contains("litewave.home") || input.startsWith("litewave:")) {
+        loadHome(currentView());
+        return;
+    }
 
     const QRegularExpression urlPattern(
         R"(^(https?://|localhost(?::\d+)?(?:/|$)|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?::\d+)?(?:/|$)))",

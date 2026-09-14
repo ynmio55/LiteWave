@@ -21,6 +21,8 @@ class MainWindow final : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr, bool privateMode = false);
     ~MainWindow() override;
+    void loadHome(QWebEngineView *view);
+    void reloadCurrentView();
 
 private slots:
     void navigate();
@@ -54,6 +56,5 @@ private:
     QWebEngineView *createView(const QUrl &url);
     void openUrl(const QString &text);
     void applyTheme();
-    void loadHome(QWebEngineView *view);
 };
 
