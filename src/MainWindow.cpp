@@ -3,16 +3,7 @@
 
 #include <QAction>
 #include <QApplication>
-#include <QInputDialog>
 #include <QLineEdit>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
-#include <QUrlQuery>
-#include <QProcessEnvironment>
 #include <QProgressBar>
 #include <QStandardPaths>
 #include <QRegularExpression>
@@ -30,8 +21,7 @@ MainWindow::MainWindow(QWidget *parent)
       tabs_(new QTabWidget(this)),
       progress_(new QProgressBar(this)),
       shieldAction_(nullptr),
-      adBlocker_(new AdBlocker(QWebEngineProfile::defaultProfile())),
-      network_(new QNetworkAccessManager(this))
+      adBlocker_(new AdBlocker(QWebEngineProfile::defaultProfile()))
 {
     setWindowTitle("LiteWave");
     resize(1320, 840);
@@ -162,45 +152,8 @@ void MainWindow::openUrl(const QString &text)
         return;
     }
 
-    const auto env = QProcessEnvironment::systemEnvironment();
-    if (!env.value("GOOGLE_API_KEY").isEmpty() && !env.value("GOOGLE_CSE_ID").isEmpty()) {
-        searchGoogleApi(input);
-        return;
-    }
-
     url = QUrl("https://www.google.com/search?q=" + QUrl::toPercentEncoding(input));
     currentView()->setUrl(url);
-}
-
-void MainWindow::searchGoogleApi(const QString &query)
-{
-    const auto env = QProcessEnvironment::systemEnvironment();
-    QUrl url("https://www.googleapis.com/customsearch/v1");
-    QUrlQuery params;
-    params.addQueryItem("key", env.value("GOOGLE_API_KEY"));
-    params.addQueryItem("cx", env.value("GOOGLE_CSE_ID"));
-    params.addQueryItem("q", query);
-    url.setQuery(params);
-
-    currentView()->setHtml("<h2 style='padding:40px;font-family:sans-serif'>กำลังค้นหาด้วย Google...</h2>");
-    auto *reply = network_->get(QNetworkRequest(url));
-    connect(reply, &QNetworkReply::finished, this, [this, reply, query] {
-        const auto data = QJsonDocument::fromJson(reply->readAll()).object();
-        reply->deleteLater();
-
-        QString html = "<html><meta charset='utf-8'><style>body{font-family:Arial;max-width:850px;margin:40px auto;color:#20252b}h1{font-size:24px;color:#1688c0}.result{padding:18px 0;border-bottom:1px solid #e4e8eb}.result a{font-size:18px;color:#1769aa;text-decoration:none}.result p{color:#59656e;line-height:1.5}</style><h1>ผลการค้นหา Google</h1>";
-        const auto items = data.value("items").toArray();
-        if (items.isEmpty()) html += "<p>ไม่พบผลการค้นหา หรือ API ยังไม่ได้เปิดใช้งาน</p>";
-        for (const auto &value : items) {
-            const auto item = value.toObject();
-            const QString title = item.value("title").toString().toHtmlEscaped();
-            const QString link = item.value("link").toString();
-            const QString snippet = item.value("snippet").toString().toHtmlEscaped();
-            html += "<div class='result'><a href='" + link + "'>" + title + "</a><p>" + snippet + "</p></div>";
-        }
-        html += "<p style='color:#89959d'>ค้นหา: " + query.toHtmlEscaped() + "</p></html>";
-        currentView()->setHtml(html, QUrl("https://litewave.search/"));
-    });
 }
 
 void MainWindow::updateCurrentUrl(const QUrl &url)
@@ -272,7 +225,7 @@ h2{font-size:18px;font-weight:500;margin:42px 0 15px}.sites{display:grid;grid-te
 <div class="site" onclick="openSite('https://www.youtube.com')"><div class="icon">▶</div><span>YouTube</span></div>
 <div class="site" onclick="openSite('https://github.com')"><div class="icon">⌘</div><span>GitHub</span></div>
 <div class="site" onclick="help()"><div class="icon">?</div><span>AI ช่วยค้นหา</span></div>
-</div><div class="note">LiteWave 0.5 · Brave Search + Shield บล็อกตัวติดตามและโฆษณาจากโดเมนที่รู้จัก</div></main>
+</div><div class="note">LiteWave 0.6 · Google Search + Shield บล็อกตัวติดตามและโฆษณาจากโดเมนที่รู้จัก</div></main>
 <script>
 function openSite(u){window.location.href=u}
 function help(){document.getElementById('q').value='ช่วยค้นหา ';document.getElementById('q').focus()}
@@ -281,7 +234,7 @@ function go(e){
   const x=document.getElementById('q').value.trim();
   if(!x)return;
   const isUrl=x.indexOf('://')>0 || x.startsWith('www.') || (x.indexOf('.')>0 && x.indexOf(' ')<0);
-  window.location.href=isUrl?(x.indexOf('://')>0?x:'https://'+x):'https://search.brave.com/search?q='+encodeURIComponent(x);
+  window.location.href=isUrl?(x.indexOf('://')>0?x:'https://'+x):'https://www.google.com/search?q='+encodeURIComponent(x);
 }
 </script></body></html>
 )HTML");
