@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=LiteWave
+Comment=Lightweight web browser
+Exec=/usr/local/bin/LiteWave
+Icon=web-browser
+Terminal=false
+Categories=Network;WebBrowser;
+StartupWMClass=LiteWave
