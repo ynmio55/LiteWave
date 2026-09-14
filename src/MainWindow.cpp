@@ -84,6 +84,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     resize(1320, 840);
 
     privateMode_ = privateMode;
+    QSettings themeSettings("LiteWave", "LiteWave");
+    darkMode_ = themeSettings.value("theme/dark", false).toBool();
     const QString storagePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/Storage";
     const QString cachePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/Cache";
 
@@ -158,9 +160,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     connect(shieldAction_, &QAction::toggled, this, &MainWindow::toggleShield);
     connect(adBlocker_, &AdBlocker::countChanged, this, &MainWindow::updateShieldBadge);
 
-    auto *theme = addButton("โหมดมืด");
-    theme->setToolTip("สลับโหมดมืด/สว่าง");
-    connect(theme, &QAction::triggered, this, &MainWindow::toggleTheme);
+    themeAction_ = addButton(darkMode_ ? "โหมดสว่าง" : "โหมดมืด");
+    themeAction_->setToolTip("สลับโหมดมืด/สว่าง");
+    connect(themeAction_, &QAction::triggered, this, &MainWindow::toggleTheme);
 
     progress_->setMaximumWidth(120);
     progress_->setTextVisible(false);
@@ -521,11 +523,23 @@ void MainWindow::toggleShield(bool enabled)
 void MainWindow::toggleTheme()
 {
     darkMode_ = !darkMode_;
+    QSettings themeSettings("LiteWave", "LiteWave");
+    themeSettings.setValue("theme/dark", darkMode_);
     applyTheme();
+
+    // Refresh the built-in home page immediately so its colors match the browser chrome.
+    if (currentView() && currentView()->url().host() == "litewave.home") {
+        loadHome(currentView());
+    }
 }
 
 void MainWindow::applyTheme()
 {
+    if (themeAction_) {
+        themeAction_->setText(darkMode_ ? "โหมดสว่าง" : "โหมดมืด");
+        themeAction_->setToolTip(darkMode_ ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด");
+    }
+
     if (darkMode_) {
         qApp->setStyleSheet(QStringLiteral(R"QSS(
             QMainWindow {
