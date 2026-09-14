@@ -758,42 +758,61 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 60px 20px 30px;
+  padding: 80px 20px 40px;
 }
 .brand {
-  font-size: 34px;
+  font-size: 52px;
   font-weight: 700;
-  letter-spacing: -0.5px;
-  color: #2563eb;
+  letter-spacing: -1px;
   margin-bottom: 8px;
+  user-select: none;
 }
+.brand .c-blue { color: #4285F4; }
+.brand .c-red { color: #EA4335; }
+.brand .c-yellow { color: #FBBC05; }
+.brand .c-green { color: #34A853; }
 .subtitle {
   font-size: 14px;
   color: %4;
-  margin-bottom: 36px;
+  margin-bottom: 32px;
+  font-weight: 400;
 }
 .search-container {
-  width: 100%%;
-  max-width: 640px;
-  margin-bottom: 48px;
+  width: 100%;
+  max-width: 740px;
+  margin-bottom: 44px;
 }
 .search-box {
   display: flex;
+  align-items: center;
   background-color: %2;
   border: 1px solid %5;
-  border-radius: 8px;
-  padding: 4px;
+  border-radius: 28px;
+  padding: 4px 8px 4px 18px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.search-box:focus-within, .search-box:hover {
+  box-shadow: 0 4px 18px rgba(32, 33, 36, 0.16);
+  border-color: #4285F4;
+}
+.search-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: %4;
+  margin-right: 8px;
 }
 .search-box select {
   background-color: transparent;
   color: %3;
   border: none;
-  border-right: 1px solid %5;
-  padding: 0 14px;
   font-size: 14px;
   font-weight: 500;
   outline: none;
   cursor: pointer;
+  padding: 0 8px 0 0;
+  border-right: 1px solid %5;
 }
 .search-box select option {
   background-color: %2;
@@ -803,27 +822,37 @@ body {
   flex: 1;
   border: none;
   background: transparent;
-  padding: 12px 16px;
-  font-size: 15px;
+  padding: 12px 14px;
+  font-size: 16px;
   color: %3;
   outline: none;
 }
 .search-box button {
-  background-color: #2563eb;
+  background-color: #1a73e8;
   color: #ffffff;
   border: none;
-  border-radius: 6px;
-  padding: 0 24px;
+  border-radius: 20px;
+  padding: 10px 24px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
 }
 .search-box button:hover {
-  background-color: #1d4ed8;
+  background-color: #1557b0;
+}
+.search-box button:active {
+  transform: scale(0.98);
 }
 .sites-section {
-  width: 100%%;
-  max-width: 640px;
+  width: 100%;
+  max-width: 740px;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
 .section-title {
   font-size: 13px;
@@ -831,7 +860,6 @@ body {
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: %4;
-  margin-bottom: 16px;
 }
 .sites-grid {
   display: grid;
@@ -839,9 +867,10 @@ body {
   gap: 16px;
 }
 .site-card {
+  position: relative;
   background-color: %2;
   border: 1px solid %5;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 20px 12px;
   text-align: center;
   cursor: pointer;
@@ -852,26 +881,142 @@ body {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 .site-card:hover {
-  border-color: #2563eb;
+  border-color: #4285F4;
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
 }
 .site-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+.custom-avatar {
+  background-color: #e8f0fe;
+  color: #1a73e8;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
 }
 .site-name {
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+.del-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0,0,0,0.1);
+  color: %3;
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 12px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.site-card:hover .del-btn {
+  display: flex;
+}
+.del-btn:hover {
+  background: #ea4335;
+  color: #fff;
+}
+.add-card {
+  border: 2px dashed %5;
+  background-color: transparent;
+}
+.add-card:hover {
+  border-color: #4285F4;
+  background-color: %2;
+}
+.add-icon {
+  font-size: 24px;
+  color: #4285F4;
+}
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-overlay.active {
+  display: flex;
+}
+.modal {
+  background-color: %2;
+  color: %3;
+  border: 1px solid %5;
+  border-radius: 16px;
+  padding: 24px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.25);
+}
+.modal h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.modal input {
+  width: 100%;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  border: 1px solid %5;
+  border-radius: 8px;
+  background: %1;
+  color: %3;
+  font-size: 14px;
+  outline: none;
+}
+.modal input:focus {
+  border-color: #4285F4;
+}
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+.modal-buttons button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+.btn-cancel {
+  background: transparent;
+  color: %4;
+}
+.btn-save {
+  background: #1a73e8;
+  color: #fff;
+}
+.btn-save:hover {
+  background: #1557b0;
 }
 .footer-note {
   margin-top: auto;
-  padding-top: 40px;
+  padding-top: 48px;
   font-size: 13px;
   color: %4;
 }
@@ -879,83 +1024,133 @@ body {
 </head>
 <body>
 
-<div class="brand">LiteWave</div>
-<div class="subtitle">ระบบค้นหาและท่องเว็บความเร็วสูง ไร้โฆษณารบกวน</div>
+<div class="brand">
+  <span class="c-blue">Lite</span><span class="c-red">W</span><span class="c-yellow">a</span><span class="c-green">v</span><span class="c-red">e</span>
+</div>
+<div class="subtitle">ระบบค้นหาและท่องเว็บความเร็วสูง · ปลอดภัย ไร้โฆษณารบกวน</div>
 
 <div class="search-container">
   <form class="search-box" action="litewave://search" method="get">
+    <div class="search-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    </div>
     <select id="engine" name="engine" aria-label="เครื่องมือค้นหา">
       <option value="brave" selected>Brave Search</option>
       <option value="google">Google Search</option>
       <option value="duckduckgo">DuckDuckGo</option>
     </select>
-    <input id="q" name="q" type="search" autofocus placeholder="ค้นหา หรือป้อนที่อยู่เว็บไซต์..." autocomplete="off">
+    <input id="q" name="q" type="search" autofocus placeholder="ค้นหาบน Google หรือป้อนที่อยู่เว็บไซต์..." autocomplete="off">
     <button type="submit">ค้นหา</button>
   </form>
 </div>
 
 <div class="sites-section">
-  <div class="section-title">ทางลัดเว็บไซต์</div>
-  <div class="sites-grid">
-    <a class="site-card" href="https://www.google.com">
-      <div class="site-icon"><svg width="24" height="24" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg></div>
-      <div class="site-name">Google</div>
-    </a>
-    <a class="site-card" href="https://www.youtube.com">
-      <div class="site-icon"><svg width="24" height="24" viewBox="0 0 24 24"><path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></div>
-      <div class="site-name">YouTube</div>
-    </a>
-    <a class="site-card" href="https://github.com">
-      <div class="site-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg></div>
-      <div class="site-name">GitHub</div>
-    </a>
-    <a class="site-card" href="https://chatgpt.com">
-      <div class="site-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9 6.065 6.065 0 0 0-4.975-2.484 6.05 6.05 0 0 0-5.784 4.098 6.02 6.02 0 0 0-4.636 3.3 6.062 6.062 0 0 0 .734 6.643 5.985 5.985 0 0 0 .517 4.911 6.047 6.047 0 0 0 6.51 2.9 6.056 6.056 0 0 0 4.976 2.484 6.05 6.05 0 0 0 5.784-4.097 6.016 6.016 0 0 0 4.635-3.3 6.063 6.063 0 0 0-.749-6.644zM12.001 20.407a4.417 4.417 0 0 1-2.896-1.077l.147-.084 3.738-2.158a.834.834 0 0 0 .42-.724v-5.269l1.579.912a.08.08 0 0 1 .042.062v4.416a4.432 4.432 0 0 1-3.03 3.922zm-7.669-4.708a4.423 4.423 0 0 1-.535-3.037l.149.088 3.737 2.157a.835.835 0 0 0 .838 0l4.563-2.634v1.824a.08.08 0 0 1-.038.069l-3.824 2.208a4.434 4.434 0 0 1-4.89-.675zm-1.127-8.98a4.418 4.418 0 0 1 2.361-1.961l.002.172v4.316a.835.835 0 0 0 .419.724l4.562 2.634-1.578.911a.08.08 0 0 1-.079 0l-3.824-2.207a4.433 4.433 0 0 1-1.861-4.589zm14.862 3.652-4.563-2.634 1.579-.911a.08.08 0 0 1 .079 0l3.824 2.207a4.434 4.434 0 0 1 1.86 4.589 4.417 4.417 0 0 1-2.36 1.962v-4.488a.836.836 0 0 0-.419-.725zm2.146-2.585a4.43 4.43 0 0 1 .536 3.038l-.149-.087-3.738-2.158a.833.833 0 0 0-.837 0l-4.563 2.634v-1.824a.08.08 0 0 1 .038-.069l3.824-2.208a4.434 4.434 0 0 1 4.889.674zM12 13.722l-2.686-1.551 2.686-1.55 2.686 1.55-2.686 1.551z"/></svg></div>
-      <div class="site-name">ChatGPT</div>
-    </a>
-    <a class="site-card" href="https://www.facebook.com">
-      <div class="site-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></div>
-      <div class="site-name">Facebook</div>
-    </a>
-    <a class="site-card" href="https://www.wikipedia.org">
-      <div class="site-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12.09 13.118l-2.072-4.78h-.056l-2.1 4.78h4.228zM1.4 5.312h4.545v.852H4.492l3.414 7.828 2.502-5.748h-1.026v-.852h4.15v.852h-1.028l2.673 6.136 3.255-7.488h-1.572v-.852h4.74v.852h-1.2l-4.78 10.99H14.45L11.5 10.934l-2.928 6.726H7.333L2.73 6.164H1.4v-.852z"/></svg></div>
-      <div class="site-name">Wikipedia</div>
-    </a>
-    <a class="site-card" href="https://www.reddit.com">
-      <div class="site-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="#FF4500"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.196-.491.961 0 1.741.78 1.741 1.74 0 .61-.315 1.144-.792 1.45.023.19.034.381.034.574 0 2.924-3.387 5.295-7.564 5.295-4.178 0-7.565-2.371-7.565-5.295 0-.19.011-.38.033-.57-.481-.307-.798-.842-.798-1.45 0-.96.78-1.74 1.741-1.74.47 0 .895.186 1.204.499 1.198-.859 2.859-1.42 4.689-1.487l.926-4.341 3.204.675a1.247 1.247 0 0 1 1.207-.852zm-8.01 8.875c-.687 0-1.243.557-1.243 1.244 0 .687.556 1.244 1.243 1.244.688 0 1.244-.557 1.244-1.244 0-.687-.556-1.244-1.244-1.244zm6.002 0c-.687 0-1.244.557-1.244 1.244 0 .687.557 1.244 1.244 1.244.688 0 1.243-.557 1.243-1.244 0-.687-.555-1.244-1.243-1.244zm-5.466 3.655a.39.39 0 0 0-.27.666c.883.882 2.316.882 3.199 0a.39.39 0 1 0-.55-.552c-.579.578-1.518.578-2.097 0a.386.386 0 0 0-.282-.114z"/></svg></div>
-      <div class="site-name">Reddit</div>
-    </a>
-    <a class="site-card" href="https://twitch.tv">
-      <div class="site-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="#9146FF"><path d="M11.571 4.714h1.715v5.143H11.571V4.714zm4.715 0H18v5.143h-1.714V4.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0H6zm14.571 11.143l-3.428 3.429h-3.429l-3 3v-3H6.857V1.714h13.714v9.429z"/></svg></div>
-      <div class="site-name">Twitch</div>
-    </a>
+  <div class="section-header">
+    <div class="section-title">ทางลัดเว็บไซต์</div>
+  </div>
+  <div class="sites-grid" id="sitesGrid"></div>
+</div>
+
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h3>เพิ่มทางลัดเว็บไซต์</h3>
+    <input id="shortcutName" placeholder="ชื่อเว็บไซต์ (เช่น Pantip)" autocomplete="off">
+    <input id="shortcutUrl" placeholder="ที่อยู่เว็บ (เช่น https://pantip.com)" autocomplete="off">
+    <div class="modal-buttons">
+      <button type="button" class="btn-cancel" onclick="closeAddModal()">ยกเลิก</button>
+      <button type="button" class="btn-save" onclick="saveCustomShortcut()">บันทึก</button>
+    </div>
   </div>
 </div>
 
 <div class="footer-note">Shield Active · บล็อกโฆษณาแล้ว %6 รายการ</div>
 
 <script>
-function openSite(u) {
-  window.location.href = u;
+const defaultSites = [
+  { name: 'Google', url: 'https://www.google.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>' },
+  { name: 'YouTube', url: 'https://www.youtube.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24"><path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>' },
+  { name: 'GitHub', url: 'https://github.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>' },
+  { name: 'ChatGPT', url: 'https://chatgpt.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9 6.065 6.065 0 0 0-4.975-2.484 6.05 6.05 0 0 0-5.784 4.098 6.02 6.02 0 0 0-4.636 3.3 6.062 6.062 0 0 0 .734 6.643 5.985 5.985 0 0 0 .517 4.911 6.047 6.047 0 0 0 6.51 2.9 6.056 6.056 0 0 0 4.976 2.484 6.05 6.05 0 0 0 5.784-4.097 6.016 6.016 0 0 0 4.635-3.3 6.063 6.063 0 0 0-.749-6.644zM12.001 20.407a4.417 4.417 0 0 1-2.896-1.077l.147-.084 3.738-2.158a.834.834 0 0 0 .42-.724v-5.269l1.579.912a.08.08 0 0 1 .042.062v4.416a4.432 4.432 0 0 1-3.03 3.922zm-7.669-4.708a4.423 4.423 0 0 1-.535-3.037l.149.088 3.737 2.157a.835.835 0 0 0 .838 0l4.563-2.634v1.824a.08.08 0 0 1-.038.069l-3.824 2.208a4.434 4.434 0 0 1-4.89-.675zm-1.127-8.98a4.418 4.418 0 0 1 2.361-1.961l.002.172v4.316a.835.835 0 0 0 .419.724l4.562 2.634-1.578.911a.08.08 0 0 1-.079 0l-3.824-2.207a4.433 4.433 0 0 1-1.861-4.589zm14.862 3.652-4.563-2.634 1.579-.911a.08.08 0 0 1 .079 0l3.824 2.207a4.434 4.434 0 0 1 1.86 4.589 4.417 4.417 0 0 1-2.36 1.962v-4.488a.836.836 0 0 0-.419-.725zm2.146-2.585a4.43 4.43 0 0 1 .536 3.038l-.149-.087-3.738-2.158a.833.833 0 0 0-.837 0l-4.563 2.634v-1.824a.08.08 0 0 1 .038-.069l3.824-2.208a4.434 4.434 0 0 1 4.889.674zM12 13.722l-2.686-1.551 2.686-1.55 2.686 1.55-2.686 1.551z"/></svg>' },
+  { name: 'Facebook', url: 'https://www.facebook.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>' },
+  { name: 'Wikipedia', url: 'https://www.wikipedia.org', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12.09 13.118l-2.072-4.78h-.056l-2.1 4.78h4.228zM1.4 5.312h4.545v.852H4.492l3.414 7.828 2.502-5.748h-1.026v-.852h4.15v.852h-1.028l2.673 6.136 3.255-7.488h-1.572v-.852h4.74v.852h-1.2l-4.78 10.99H14.45L11.5 10.934l-2.928 6.726H7.333L2.73 6.164H1.4v-.852z"/></svg>' },
+  { name: 'Reddit', url: 'https://www.reddit.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="#FF4500"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.196-.491.961 0 1.741.78 1.741 1.74 0 .61-.315 1.144-.792 1.45.023.19.034.381.034.574 0 2.924-3.387 5.295-7.564 5.295-4.178 0-7.565-2.371-7.565-5.295 0-.19.011-.38.033-.57-.481-.307-.798-.842-.798-1.45 0-.96.78-1.74 1.741-1.74.47 0 .895.186 1.204.499 1.198-.859 2.859-1.42 4.689-1.487l.926-4.341 3.204.675a1.247 1.247 0 0 1 1.207-.852zm-8.01 8.875c-.687 0-1.243.557-1.243 1.244 0 .687.556 1.244 1.243 1.244.688 0 1.244-.557 1.244-1.244 0-.687-.556-1.244-1.244-1.244zm6.002 0c-.687 0-1.244.557-1.244 1.244 0 .687.557 1.244 1.244 1.244.688 0 1.243-.557 1.243-1.244 0-.687-.555-1.244-1.244-1.244zm-5.466 3.655a.39.39 0 0 0-.27.666c.883.882 2.316.882 3.199 0a.39.39 0 1 0-.55-.552c-.579.578-1.518.578-2.097 0a.386.386 0 0 0-.282-.114z"/></svg>' },
+  { name: 'Twitch', url: 'https://twitch.tv', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="#9146FF"><path d="M11.571 4.714h1.715v5.143H11.571V4.714zm4.715 0H18v5.143h-1.714V4.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0H6zm14.571 11.143l-3.428 3.429h-3.429l-3 3v-3H6.857V1.714h13.714v9.429z"/></svg>' }
+];
+
+function renderShortcuts() {
+  const grid = document.getElementById('sitesGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  defaultSites.forEach(s => {
+    const card = document.createElement('a');
+    card.className = 'site-card';
+    card.href = s.url;
+    card.innerHTML = `<div class="site-icon">${s.icon}</div><div class="site-name">${s.name}</div>`;
+    grid.appendChild(card);
+  });
+
+  const custom = JSON.parse(localStorage.getItem('litewave_custom_shortcuts') || '[]');
+  custom.forEach((s, idx) => {
+    const card = document.createElement('div');
+    card.className = 'site-card';
+    card.onclick = () => window.location.href = s.url;
+    const initial = (s.name || 'W').charAt(0).toUpperCase();
+    card.innerHTML = `
+      <button class="del-btn" title="ลบทางลัด" onclick="deleteShortcut(event, ${idx})">✕</button>
+      <div class="site-icon custom-avatar">${initial}</div>
+      <div class="site-name">${s.name}</div>
+    `;
+    grid.appendChild(card);
+  });
+
+  const addBtn = document.createElement('div');
+  addBtn.className = 'site-card add-card';
+  addBtn.onclick = openAddModal;
+  addBtn.innerHTML = `
+    <div class="site-icon add-icon">+</div>
+    <div class="site-name">เพิ่มทางลัด</div>
+  `;
+  grid.appendChild(addBtn);
 }
-function go(e) {
-  e.preventDefault();
-  const x = document.getElementById('q').value.trim();
-  if (!x) return;
-  const isUrl = x.indexOf('://') > 0 || x.startsWith('www.') || (x.indexOf('.') > 0 && x.indexOf(' ') < 0);
-  if (isUrl) {
-    window.location.href = x.indexOf('://') > 0 ? x : 'https://' + x;
-    return;
-  }
-  const engine = document.getElementById('engine').value;
-  let targetUrl = 'https://www.google.com/search?q=' + encodeURIComponent(x);
-  if (engine === 'google') {
-    targetUrl = 'https://www.google.com/search?q=' + encodeURIComponent(x);
-  } else if (engine === 'duckduckgo') {
-    targetUrl = 'https://duckduckgo.com/?q=' + encodeURIComponent(x);
-  }
-  window.location.href = targetUrl;
+
+function openAddModal() {
+  document.getElementById('addModal').classList.add('active');
+  document.getElementById('shortcutName').focus();
 }
+
+function closeAddModal() {
+  document.getElementById('addModal').classList.remove('active');
+  document.getElementById('shortcutName').value = '';
+  document.getElementById('shortcutUrl').value = '';
+}
+
+function saveCustomShortcut() {
+  const name = document.getElementById('shortcutName').value.trim();
+  let url = document.getElementById('shortcutUrl').value.trim();
+  if (!name || !url) return;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+  const custom = JSON.parse(localStorage.getItem('litewave_custom_shortcuts') || '[]');
+  custom.push({ name, url });
+  localStorage.setItem('litewave_custom_shortcuts', JSON.stringify(custom));
+  closeAddModal();
+  renderShortcuts();
+}
+
+function deleteShortcut(e, idx) {
+  e.stopPropagation();
+  const custom = JSON.parse(localStorage.getItem('litewave_custom_shortcuts') || '[]');
+  custom.splice(idx, 1);
+  localStorage.setItem('litewave_custom_shortcuts', JSON.stringify(custom));
+  renderShortcuts();
+}
+
+renderShortcuts();
+</script>
+</body>
+</html>
 )HTML").arg(bg, cardBg, textCol, subCol, borderCol).arg(blockedCount);
 
     view->setHtml(html, QUrl("https://litewave.home/"));
