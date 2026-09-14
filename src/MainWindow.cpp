@@ -6,6 +6,7 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QProgressBar>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -133,10 +134,19 @@ void MainWindow::openUrl(const QString &text)
     const QString input = text.trimmed();
     if (input.isEmpty() || !currentView()) return;
 
-    QUrl url = QUrl::fromUserInput(input);
-    if (!url.isValid()) return;
-    if (url.scheme().isEmpty() || url.scheme() == "search")
+    const QRegularExpression urlPattern(
+        R"(^(https?://|http://|ftp://|localhost(?::\\d+)?(?:/|$)|(?:www\\.)?[a-zA-Z0-9-]+\\.[a-zA-Z]{2,}(?:/|$)))",
+        QRegularExpression::CaseInsensitiveOption);
+
+    QUrl url;
+    if (urlPattern.match(input).hasMatch()) {
+        const QString address = input.contains("://") ? input : "https://" + input;
+        url = QUrl(address);
+    } else {
         url = QUrl("https://www.google.com/search?q=" + QUrl::toPercentEncoding(input));
+    }
+
+    if (!url.isValid()) return;
     currentView()->setUrl(url);
 }
 
