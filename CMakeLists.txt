@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(LiteWave VERSION 0.1 LANGUAGES CXX)
+project(LiteWave VERSION 0.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,6 +13,8 @@ qt_add_executable(LiteWave
     src/main.cpp
     src/MainWindow.cpp
     src/MainWindow.h
+    src/AdBlocker.cpp
+    src/AdBlocker.h
 )
 
 target_link_libraries(LiteWave PRIVATE
@@ -23,3 +25,5 @@ target_link_libraries(LiteWave PRIVATE
 if(WIN32)
     set_target_properties(LiteWave PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
+
+install(TARGETS LiteWave RUNTIME DESTINATION bin)
