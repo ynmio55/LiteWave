@@ -12,7 +12,7 @@ permissions:
 jobs:
   windows:
     name: Windows installer package
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - name: Install Qt
@@ -20,7 +20,7 @@ jobs:
         with:
           version: "6.8.3"
           arch: win64_msvc2022_64
-          modules: "qtwebengine"
+          modules: "qtwebengine qtwebchannel qtpositioning"
           cache: true
       - name: Build and package
         shell: pwsh
@@ -31,20 +31,22 @@ jobs:
           Copy-Item build/Release/LiteWave.exe package/
           windeployqt --release --no-translations package/LiteWave.exe
           choco install innosetup --no-progress -y
-          iscc packaging/LiteWave.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging/LiteWave.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed" }
+          if (!(Test-Path dist/LiteWave-Setup-Windows-x64.exe)) { throw "Installer missing" }
           Compress-Archive -Path package/* -DestinationPath LiteWave-Windows-x64-portable.zip
       - uses: actions/upload-artifact@v4
         with:
           name: LiteWave-Windows-x64
           path: |
-            LiteWave-Setup-Windows-x64.exe
+            dist/LiteWave-Setup-Windows-x64.exe
             LiteWave-Windows-x64-portable.zip
       - name: Publish release assets
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            LiteWave-Setup-Windows-x64.exe
+            dist/LiteWave-Setup-Windows-x64.exe
             LiteWave-Windows-x64-portable.zip
 
   linux:
