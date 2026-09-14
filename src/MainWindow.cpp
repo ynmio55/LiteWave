@@ -221,8 +221,15 @@ h2{font-size:18px;font-weight:500;margin:42px 0 15px}.sites{display:grid;grid-te
 <div class="site" onclick="help()"><div class="icon">?</div><span>AI ช่วยค้นหา</span></div>
 </div><div class="note">LiteWave 0.3 · Shield บล็อกตัวติดตามและโฆษณาจากโดเมนที่รู้จัก</div></main>
 <script>
-function openSite(u){location.href=u}function help(){q.value='ช่วยค้นหา ';q.focus()}
-function go(e){e.preventDefault();let x=q.value.trim();if(!x)return;let u=/^(https?:\\/\\/|localhost|[a-z0-9-]+\\.[a-z]{2,})/i.test(x)?(x.match(/^https?:\\/\\//i)?x:'https://'+x):'https://www.google.com/search?q='+encodeURIComponent(x);location.href=u}
+function openSite(u){window.location.href=u}
+function help(){document.getElementById('q').value='ช่วยค้นหา ';document.getElementById('q').focus()}
+function go(e){
+  e.preventDefault();
+  const x=document.getElementById('q').value.trim();
+  if(!x)return;
+  const isUrl=x.indexOf('://')>0 || x.startsWith('www.') || (x.indexOf('.')>0 && x.indexOf(' ')<0);
+  window.location.href=isUrl?(x.indexOf('://')>0?x:'https://'+x):'https://www.google.com/search?q='+encodeURIComponent(x);
+}
 </script></body></html>
 )HTML");
     view->setHtml(html, QUrl("https://litewave.home/"));
