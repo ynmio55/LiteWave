@@ -42,7 +42,7 @@ private:
     QToolButton *shieldBtn_ = nullptr;
     QLabel *sslLabel_ = nullptr;
     AdBlocker *adBlocker_;
-    bool darkMode_ = true;
+    bool darkMode_ = false;
     bool privateMode_ = false;
     QWebEngineProfile *profile_ = nullptr;
     QList<QUrl> closedTabs_;
