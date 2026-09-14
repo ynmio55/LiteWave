@@ -102,9 +102,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: LiteWave latest
-          prerelease: true
-          make_latest: false
+          name: LiteWave Latest (v0.8.0)
+          prerelease: false
+          make_latest: true
           target_commitish: ${{ github.sha }}
           fail_on_unmatched_files: true
           body: |

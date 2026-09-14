@@ -1,16 +1,24 @@
 
-# LiteWave — รุ่นทดลอง
+# LiteWave 🌊 — เว็บเบราว์เซอร์ความเร็วสูง
 
-## ดาวน์โหลดล่าสุด
+[![Download Windows Installer](https://img.shields.io/badge/Download_Windows-Installer_.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Setup-Windows-x64.exe)
+[![Download Windows Portable](https://img.shields.io/badge/Download_Windows-Portable_.zip-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Windows-x64-portable.zip)
+[![Download Linux Package](https://img.shields.io/badge/Download_Linux-.tar.gz-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Linux-x64.tar.gz)
+[![GitHub Release](https://img.shields.io/github/v/release/ynmio55/LiteWave?style=for-the-badge&label=Latest%20Release&color=2ea44f)](https://github.com/ynmio55/LiteWave/releases/latest)
 
-- [ติดตั้ง Windows x64 (.exe)](https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Setup-Windows-x64.exe) — ดาวน์โหลดแล้วเปิดตัวติดตั้ง
-- [Windows Portable (.zip)](https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Windows-x64-portable.zip) — แตกไฟล์ก่อนเปิด
-- [Linux x64 (.tar.gz)](https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Linux-x64.tar.gz) — สร้างบน Ubuntu 24.04 ต้องมี Qt runtime ที่เข้ากันได้ ไม่ใช่แพ็กเกจ standalone สำหรับ Linux ทุกดิสโทร
-- [หน้าไฟล์ล่าสุดและข้อมูลรุ่น](https://github.com/ynmio55/LiteWave/releases/tag/latest)
+---
 
-ไฟล์ดาวน์โหลดจะอัปเดตเมื่อ Windows/Linux build และงานเผยแพร่สำเร็จ
-การ build ผ่านยังไม่ใช่การทดสอบทุกเว็บไซต์หรือการรับรองการเล่นวิดีโอจริง
-ไม่ต้องเข้าสู่ระบบ GitHub เพื่อโหลด Release ของโปรเจกต์สาธารณะ
+## ⚡ วิธีดาวน์โหลดติดตั้งง่ายๆ (สำหรับผู้ใช้ทั่วไป)
+
+### 📥 ตัวเลือกที่ 1: กดปุ่มดาวน์โหลดโดยตรงข้างบนนี้
+* **Windows (แนะนำ):** กดปุ่ม **`Download Windows Installer (.exe)`** แล้วกดรันเพื่อติดตั้งได้ทันที
+* **Windows ไม่ต้องติดตั้ง:** กด **`Download Windows Portable (.zip)`** แตกไฟล์แล้วเปิด `LiteWave.exe` เล่นได้เลย
+* **Linux:** กด **`Download Linux (.tar.gz)`** (สร้างบน Ubuntu 24.04 / Qt 6)
+
+### 📌 ตัวเลือกที่ 2: ดาวน์โหลดจากหน้า Releases บน GitHub
+1. มองไปที่แถบขวามือของหน้า GitHub นี้ ตรงหัวข้อ **`Releases`** (จะเห็นคำว่า **`LiteWave Latest (v0.8.0)`**)
+2. คลิกที่ชื่อ **`LiteWave Latest`** หรือคลิกที่ลิงก์ 👉 **[ไปที่หน้าดาวน์โหลด Releases](https://github.com/ynmio55/LiteWave/releases/latest)**
+3. เลื่อนลงมาใต้หัวข้อ **Assets** แล้วกดดาวน์โหลดไฟล์ `.exe` หรือ `.zip` ได้ทันที! (ไม่ต้อง Login ก็โหลดได้)
 
 ## ความเข้ากันได้ของเว็บไซต์และวิดีโอ
 
