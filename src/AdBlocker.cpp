@@ -21,7 +21,7 @@ AdBlocker::AdBlocker(QObject *parent)
         "hotjar.com", "mouseflow.com", "fullstory.com", "mixpanel.com",
         "app-measurement.com", "segment.io", "amplitude.com", "umeng.com",
         "analytics.yahoo.com", "amazon-adsystem.com", "adsterra.com",
-        "propellerads.com", "a-ads.com", "trafficjunky.com", "juicyads.com",
+        "propellerads.com", "a-ads.com", "juicyads.com",
         "hilltopads.com", "clickadu.com", "monetag.com", "adstriker.com",
         "adcash.com", "adtrue.com", "exponential.com", "yieldmo.com",
         "spotxchange.com", "teads.tv", "admanmedia.com", "bebi.com",
@@ -105,12 +105,10 @@ QString AdBlocker::cosmeticCss()
 {
     return QStringLiteral(R"CSS(
         iframe[src*="doubleclick"], iframe[src*="googlesyndication"], iframe[src*="adservice"], iframe[src*="adsystem"],
-        div[class*="ad-box"], div[class*="ad-container"], div[class*="sponsored-post"], div[class*="ad-banner"],
-        .adsbygoogle, .a-ad, .ad_wrapper, .ad-unit, .ad-slot, .ad-card, .ad-placement, .ad_box, .ad_frame,
-        [id*="google_ads"], [id*="div-gpt-ad"], [class*="google-auto-placed"],
+        .adsbygoogle, .a-ad, [id*="google_ads"], [id*="div-gpt-ad"], [class*="google-auto-placed"],
         ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, ytd-statement-banner-renderer,
         ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer, .ytd-action-companion-ad-renderer,
-        #player-ads, .video-ads, .ytp-ad-overlay-container, .ytp-ad-message-container,
+        #player-ads, .ytp-ad-overlay-container, .ytp-ad-message-container,
         ytd-ad-slot-renderer, ytd-promoted-video-renderer, .ytp-ad-button, .ytp-ad-text
         { display: none !important; visibility: hidden !important; width: 0px !important; height: 0px !important; pointer-events: none !important; opacity: 0 !important; }
     )CSS");
@@ -125,6 +123,7 @@ QString AdBlocker::cosmeticJs()
             } catch(e) {}
 
             function cleanAds() {
+                if (!window.location.hostname.includes('youtube.com')) return;
                 try {
                     var video = document.querySelector('video');
                     var adPlaying = document.querySelector('.ad-interrupting, .ad-showing, .ytp-ad-player-overlay');
