@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(LiteWave VERSION 0.6 LANGUAGES CXX)
+project(LiteWave VERSION 0.7 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,6 +15,7 @@ qt_add_executable(LiteWave
     src/MainWindow.h
     src/AdBlocker.cpp
     src/AdBlocker.h
+    resources.qrc
 )
 
 target_link_libraries(LiteWave PRIVATE
