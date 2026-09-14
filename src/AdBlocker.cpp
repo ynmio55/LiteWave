@@ -86,6 +86,11 @@ void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
     const QString host = request.host().toLower();
     const QString target = (request.path() + "?" + request.query()).toLower();
 
+    // Never block reCAPTCHA or Google verification URLs
+    if (host.contains("recaptcha") || target.contains("recaptcha") || target.contains("sorry/index")) {
+        return;
+    }
+
     if (isDomainBlocked(host) || isPathBlocked(target)) {
         info.block(true);
         const int count = blockedCount_.fetchAndAddAcquire(1) + 1;
