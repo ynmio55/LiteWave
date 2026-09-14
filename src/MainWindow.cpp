@@ -6,6 +6,7 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QProgressBar>
+#include <QStandardPaths>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QStatusBar>
@@ -27,6 +28,12 @@ MainWindow::MainWindow(QWidget *parent)
     resize(1320, 840);
 
     auto *profile = QWebEngineProfile::defaultProfile();
+    profile->setPersistentStoragePath(
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/webdata");
+    profile->setCachePath(
+        QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/webcache");
+    profile->setPersistentCookiesPolicy(QWebEngineProfile::AllowPersistentCookies);
+    profile->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
     profile->setUrlRequestInterceptor(adBlocker_);
 
     auto *toolbar = addToolBar("LiteWave");
@@ -142,7 +149,7 @@ void MainWindow::openUrl(const QString &text)
         const QString address = input.contains("://") ? input : "https://" + input;
         url = QUrl(address);
     } else {
-        url = QUrl("https://www.google.com/search?igu=1&q=" + QUrl::toPercentEncoding(input));
+        url = QUrl("https://www.google.com/search?q=" + QUrl::toPercentEncoding(input));
     }
 
     if (!url.isValid()) return;
@@ -227,7 +234,7 @@ function go(e){
   const x=document.getElementById('q').value.trim();
   if(!x)return;
   const isUrl=x.indexOf('://')>0 || x.startsWith('www.') || (x.indexOf('.')>0 && x.indexOf(' ')<0);
-  window.location.href=isUrl?(x.indexOf('://')>0?x:'https://'+x):'https://www.google.com/search?igu=1&q='+encodeURIComponent(x);
+  window.location.href=isUrl?(x.indexOf('://')>0?x:'https://'+x):'https://www.google.com/search?q='+encodeURIComponent(x);
 }
 </script></body></html>
 )HTML");
