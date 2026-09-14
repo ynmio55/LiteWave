@@ -17,6 +17,7 @@
 #include <QToolBar>
 #include <QWebEngineFullScreenRequest>
 #include <QWebEngineNewWindowRequest>
+#include <QWebEnginePermission>
 #include <QWebEnginePage>
 #include <QUrlQuery>
 #include <QFileInfo>
@@ -41,6 +42,15 @@ public:
         : QWebEnginePage(profile, parent), mw_(mw), view_(view) {}
 
 protected:
+    QWebEnginePage *createWindow(WebWindowType type) override {
+        Q_UNUSED(type);
+        if (mw_) {
+            auto *newView = mw_->createView(QUrl());
+            return newView->page();
+        }
+        return nullptr;
+    }
+
     bool acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) override {
         if (url.scheme() == "litewave") {
             if (isMainFrame && mw_ && view_) {
@@ -199,10 +209,21 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
     auto *view = new QWebEngineView(tabs_);
     auto *page = new WebPage(profile_, this, view);
     view->setPage(page);
-    view->settings()->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
-    view->settings()->setAttribute(QWebEngineSettings::LocalStorageEnabled, true);
-    view->settings()->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
-    view->settings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
+    auto *s = view->settings();
+    s->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
+    s->setAttribute(QWebEngineSettings::LocalStorageEnabled, true);
+    s->setAttribute(QWebEngineSettings::PluginsEnabled, true);
+    s->setAttribute(QWebEngineSettings::DnsPrefetchEnabled, true);
+    s->setAttribute(QWebEngineSettings::WebGLEnabled, true);
+    s->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
+    s->setAttribute(QWebEngineSettings::AutoLoadImages, true);
+    s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, true);
+    s->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, true);
+    s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, true);
+    s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
+    s->setAttribute(QWebEngineSettings::PdfViewerEnabled, true);
+    s->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
+    s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
     const int index = tabs_->addTab(view, "LiteWave");
     tabs_->setCurrentIndex(index);
     tabs_->tabBar()->setVisible(tabs_->count() > 1);
@@ -227,6 +248,11 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
             [this](QWebEngineNewWindowRequest &request) {
                 auto *newView = createView(QUrl());
                 request.openIn(newView->page());
+            });
+
+    connect(page, &QWebEnginePage::permissionRequested, this,
+            [](QWebEnginePermission permission) {
+                permission.grant();
             });
 
     connect(profile_, &QWebEngineProfile::downloadRequested, this,

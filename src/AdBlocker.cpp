@@ -41,12 +41,9 @@ AdBlocker::AdBlocker(QObject *parent)
     }
 
     blockedPathParts_ = {
-        "/pagead/", "/pagead2.", "/adsystem/", "/adservice/",
-        "/advertising/", "/advertisement/", "/ads/", "/adserver/",
-        "/prebid/", "/bidrequest", "/tracking/", "/tracker/",
-        "/telemetry/", "/doubleclick/", "/api/stats/ads",
-        "googlesyndication", "googleadservices", "ad_click",
-        "/gampad/", "/get_ad", "/ad_status", "/pcs/activeview"
+        "/pagead/js/", "/pagead/conversion/", "/pagead/gen_204",
+        "/pagead2.googlesyndication", "/adservice.google",
+        "/gampad/ads", "/pcs/activeview", "/doubleclick/pagead"
     };
 }
 

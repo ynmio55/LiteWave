@@ -18,9 +18,11 @@ class QToolButton;
 class MainWindow final : public QMainWindow
 {
     Q_OBJECT
+    friend class WebPage;
 public:
     explicit MainWindow(QWidget *parent = nullptr, bool privateMode = false);
     ~MainWindow() override;
+    QWebEngineView *createView(const QUrl &url);
     void loadHome(QWebEngineView *view);
     void handleHomeNavigation(const QUrl &url, QWebEngineView *view);
     void reloadCurrentView();
@@ -55,7 +57,6 @@ private:
     void setupShortcuts();
     void setupUserScripts();
     QWebEngineView *currentView() const;
-    QWebEngineView *createView(const QUrl &url);
     void openUrl(const QString &text);
     void applyTheme();
 };
