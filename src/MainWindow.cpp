@@ -3,6 +3,11 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QIcon>
+#include <QTabBar>
+#include <QToolBar>
+#include <QWebEngineFullScreenRequest>
+#include <QWebEnginePage>
 #include <QLineEdit>
 #include <QProgressBar>
 #include <QStandardPaths>
@@ -20,10 +25,12 @@ MainWindow::MainWindow(QWidget *parent)
       urlBar_(new QLineEdit(this)),
       tabs_(new QTabWidget(this)),
       progress_(new QProgressBar(this)),
+      toolbar_(nullptr),
       shieldAction_(nullptr),
       adBlocker_(new AdBlocker(QWebEngineProfile::defaultProfile()))
 {
     setWindowTitle("LiteWave");
+    setWindowIcon(QIcon(":/icons/litewave.svg"));
     resize(1320, 840);
 
     auto *profile = QWebEngineProfile::defaultProfile();
@@ -36,6 +43,7 @@ MainWindow::MainWindow(QWidget *parent)
     profile->setUrlRequestInterceptor(adBlocker_);
 
     auto *toolbar = addToolBar("LiteWave");
+    toolbar_ = toolbar;
     toolbar->setMovable(false);
     toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
 
@@ -102,6 +110,21 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
     auto *view = new QWebEngineView(tabs_);
     const int index = tabs_->addTab(view, "LiteWave");
     tabs_->setCurrentIndex(index);
+    tabs_->tabBar()->setVisible(tabs_->count() > 1);
+
+    connect(view->page(), &QWebEnginePage::fullScreenRequested, this,
+            [this](QWebEngineFullScreenRequest request) {
+                request.accept();
+                if (request.toggleOn()) {
+                    toolbar_->hide();
+                    tabs_->tabBar()->hide();
+                    showFullScreen();
+                } else {
+                    showNormal();
+                    toolbar_->show();
+                    tabs_->tabBar()->setVisible(tabs_->count() > 1);
+                }
+            });
 
     connect(view, &QWebEngineView::urlChanged, this, &MainWindow::updateCurrentUrl);
     connect(view, &QWebEngineView::titleChanged, this, &MainWindow::updateTabTitle);
@@ -127,6 +150,7 @@ void MainWindow::closeTab(int index)
     QWidget *page = tabs_->widget(index);
     tabs_->removeTab(index);
     page->deleteLater();
+    tabs_->tabBar()->setVisible(tabs_->count() > 1);
 }
 
 void MainWindow::navigate()
