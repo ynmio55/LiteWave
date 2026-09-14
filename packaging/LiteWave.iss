@@ -4,8 +4,7 @@
 #define AppExeName "LiteWave.exe"
 
 [Setup]
-SourceDir=..
-OutputDir=dist
+OutputDir=..\dist
 AppId={{A9B8C7D6-E5F4-4321-9876-LITEWAVE0001}
 AppName={#AppName}
 AppVersion={#AppVersion}
@@ -21,7 +20,7 @@ UninstallDisplayIcon={app}\{#AppExeName}
 WizardStyle=modern
 
 [Files]
-Source: "package\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+Source: "..\package\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\LiteWave"; Filename: "{app}\{#AppExeName}"
