@@ -143,7 +143,7 @@ void MainWindow::openUrl(const QString &text)
         const QString address = input.contains("://") ? input : "https://" + input;
         url = QUrl(address);
     } else {
-        url = QUrl("https://www.google.com/search?q=" + QUrl::toPercentEncoding(input));
+        url = QUrl("https://html.duckduckgo.com/html/?q=" + QUrl::toPercentEncoding(input));
     }
 
     if (!url.isValid()) return;
@@ -228,7 +228,7 @@ function go(e){
   const x=document.getElementById('q').value.trim();
   if(!x)return;
   const isUrl=x.indexOf('://')>0 || x.startsWith('www.') || (x.indexOf('.')>0 && x.indexOf(' ')<0);
-  window.location.href=isUrl?(x.indexOf('://')>0?x:'https://'+x):'https://www.google.com/search?q='+encodeURIComponent(x);
+  window.location.href=isUrl?(x.indexOf('://')>0?x:'https://'+x):'https://html.duckduckgo.com/html/?q='+encodeURIComponent(x);
 }
 </script></body></html>
 )HTML");
