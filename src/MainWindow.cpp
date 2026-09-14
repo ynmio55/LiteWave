@@ -221,11 +221,14 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
                     ? QStringLiteral("LiteWave-download") : download->downloadFileName();
                 download->setDownloadDirectory(dir);
                 download->setDownloadFileName(name);
-                connect(download, &QWebEngineDownloadRequest::finished, this,
-                        [this, download] {
-                            const bool ok = download->state() == QWebEngineDownloadRequest::DownloadCompleted;
-                            statusBar()->showMessage(ok ? "ดาวน์โหลดเสร็จแล้ว: " + download->downloadFileName()
-                                                        : "ดาวน์โหลดไม่สำเร็จ", 5000);
+                connect(download, &QWebEngineDownloadRequest::stateChanged, this,
+                        [this, download](QWebEngineDownloadRequest::DownloadState state) {
+                            if (state == QWebEngineDownloadRequest::DownloadCompleted) {
+                                statusBar()->showMessage("ดาวน์โหลดเสร็จแล้ว: " + download->downloadFileName(), 5000);
+                            } else if (state == QWebEngineDownloadRequest::DownloadCancelled ||
+                                       state == QWebEngineDownloadRequest::DownloadInterrupted) {
+                                statusBar()->showMessage("ดาวน์โหลดไม่สำเร็จ", 5000);
+                            }
                         });
                 download->accept();
                 statusBar()->showMessage("กำลังดาวน์โหลด: " + name, 2500);
