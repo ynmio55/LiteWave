@@ -17,7 +17,9 @@
 #include <QToolBar>
 #include <QWebEngineFullScreenRequest>
 #include <QWebEngineNewWindowRequest>
-#include <QWebEnginePermission>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
 #include <QWebEnginePage>
 #include <QUrlQuery>
 #include <QFileInfo>
@@ -55,9 +57,9 @@ protected:
         if (url.scheme() == "litewave") {
             if (isMainFrame && mw_ && view_) {
                 MainWindow *mw = mw_;
-                QWebEngineView *v = view_;
+                QPointer<QWebEngineView> v = view_;
                 QMetaObject::invokeMethod(mw, [mw, v, url]{
-                    mw->handleHomeNavigation(url, v);
+                    if (v) mw->handleHomeNavigation(url, v);
                 }, Qt::QueuedConnection);
             }
             return false;
@@ -65,9 +67,9 @@ protected:
         if (url.host() == "litewave.home") {
             if (isMainFrame && mw_ && view_) {
                 MainWindow *mw = mw_;
-                QWebEngineView *v = view_;
+                QPointer<QWebEngineView> v = view_;
                 QMetaObject::invokeMethod(mw, [mw, v]{
-                    mw->loadHome(v);
+                    if (v) mw->loadHome(v);
                 }, Qt::QueuedConnection);
             }
             return false;
@@ -101,7 +103,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 
     static QWebEngineProfile *normalProfile = new QWebEngineProfile("LiteWave", qApp);
     profile_ = privateMode_ ? new QWebEngineProfile(this) : normalProfile;
-    profile_->setHttpUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+    // Keep the engine's real version and platform for capability detection.
     profile_->setHttpAcceptLanguage("th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
     if (!privateMode_) {
         profile_->setPersistentStoragePath(storagePath);
@@ -174,6 +176,29 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     themeAction_->setToolTip("สลับโหมดมืด/สว่าง");
     connect(themeAction_, &QAction::triggered, this, &MainWindow::toggleTheme);
 
+    auto *mediaCheck = addButton("ตรวจวิดีโอ");
+    mediaCheck->setToolTip("ตรวจ codec ที่เครื่องนี้รองรับ โดยไม่เปิดเว็บไซต์ภายนอก");
+    connect(mediaCheck, &QAction::triggered, this, [this] {
+        if (!currentView()) return;
+        QPointer<MainWindow> guard(this);
+        currentView()->page()->runJavaScript(QStringLiteral(R"JS(
+            (() => {
+                const v = document.createElement('video');
+                const types = [
+                    ['H.264 / AAC (MP4)', 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"'],
+                    ['VP9 / Opus (WebM)', 'video/webm; codecs="vp9, opus"'],
+                    ['AV1 (MP4)', 'video/mp4; codecs="av01.0.05M.08"']
+                ];
+                return types.map(([name, mime]) => name + ': ' +
+                    (v.canPlayType(mime) || 'not supported')).join('\n') +
+                    '\nMediaSource: ' + (typeof MediaSource !== 'undefined') +
+                    '\nThis checks advertised support, not actual playback or DRM.';
+            })()
+        )JS"), [guard](const QVariant &result) {
+            if (guard) QMessageBox::information(guard, "Video capability", result.toString());
+        });
+    });
+
     progress_->setMaximumWidth(120);
     progress_->setTextVisible(false);
     progress_->setRange(0, 100);
@@ -207,7 +232,7 @@ QWebEngineView *MainWindow::currentView() const
 QWebEngineView *MainWindow::createView(const QUrl &url)
 {
     auto *view = new QWebEngineView(tabs_);
-    auto *page = new WebPage(profile_, this, view);
+    auto *page = new WebPage(profile_, this, view, view);
     view->setPage(page);
     auto *s = view->settings();
     s->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
@@ -217,12 +242,12 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
     s->setAttribute(QWebEngineSettings::WebGLEnabled, true);
     s->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
     s->setAttribute(QWebEngineSettings::AutoLoadImages, true);
-    s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, true);
+    s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, false);
     s->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, true);
-    s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, true);
+    s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, false);
     s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
     s->setAttribute(QWebEngineSettings::PdfViewerEnabled, true);
-    s->setAttribute(QWebEngineSettings::AllowRunningInsecureContent, true);
+    s->setAttribute(QWebEngineSettings::AllowRunningInsecureContent, false);
     s->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
     s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
     const int index = tabs_->addTab(view, "LiteWave");
@@ -251,14 +276,39 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
                 request.openIn(newView->page());
             });
 
-    connect(page, &QWebEnginePage::permissionRequested, this,
-            [](QWebEnginePermission permission) {
-                permission.grant();
+    // Compatible with Qt 6.4+; never grant sensitive permissions silently.
+    connect(page, &QWebEnginePage::featurePermissionRequested, this,
+            [this, page](const QUrl &origin, QWebEnginePage::Feature feature) {
+                QString capability;
+                switch (feature) {
+                case QWebEnginePage::MediaAudioCapture: capability = "microphone"; break;
+                case QWebEnginePage::MediaVideoCapture: capability = "camera"; break;
+                case QWebEnginePage::MediaAudioVideoCapture: capability = "camera and microphone"; break;
+                case QWebEnginePage::Geolocation: capability = "location"; break;
+                case QWebEnginePage::Notifications: capability = "notifications"; break;
+                default:
+                    page->setFeaturePermission(origin, feature, QWebEnginePage::PermissionDeniedByUser);
+                    return;
+                }
+                QPointer<QWebEnginePage> guard(page);
+                const auto answer = QMessageBox::question(this, "Site permission",
+                    origin.toDisplayString() + "\nAllow access to " + capability + "?",
+                    QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+                if (guard)
+                    guard->setFeaturePermission(origin, feature,
+                        answer == QMessageBox::Yes ? QWebEnginePage::PermissionGrantedByUser
+                                                   : QWebEnginePage::PermissionDeniedByUser);
             });
 
-    connect(profile_, &QWebEngineProfile::downloadRequested, this,
-            [this](QWebEngineDownloadRequest *download) {
-                if (!download) return;
+    connect(profile_, &QWebEngineProfile::downloadRequested, view,
+            [this, page](QWebEngineDownloadRequest *download) {
+                // A shared profile emits to every tab: only the originating page handles it.
+                if (!download || download->page() != page ||
+                    download->state() != QWebEngineDownloadRequest::DownloadRequested) return;
+                if (download->isSavePageDownload()) {
+                    download->accept(); // Keep the filename selected by Ctrl+S.
+                    return;
+                }
                 const QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
                 const QString name = download->downloadFileName().isEmpty()
                     ? QStringLiteral("LiteWave-download") : download->downloadFileName();
@@ -472,9 +522,13 @@ void MainWindow::setupUserScripts()
     if (profile_->scripts()->find("LiteWaveCosmeticCss").isEmpty()) {
         QWebEngineScript cssScript;
         cssScript.setName("LiteWaveCosmeticCss");
-        cssScript.setSourceCode(AdBlocker::cosmeticCss());
+        const QString cssJson = QString::fromUtf8(
+            QJsonDocument(QJsonArray{AdBlocker::cosmeticCss()}).toJson(QJsonDocument::Compact));
+        cssScript.setSourceCode("(() => { const s = document.createElement('style'); "
+            "s.id = 'litewave-ad-style'; s.textContent = " + cssJson +
+            "[0]; (document.head || document.documentElement).appendChild(s); })();");
         cssScript.setInjectionPoint(QWebEngineScript::DocumentReady);
-        cssScript.setWorldId(QWebEngineScript::MainWorld);
+        cssScript.setWorldId(QWebEngineScript::ApplicationWorld);
         cssScript.setRunsOnSubFrames(true);
         profile_->scripts()->insert(cssScript);
     }
@@ -484,7 +538,7 @@ void MainWindow::setupUserScripts()
         jsScript.setName("LiteWaveCosmeticJs");
         jsScript.setSourceCode(AdBlocker::cosmeticJs());
         jsScript.setInjectionPoint(QWebEngineScript::DocumentReady);
-        jsScript.setWorldId(QWebEngineScript::MainWorld);
+        jsScript.setWorldId(QWebEngineScript::ApplicationWorld);
         jsScript.setRunsOnSubFrames(true);
         profile_->scripts()->insert(jsScript);
     }

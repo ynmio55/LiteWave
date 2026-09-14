@@ -76,13 +76,7 @@ bool AdBlocker::isPathBlocked(const QString &target) const
 
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
-    // Override request headers to prevent QtWebEngine bot detection & fingerprinting
-    info.setHttpHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
-    info.setHttpHeader("Sec-CH-UA", "\"Chromium\";v=\"128\", \"Not;A=Brand\";v=\"24\", \"Google Chrome\";v=\"128\"");
-    info.setHttpHeader("Sec-CH-UA-Mobile", "?0");
-    info.setHttpHeader("Sec-CH-UA-Platform", "\"Windows\"");
-    info.setHttpHeader("Accept-Language", "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
-
+    // Let Chromium generate consistent User-Agent and client-hint headers.
     if (!enabled_) return;
 
     const QUrl request = info.requestUrl();
@@ -117,36 +111,19 @@ QString AdBlocker::cosmeticCss()
 QString AdBlocker::cosmeticJs()
 {
     return QStringLiteral(R"JS(
-        (function() {
-            try {
-                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            } catch(e) {}
-
-            function cleanAds() {
-                if (!window.location.hostname.includes('youtube.com')) return;
-                try {
-                    var video = document.querySelector('video');
-                    var adPlaying = document.querySelector('.ad-interrupting, .ad-showing, .ytp-ad-player-overlay');
-                    if (video && adPlaying) {
-                        if (!isNaN(video.duration) && video.duration > 0 && isFinite(video.duration)) {
-                            video.currentTime = video.duration - 0.1;
-                        }
-                        video.playbackRate = 16.0;
-                        video.muted = true;
-                    }
-                    var skipBtns = document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-ad-overlay-close-button, .ytp-ad-skip-button-slot, .ytp-ad-skip-button-container');
-                    skipBtns.forEach(function(btn) { if (btn) btn.click(); });
-
-                    var adNodes = document.querySelectorAll('ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, #player-ads, .ytd-in-feed-ad-layout-renderer, .adsbygoogle, [id*="google_ads"]');
-                    adNodes.forEach(function(node) {
-                        if (node && node.parentNode) { node.parentNode.removeChild(node); }
-                    });
-                } catch(e) {}
-            }
-            setInterval(cleanAds, 500);
-            document.addEventListener('DOMContentLoaded', cleanAds);
-        })();
-    )JS");
+(() => {
+    // Only touch YouTube's visible skip buttons; never seek, mute or speed up content.
+    const host = location.hostname;
+    if (host !== 'youtube.com' && !host.endsWith('.youtube.com')) return;
+    setInterval(() => {
+        if (document.hidden) return;
+        document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-ad-overlay-close-button')
+            .forEach(button => {
+                if (button.getClientRects().length && !button.disabled) button.click();
+            });
+    }, 1000);
+})();
+)JS");
 }
 
 

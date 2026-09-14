@@ -69,6 +69,8 @@ jobs:
           mkdir -p package/LiteWave
           cp build/LiteWave package/LiteWave/
           cp packaging/LiteWave.desktop package/LiteWave/
+          cp assets/litewave.svg package/LiteWave/
+          cp README.md package/LiteWave/
           tar -czf LiteWave-Linux-x64.tar.gz -C package LiteWave
       - uses: actions/upload-artifact@v4
         with:
@@ -102,7 +104,15 @@ jobs:
           tag_name: latest
           name: LiteWave latest
           prerelease: true
-          make_latest: true
+          make_latest: false
+          target_commitish: ${{ github.sha }}
+          fail_on_unmatched_files: true
+          body: |
+            Compatibility update built from commit ${{ github.sha }}.
+            Build and packaging checks passed; not a certification of all-site or DRM playback.
+            Windows: download the Setup EXE and run it. Linux archive is built on Ubuntu 24.04;
+            Fedora users should follow the source-build instructions in README.
+            Use the Video capability button to check the codecs available on your installation.
           files: |
             release/windows/dist/LiteWave-Setup-Windows-x64.exe
             release/windows/LiteWave-Windows-x64-portable.zip
