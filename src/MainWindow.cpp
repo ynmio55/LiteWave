@@ -443,14 +443,16 @@ void MainWindow::handleHomeNavigation(const QUrl &url, QWebEngineView *view)
 {
     if (!view) return;
 
-    if (url.scheme() != "litewave") {
+    const QString host = url.host().toLower();
+    const QString path = url.path().toLower();
+
+    if (url.scheme() != "litewave" && host != "litewave.home") {
         view->setUrl(url);
         return;
     }
 
     const QUrlQuery query(url);
-    const QString action = url.host().toLower();
-    if (action == "search") {
+    if (host == "search" || path == "/search") {
         const QString text = query.queryItemValue("q").trimmed();
         const QString engine = query.queryItemValue("engine").toLower();
         if (text.isEmpty()) {
@@ -1091,7 +1093,7 @@ body {
 <div class="subtitle">ระบบค้นหาและท่องเว็บความเร็วสูง · ปลอดภัย ไร้โฆษณารบกวน</div>
 
 <div class="search-container">
-  <form class="search-box" action="litewave://search" method="get">
+  <form class="search-box" action="https://litewave.home/search" method="get">
     <div class="search-icon">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
     </div>
