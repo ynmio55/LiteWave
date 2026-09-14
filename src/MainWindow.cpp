@@ -101,7 +101,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 
     static QWebEngineProfile *normalProfile = new QWebEngineProfile("LiteWave", qApp);
     profile_ = privateMode_ ? new QWebEngineProfile(this) : normalProfile;
-    profile_->setHttpUserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+    profile_->setHttpUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
     profile_->setHttpAcceptLanguage("th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
     if (!privateMode_) {
         profile_->setPersistentStoragePath(storagePath);
@@ -222,6 +222,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
     s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, true);
     s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
     s->setAttribute(QWebEngineSettings::PdfViewerEnabled, true);
+    s->setAttribute(QWebEngineSettings::AllowRunningInsecureContent, true);
     s->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
     s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
     const int index = tabs_->addTab(view, "LiteWave");
@@ -544,6 +545,7 @@ void MainWindow::toggleShield(bool enabled)
     adBlocker_->setEnabled(enabled);
     updateShieldBadge(adBlocker_->blockedCount());
     statusBar()->showMessage(enabled ? "เปิดการบล็อกโฆษณาแล้ว" : "ปิดการบล็อกโฆษณาแล้ว", 2500);
+    if (currentView()) currentView()->reload();
 }
 
 void MainWindow::toggleTheme()
