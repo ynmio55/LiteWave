@@ -8,6 +8,7 @@ class QLineEdit;
 class QProgressBar;
 class QTabWidget;
 class QWebEngineView;
+class QToolBar;
 class QAction;
 
 class MainWindow final : public QMainWindow
@@ -30,6 +31,7 @@ private:
     QLineEdit *urlBar_;
     QTabWidget *tabs_;
     QProgressBar *progress_;
+    QToolBar *toolbar_;
     QAction *shieldAction_;
     AdBlocker *adBlocker_;
     bool darkMode_ = false;
