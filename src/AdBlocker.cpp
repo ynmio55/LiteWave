@@ -78,13 +78,8 @@ bool AdBlocker::isPathBlocked(const QString &target) const
 
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
-    // Standardize User-Agent header to latest stable Windows 10 Chrome
-    info.setHttpHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
-    info.setHttpHeader("Sec-CH-UA", "\"Chromium\";v=\"128\", \"Not;A=Brand\";v=\"24\", \"Google Chrome\";v=\"128\"");
-    info.setHttpHeader("Sec-CH-UA-Mobile", "?0");
-    info.setHttpHeader("Sec-CH-UA-Platform", "\"Windows\"");
-    info.setHttpHeader("Accept-Language", "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
-
+    // Do not spoof User-Agent or Client Hints. Chromium must report the real
+    // engine/platform so media servers choose compatible streams.
     if (!enabled_) return;
 
     const QUrl request = info.requestUrl();
@@ -124,36 +119,24 @@ QString AdBlocker::cosmeticJs()
 {
     return QStringLiteral(R"JS(
 (() => {
-    try {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    } catch(e) {}
-
+    // Only click visible skip/close controls. Never seek, mute, or change
+    // playback speed: those mutations can break normal video playback.
     const host = location.hostname;
+    if (host !== 'youtube.com' && !host.endsWith('.youtube.com')) return;
 
-    // Fast Ad-Skipper for YouTube
-    if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
-        setInterval(() => {
-            if (document.hidden) return;
-            try {
-                const video = document.querySelector('video');
-                const adPlaying = document.querySelector('.ad-interrupting, .ad-showing, .ytp-ad-player-overlay');
-                if (video && adPlaying) {
-                    if (!isNaN(video.duration) && video.duration > 0 && isFinite(video.duration)) {
-                        video.currentTime = video.duration - 0.1;
-                    }
-                    video.playbackRate = 16.0;
-                    video.muted = true;
+    setInterval(() => {
+        if (document.hidden) return;
+        try {
+            document.querySelectorAll(
+                '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, ' +
+                '.ytp-ad-overlay-close-button'
+            ).forEach(button => {
+                if (button.getClientRects().length && !button.disabled) {
+                    button.click();
                 }
-                const skipBtns = document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-ad-overlay-close-button, .ytp-ad-skip-button-slot, .ytp-ad-skip-button-container');
-                skipBtns.forEach(btn => { if (btn && typeof btn.click === 'function') btn.click(); });
-
-                const adNodes = document.querySelectorAll('ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, #player-ads, .ytd-in-feed-ad-layout-renderer, .adsbygoogle, [id*="google_ads"]');
-                adNodes.forEach(node => {
-                    if (node && node.parentNode) { node.parentNode.removeChild(node); }
-                });
-            } catch(e) {}
-        }, 500);
-    }
+            });
+        } catch (e) {}
+    }, 1000);
 })();
 )JS");
 }

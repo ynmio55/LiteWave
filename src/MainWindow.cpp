@@ -20,8 +20,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPointer>
-#include <QWebEnginePermission>
-#include <QWebEngineCertificateError>
 #include <QWebEnginePage>
 #include <QUrlQuery>
 #include <QFileInfo>
@@ -300,11 +298,6 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
                     guard->setFeaturePermission(origin, feature,
                         answer == QMessageBox::Yes ? QWebEnginePage::PermissionGrantedByUser
                                                    : QWebEnginePage::PermissionDeniedByUser);
-            });
-
-    connect(page, &QWebEnginePage::certificateError, this,
-            [](QWebEngineCertificateError certError) {
-                certError.acceptCertificate();
             });
 
     connect(profile_, &QWebEngineProfile::downloadRequested, view,
@@ -1093,7 +1086,7 @@ body {
 <div class="subtitle">ระบบค้นหาและท่องเว็บความเร็วสูง · ปลอดภัย ไร้โฆษณารบกวน</div>
 
 <div class="search-container">
-  <form class="search-box" action="https://litewave.home/search" method="get">
+  <form class="search-box" onsubmit="return submitSearch(event)">
     <div class="search-icon">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
     </div>
@@ -1129,6 +1122,16 @@ body {
 <div class="footer-note">Shield Active · บล็อกโฆษณาแล้ว %6 รายการ</div>
 
 <script>
+function submitSearch(event) {
+  event.preventDefault();
+  const query = document.getElementById('q').value.trim();
+  if (!query) return false;
+  const engine = document.getElementById('engine').value;
+  window.location.href = 'litewave://search?engine=' +
+    encodeURIComponent(engine) + '&q=' + encodeURIComponent(query);
+  return false;
+}
+
 const defaultSites = [
   { name: 'Google', url: 'https://www.google.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>' },
   { name: 'YouTube', url: 'https://www.youtube.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24"><path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>' },
