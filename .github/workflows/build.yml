@@ -1,0 +1,67 @@
+name: Build LiteWave
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows installer package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          arch: win64_msvc2022_64
+          modules: "qtwebengine"
+          cache: true
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          cmake --build build --config Release
+          New-Item -ItemType Directory -Force package
+          Copy-Item build/Release/LiteWave.exe package/
+          windeployqt --release --no-translations package/LiteWave.exe
+          Compress-Archive -Path package/* -DestinationPath LiteWave-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiteWave-Windows-x64
+          path: LiteWave-Windows-x64.zip
+      - name: Publish release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LiteWave-Windows-x64.zip
+
+  linux:
+    name: Linux package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev qt6-webengine-dev
+      - name: Build
+        run: |
+          cmake -S . -B build
+          cmake --build build -j2
+          mkdir -p package/LiteWave
+          cp build/LiteWave package/LiteWave/
+          cp packaging/LiteWave.desktop package/LiteWave/
+          tar -czf LiteWave-Linux-x64.tar.gz -C package LiteWave
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiteWave-Linux-x64
+          path: LiteWave-Linux-x64.tar.gz
+      - name: Publish release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LiteWave-Linux-x64.tar.gz
