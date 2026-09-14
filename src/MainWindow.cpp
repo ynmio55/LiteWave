@@ -99,11 +99,6 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
     connect(view, &QWebEngineView::urlChanged, this, &MainWindow::updateCurrentUrl);
     connect(view, &QWebEngineView::titleChanged, this, &MainWindow::updateTabTitle);
     connect(view, &QWebEngineView::loadProgress, progress_, &QProgressBar::setValue);
-    connect(view, &QWebEngineView::renderProcessTerminated, this,
-            [this](QWebEnginePage::RenderProcessTerminationStatus, int) {
-                if (currentView()) currentView()->setHtml("<h2 style='padding:40px'>หน้าเว็บหยุดทำงาน กดรีเฟรชเพื่อลองใหม่</h2>");
-            });
-
     if (url.isValid() && !url.isEmpty())
         view->setUrl(url);
     return view;
