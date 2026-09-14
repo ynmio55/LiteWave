@@ -4,6 +4,8 @@
 #define AppExeName "LiteWave.exe"
 
 [Setup]
+SourceDir=..
+OutputDir=dist
 AppId={{A9B8C7D6-E5F4-4321-9876-LITEWAVE0001}
 AppName={#AppName}
 AppVersion={#AppVersion}
