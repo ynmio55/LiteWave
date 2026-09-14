@@ -1,10 +1,14 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QUrl>
 
 class AdBlocker;
 class QLineEdit;
+class QProgressBar;
+class QTabWidget;
 class QWebEngineView;
+class QAction;
 
 class MainWindow final : public QMainWindow
 {
@@ -15,16 +19,25 @@ public:
 
 private slots:
     void navigate();
-    void updateUrl(const QUrl &url);
-    void updateTitle(const QString &title);
+    void newTab();
+    void closeTab(int index);
+    void updateCurrentUrl(const QUrl &url);
+    void updateTabTitle(const QString &title);
+    void addBookmark();
     void toggleTheme();
+    void toggleShield(bool enabled);
 
 private:
     QLineEdit *urlBar_;
-    QWebEngineView *webView_;
+    QTabWidget *tabs_;
+    QProgressBar *progress_;
+    QAction *shieldAction_;
     AdBlocker *adBlocker_;
     bool darkMode_ = false;
 
+    QWebEngineView *currentView() const;
+    QWebEngineView *createView(const QUrl &url);
     void openUrl(const QString &text);
     void applyTheme();
+    void loadHome(QWebEngineView *view);
 };
