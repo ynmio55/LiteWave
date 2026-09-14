@@ -2,6 +2,8 @@
 
 #include <QMainWindow>
 #include <QUrl>
+#include <QList>
+class QWebEngineProfile;
 
 class AdBlocker;
 class QLineEdit;
@@ -15,7 +17,8 @@ class MainWindow final : public QMainWindow
 {
     Q_OBJECT
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(QWidget *parent = nullptr, bool privateMode = false);
+    ~MainWindow() override;
 
 private slots:
     void navigate();
@@ -35,6 +38,11 @@ private:
     QAction *shieldAction_;
     AdBlocker *adBlocker_;
     bool darkMode_ = false;
+    bool privateMode_ = false;
+    QWebEngineProfile *profile_ = nullptr;
+    QList<QUrl> closedTabs_;
+    QString findQuery_;
+    void setupShortcuts();
 
     QWebEngineView *currentView() const;
     QWebEngineView *createView(const QUrl &url);
