@@ -46,8 +46,7 @@ AdBlocker::AdBlocker(QObject *parent)
         "/prebid/", "/bidrequest", "/tracking/", "/tracker/",
         "/telemetry/", "/doubleclick/", "/api/stats/ads",
         "googlesyndication", "googleadservices", "ad_click",
-        "/gampad/", "/get_ad", "/ad_status", "ytp-ad-module",
-        "/pcs/activeview", "/api/stats/qoe"
+        "/gampad/", "/get_ad", "/ad_status", "/pcs/activeview"
     };
 }
 
@@ -114,7 +113,7 @@ QString AdBlocker::cosmeticCss()
         [id*="google_ads"], [id*="div-gpt-ad"], [class*="google-auto-placed"],
         ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, ytd-statement-banner-renderer,
         ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer, .ytd-action-companion-ad-renderer,
-        #player-ads, .video-ads, .ytp-ad-module, .ytp-ad-overlay-container, .ytp-ad-message-container,
+        #player-ads, .video-ads, .ytp-ad-overlay-container, .ytp-ad-message-container,
         ytd-ad-slot-renderer, ytd-promoted-video-renderer, .ytp-ad-button, .ytp-ad-text
         { display: none !important; visibility: hidden !important; width: 0px !important; height: 0px !important; pointer-events: none !important; opacity: 0 !important; }
     )CSS");
@@ -131,9 +130,9 @@ QString AdBlocker::cosmeticJs()
             function cleanAds() {
                 try {
                     var video = document.querySelector('video');
-                    var adModule = document.querySelector('.ad-interrupting, .html5-ad-state, .ytp-ad-player-overlay, .ytp-ad-module');
-                    if (video && adModule) {
-                        if (!isNaN(video.duration) && video.duration > 0) {
+                    var adPlaying = document.querySelector('.ad-interrupting, .ad-showing, .ytp-ad-player-overlay');
+                    if (video && adPlaying) {
+                        if (!isNaN(video.duration) && video.duration > 0 && isFinite(video.duration)) {
                             video.currentTime = video.duration - 0.1;
                         }
                         video.playbackRate = 16.0;
@@ -153,5 +152,6 @@ QString AdBlocker::cosmeticJs()
         })();
     )JS");
 }
+
 
 
