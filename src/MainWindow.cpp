@@ -53,7 +53,7 @@ MainWindow::MainWindow(QWidget *parent)
     auto *plus = addButton("+ แท็บ");
     connect(plus, &QAction::triggered, this, &MainWindow::newTab);
 
-    urlBar_->setPlaceholderText("ค้นหาเว็บหรือใส่ URL...");
+    urlBar_->setPlaceholderText("พิมพ์คำค้นหา หรือใส่ที่อยู่เว็บไซต์");
     urlBar_->setClearButtonEnabled(true);
     toolbar->addWidget(urlBar_);
     connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
@@ -212,8 +212,8 @@ h2{font-size:18px;font-weight:500;margin:42px 0 15px}.sites{display:grid;grid-te
 .site{background:#fff;border:1px solid #e1e6ea;border-radius:8px;text-align:center;padding:24px 12px;min-height:112px;cursor:pointer}.site:hover{border-color:#1688c0}
 .icon{font-size:28px;color:#1688c0;margin-bottom:10px}.site span{font-size:14px}.note{color:#84919a;font-size:13px;margin-top:34px}
 </style></head><body><header><div class="brand">LiteWave</div><div class="tag">เร็วขึ้น · เป็นส่วนตัวขึ้น · ควบคุมได้มากขึ้น</div></header>
-<main><h1>เริ่มต้นใช้งาน</h1><p>ค้นหาเว็บ เปิดหลายแท็บ และลดโฆษณารบกวนด้วย Shield</p>
-<form class="search" onsubmit="go(event)"><input id="q" autofocus placeholder="ค้นหาหรือใส่ URL"><button>ค้นหา</button></form>
+<main><h1>เริ่มต้นใช้งาน</h1><p>พิมพ์คำค้นหาได้ทันที เปิดหลายแท็บ และลดโฆษณารบกวนด้วย Shield</p>
+<form class="search" onsubmit="go(event)"><input id="q" autofocus placeholder="พิมพ์สิ่งที่ต้องการค้นหา เช่น ข่าว F1 หรือ YouTube"><button>ค้นหา</button></form>
 <h2>ทางลัด</h2><div class="sites">
 <div class="site" onclick="openSite('https://www.google.com')"><div class="icon">G</div><span>Google</span></div>
 <div class="site" onclick="openSite('https://www.youtube.com')"><div class="icon">▶</div><span>YouTube</span></div>
