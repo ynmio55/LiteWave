@@ -2551,7 +2551,7 @@ QMenu *MainWindow::createMainMenu() {
   auto *aboutAct = menu->addAction("เกี่ยวกับ LiteWave");
   connect(aboutAct, &QAction::triggered, this, [this] {
     QMessageBox::about(this, "เกี่ยวกับ LiteWave Browser",
-                       "<h3>LiteWave Browser v1.0</h3>"
+                       "<h3>LiteWave Browser v1.0.3</h3>"
                        "<p>เบราว์เซอร์ความเร็วสูง น้ำหนักเบา ปลอดภัย และใช้งานง่าย</p>"
                        "<p><b>ฟีเจอร์หลัก:</b>"
                        "<ul>"
