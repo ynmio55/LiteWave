@@ -224,6 +224,11 @@ void AdBlocker::resetBlockedCount()
     blockedCount_.storeRelease(0);
 }
 
+void AdBlocker::recordBlockedPopup()
+{
+    blockedCount_.fetchAndAddRelaxed(1);
+}
+
 int AdBlocker::ruleCount() const
 {
     // Three same-site advertising endpoints are also checked explicitly.

@@ -44,6 +44,7 @@ public:
 
     int blockedCount() const;
     void resetBlockedCount();
+    void recordBlockedPopup();
     int ruleCount() const;
 
     // Cosmetic rules only hide elements that identify a known ad endpoint or

@@ -11,6 +11,7 @@ private slots:
     void standardKeepsNavigationAndUnknownResources();
     void aggressiveAddsTrackerBlocking();
     void siteExceptionRestoresCompatibility();
+    void popupBlocksAreCounted();
 };
 
 void ShieldTests::standardBlocksKnownThirdPartyAdvertising()
@@ -65,6 +66,16 @@ void ShieldTests::aggressiveAddsTrackerBlocking()
         QUrl("https://www.google-analytics.com/analytics.js"),
         QUrl("https://news.example.com/story"),
         QWebEngineUrlRequestInfo::ResourceTypeScript));
+}
+
+void ShieldTests::popupBlocksAreCounted()
+{
+    AdBlocker blocker(nullptr, false);
+    QCOMPARE(blocker.blockedCount(), 0);
+    blocker.recordBlockedPopup();
+    QCOMPARE(blocker.blockedCount(), 1);
+    blocker.resetBlockedCount();
+    QCOMPARE(blocker.blockedCount(), 0);
 }
 
 void ShieldTests::siteExceptionRestoresCompatibility()

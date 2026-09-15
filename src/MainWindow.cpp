@@ -111,6 +111,19 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
   return QIcon(pix);
 }
 
+
+static bool isSameSiteOrSubdomain(const QUrl &first, const QUrl &second)
+{
+  const QString firstHost = first.host().toLower();
+  const QString secondHost = second.host().toLower();
+  if (firstHost.isEmpty() || secondHost.isEmpty())
+    return false;
+
+  return firstHost == secondHost ||
+         firstHost.endsWith(QStringLiteral(".") + secondHost) ||
+         secondHost.endsWith(QStringLiteral(".") + firstHost);
+}
+
 class WebPage : public QWebEnginePage {
 public:
   WebPage(QWebEngineProfile *profile, MainWindow *mw, QWebEngineView *view,
@@ -584,7 +597,31 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
           });
 
   connect(page, &QWebEnginePage::newWindowRequested, this,
-          [this](QWebEngineNewWindowRequest &request) {
+          [this, page](QWebEngineNewWindowRequest &request) {
+            const QUrl sourceUrl = page ? page->url() : QUrl();
+            const QUrl targetUrl = request.requestedUrl();
+            const bool shieldProtectsPage =
+                adBlocker_ && adBlocker_->isEnabledForUrl(sourceUrl);
+            const bool automaticPopup = !request.isUserInitiated();
+            const bool aggressiveCrossSitePopup =
+                shieldProtectsPage &&
+                adBlocker_->mode() == AdBlocker::Mode::Aggressive &&
+                targetUrl.isValid() && !isSameSiteOrSubdomain(sourceUrl, targetUrl);
+
+            // Never create the tab first and close it later: ad networks use
+            // that race to steal focus. Standard blocks scripted popups;
+            // Aggressive also blocks cross-site tabs created by ad-click traps.
+            if (shieldProtectsPage && (automaticPopup || aggressiveCrossSitePopup)) {
+              adBlocker_->recordBlockedPopup();
+              statusBar()->showMessage(
+                  automaticPopup
+                      ? QStringLiteral("Shield บล็อกป๊อปอัปอัตโนมัติแล้ว")
+                      : QStringLiteral("Shield เข้มงวดบล็อกแท็บโฆษณาข้ามเว็บแล้ว"),
+                  3500);
+              refreshShieldUi();
+              return;
+            }
+
             auto *newView = createView(QUrl());
             request.openIn(newView->page());
           });
