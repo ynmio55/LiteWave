@@ -96,6 +96,17 @@ jobs:
           install -Dm755 "${qt_prefix}/libexec/QtWebEngineProcess" \
             package/LiteWave/libexec/QtWebEngineProcess
 
+          set +e
+          timeout --signal=TERM 12s xvfb-run -a env \
+            QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu" \
+            package/LiteWave/LiteWave > litewave-linux-smoke.log 2>&1
+          launch_status=$?
+          set -e
+          if [ "${launch_status}" -ne 124 ]; then
+            cat litewave-linux-smoke.log
+            exit "${launch_status}"
+          fi
+
           tar -czf LiteWave-Linux-x64.tar.gz -C package LiteWave
       - uses: actions/upload-artifact@v4
         with:
