@@ -14,14 +14,10 @@
     let active = true;
     let timer = 0;
     let observer = null;
-    const isYouTube = location.hostname === 'youtube.com' ||
-        location.hostname.endsWith('.youtube.com') ||
-        location.hostname === 'youtu.be';
-
-    // Do nothing on every non-YouTube page. This is intentionally before CSS,
-    // observers, timers, and DOM changes so LiteWave cannot affect other
-    // streaming sites.
-    if (!isYouTube) return;
+    // C++ enables this script only for YouTube after checking the top-level
+    // navigation URL. Keep the web-page script URL-agnostic: Qt's setHtml and
+    // internal pages can expose a temporary data: URL during document creation.
+    const isYouTube = true;
 
     const style = document.createElement('style');
     style.id = 'litewave-ad-style';

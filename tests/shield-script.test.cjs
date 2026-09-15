@@ -63,6 +63,8 @@ function fixture(host = 'www.youtube.com') {
     return { state, global, doc, events, invoke, flush };
 }
 const nonYT = fixture('example.org');
+// Native C++ never enables the script outside YouTube.
+nonYT.global.__litewaveShieldEnabled = false;
 nonYT.invoke();
 assert.equal(nonYT.state.style, null);
 assert.equal(nonYT.state.timers.size, 0);
