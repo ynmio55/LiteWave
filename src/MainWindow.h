@@ -16,6 +16,7 @@ class QAction;
 class QLabel;
 class QToolButton;
 class QCompleter;
+class AdBlocker;
 
 class MainWindow final : public QMainWindow
 {
@@ -51,10 +52,12 @@ private:
     QWidget *tabBarContainer_ = nullptr;
     QToolButton *maxBtn_ = nullptr;
     QToolButton *themeBtn_ = nullptr;
+    QToolButton *shieldBtn_ = nullptr;
     QLabel *sslLabel_ = nullptr;
     bool darkMode_ = false;
     bool privateMode_ = false;
     QWebEngineProfile *profile_ = nullptr;
+    AdBlocker *adBlocker_ = nullptr;
     QList<QUrl> closedTabs_;
     QString findQuery_;
     QPoint dragPosition_;
@@ -82,4 +85,6 @@ private:
     void clearBrowsingDataDialog();
     void showSettingsDialog();
     void setupUrlBarCompleter();
+    void refreshShieldUi();
+    void applyShieldCosmetics(QWebEngineView *view);
 };

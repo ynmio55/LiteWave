@@ -14,6 +14,8 @@ qt_add_executable(LiteWave
     src/main.cpp
     src/MainWindow.cpp
     src/MainWindow.h
+    src/AdBlocker.cpp
+    src/AdBlocker.h
     resources.qrc
 )
 
@@ -43,3 +45,19 @@ if(MSVC)
     target_compile_options(LiteWave PRIVATE /utf-8)
 endif()
 
+
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
+    qt_add_executable(ShieldTests
+        tests/ShieldTests.cpp
+        src/AdBlocker.cpp
+        src/AdBlocker.h
+    )
+    target_include_directories(ShieldTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(ShieldTests PRIVATE
+        Qt6::Test
+        Qt6::WebEngineCore
+    )
+    add_test(NAME ShieldTests COMMAND ShieldTests)
+endif()

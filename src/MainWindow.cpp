@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "AdBlocker.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -176,7 +177,10 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 
   static QWebEngineProfile *normalProfile =
       new QWebEngineProfile("LiteWave", qApp);
+  static AdBlocker *normalShield = new AdBlocker(qApp, true);
   profile_ = privateMode_ ? new QWebEngineProfile(this) : normalProfile;
+  adBlocker_ = privateMode_ ? new AdBlocker(this, false) : normalShield;
+  profile_->setUrlRequestInterceptor(adBlocker_);
   // Keep Qt WebEngine's real runtime user agent. A stale Linux-only Chrome
   // spoof makes responsive, DRM, login, and payment pages select the wrong
   // compatibility branch—especially on Windows.
@@ -326,6 +330,92 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   auto *bookmark = addNavAction("★", "บันทึกหน้าเว็บนี้ (Ctrl+D)");
   connect(bookmark, &QAction::triggered, this, &MainWindow::addBookmark);
 
+  // Shield has one clear menu: Standard, Aggressive, Off, plus a per-site
+  // compatibility escape hatch. It reports only requests actually blocked.
+  shieldBtn_ = new QToolButton(this);
+  shieldBtn_->setObjectName("shieldButton");
+  shieldBtn_->setPopupMode(QToolButton::InstantPopup);
+  shieldBtn_->setCursor(Qt::PointingHandCursor);
+  auto *shieldMenu = new QMenu(shieldBtn_);
+  shieldBtn_->setMenu(shieldMenu);
+  connect(shieldMenu, &QMenu::aboutToShow, this, [this, shieldMenu] {
+    shieldMenu->clear();
+    if (auto *oldModeGroup =
+            shieldMenu->findChild<QActionGroup *>("shieldModeGroup")) {
+      oldModeGroup->deleteLater();
+    }
+    if (!adBlocker_)
+      return;
+
+    auto *modeGroup = new QActionGroup(shieldMenu);
+    modeGroup->setObjectName("shieldModeGroup");
+    modeGroup->setExclusive(true);
+
+    auto *standardAction =
+        shieldMenu->addAction("Shield มาตรฐาน — บล็อกโฆษณา third-party");
+    standardAction->setCheckable(true);
+    standardAction->setActionGroup(modeGroup);
+    standardAction->setChecked(adBlocker_->isEnabled() &&
+                               adBlocker_->mode() == AdBlocker::Mode::Standard);
+    connect(standardAction, &QAction::triggered, this, [this] {
+      adBlocker_->setMode(AdBlocker::Mode::Standard);
+      adBlocker_->setEnabled(true);
+      refreshShieldUi();
+      reloadCurrentView();
+    });
+
+    auto *aggressiveAction =
+        shieldMenu->addAction("Shield เข้มงวด — รวม tracker (บางเว็บอาจต้องปิด)");
+    aggressiveAction->setCheckable(true);
+    aggressiveAction->setActionGroup(modeGroup);
+    aggressiveAction->setChecked(adBlocker_->isEnabled() &&
+                                 adBlocker_->mode() == AdBlocker::Mode::Aggressive);
+    connect(aggressiveAction, &QAction::triggered, this, [this] {
+      adBlocker_->setMode(AdBlocker::Mode::Aggressive);
+      adBlocker_->setEnabled(true);
+      refreshShieldUi();
+      reloadCurrentView();
+    });
+
+    auto *offAction = shieldMenu->addAction("ปิด Shield ทั้งหมด");
+    offAction->setCheckable(true);
+    offAction->setActionGroup(modeGroup);
+    offAction->setChecked(!adBlocker_->isEnabled());
+    connect(offAction, &QAction::triggered, this, [this] {
+      adBlocker_->setEnabled(false);
+      refreshShieldUi();
+      reloadCurrentView();
+    });
+
+    shieldMenu->addSeparator();
+    const QUrl pageUrl = currentView() ? currentView()->url() : QUrl();
+    const QString host = pageUrl.host();
+    const bool canConfigureSite =
+        pageUrl.scheme() == "http" || pageUrl.scheme() == "https";
+    const bool siteAllowed = canConfigureSite && adBlocker_->isSiteAllowed(pageUrl);
+    auto *siteAction = shieldMenu->addAction(
+        siteAllowed ? "เปิด Shield สำหรับ " + host
+                    : "ปิด Shield สำหรับ " + host);
+    siteAction->setEnabled(canConfigureSite);
+    connect(siteAction, &QAction::triggered, this, [this, pageUrl, siteAllowed] {
+      adBlocker_->setSiteAllowed(pageUrl, !siteAllowed);
+      refreshShieldUi();
+      reloadCurrentView();
+    });
+
+    auto *resetCountAction = shieldMenu->addAction("รีเซ็ตจำนวนที่บล็อก");
+    connect(resetCountAction, &QAction::triggered, this, [this] {
+      adBlocker_->resetBlockedCount();
+      refreshShieldUi();
+    });
+
+    shieldMenu->addSeparator();
+    auto *shieldSettingsAction = shieldMenu->addAction("ตั้งค่า Shield...");
+    connect(shieldSettingsAction, &QAction::triggered, this,
+            &MainWindow::showSettingsDialog);
+  });
+  toolbar_->addWidget(shieldBtn_);
+
   // Theme Toggle Button
   themeBtn_ = new QToolButton(this);
   themeBtn_->setObjectName("themeButton");
@@ -343,6 +433,13 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   menuBtn_->setCursor(Qt::PointingHandCursor);
   menuBtn_->setMenu(createMainMenu());
   toolbar_->addWidget(menuBtn_);
+
+  auto *shieldRefreshTimer = new QTimer(this);
+  shieldRefreshTimer->setInterval(400);
+  connect(shieldRefreshTimer, &QTimer::timeout, this,
+          &MainWindow::refreshShieldUi);
+  shieldRefreshTimer->start();
+  refreshShieldUi();
 
   // 2px Slim Progress Line (Row 3 right below toolbar, 0 spacing)
   progress_->setMaximumHeight(2);
@@ -421,11 +518,6 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   auto *view = new QWebEngineView(tabStack_);
   auto *page = new WebPage(profile_, this, view, view);
   view->setPage(page);
-  connect(page, &QWebEnginePage::certificateError, page,
-          [](QWebEngineCertificateError certError) {
-            certError.acceptCertificate();
-            return true;
-          });
   auto *s = view->settings();
   s->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
   s->setAttribute(QWebEngineSettings::LocalStorageEnabled, true);
@@ -674,6 +766,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
     }
   });
   connect(view, &QWebEngineView::loadFinished, this, [this, view](bool) {
+    applyShieldCosmetics(view);
     if (view == currentView()) {
       progress_->setValue(100);
       progress_->hide();
@@ -1039,6 +1132,51 @@ void MainWindow::addBookmark() {
   settings.setValue("bookmarks/" + currentView()->url().toString(), title);
   setupUrlBarCompleter();
   statusBar()->showMessage("บันทึกเว็บแล้ว: " + title, 3000);
+}
+
+void MainWindow::refreshShieldUi() {
+  if (!shieldBtn_ || !adBlocker_)
+    return;
+
+  const int count = adBlocker_->blockedCount();
+  if (!adBlocker_->isEnabled()) {
+    shieldBtn_->setText("Shield · ปิด");
+    shieldBtn_->setToolTip("Shield ปิดอยู่ — คลิกเพื่อเปิดหรือกำหนดเฉพาะเว็บ");
+    return;
+  }
+
+  const QString mode =
+      adBlocker_->mode() == AdBlocker::Mode::Aggressive ? "เข้มงวด" : "มาตรฐาน";
+  shieldBtn_->setText("Shield · " + QString::number(count));
+  shieldBtn_->setToolTip(
+      QString("Shield %1 — บล็อกแล้ว %2 รายการ\nคลิกเพื่อเปลี่ยนโหมดหรือปิดเฉพาะเว็บ")
+          .arg(mode)
+          .arg(count));
+}
+
+void MainWindow::applyShieldCosmetics(QWebEngineView *view) {
+  if (!view || !view->page() || !adBlocker_)
+    return;
+
+  const QString styleId = QStringLiteral("litewave-shield-cosmetic-style");
+  if (!adBlocker_->isEnabledForUrl(view->url())) {
+    view->page()->runJavaScript(
+        "(function(){const s=document.getElementById('" + styleId +
+            "');if(s)s.remove();})();",
+        QWebEngineScript::ApplicationWorld);
+    return;
+  }
+
+  const QString cssJson = QString::fromUtf8(
+      QJsonDocument(QJsonArray{AdBlocker::cosmeticCss()})
+          .toJson(QJsonDocument::Compact));
+  const QString script =
+      "(function(){const id='" + styleId +
+      "';let s=document.getElementById(id);"
+      "if(!s){s=document.createElement('style');s.id=id;"
+      "(document.head||document.documentElement).appendChild(s);}"
+      "s.textContent=" + cssJson + "[0];})();";
+  view->page()->runJavaScript(script, QWebEngineScript::ApplicationWorld);
 }
 
 void MainWindow::toggleTheme() {
@@ -2738,6 +2876,7 @@ void MainWindow::showSettingsDialog() {
   addSidebarItem("เครื่องมือค้นหา", "search");
   addSidebarItem("เมื่อเริ่มต้นทำงาน", "startup");
   addSidebarItem("ความเป็นส่วนตัว", "privacy");
+  addSidebarItem("Shield", "shield");
   addSidebarItem("Secure DNS", "privacy");
   addSidebarItem("การดาวน์โหลด", "downloads");
   addSidebarItem("รีเซ็ตการตั้งค่า", "reset");
@@ -2859,7 +2998,101 @@ void MainWindow::showSettingsDialog() {
   p3Layout->addStretch();
   stacked->addWidget(page3);
 
-  // ---------------- Page 4: Privacy & Secure DNS ----------------
+  // ---------------- Page 4: LiteWave Shield ----------------
+  auto *shieldPage = new QWidget();
+  auto *shieldLayout = new QVBoxLayout(shieldPage);
+  shieldLayout->setSpacing(16);
+  shieldLayout->setContentsMargins(0, 0, 0, 0);
+
+  auto *shieldGroup = new QGroupBox("LiteWave Shield", shieldPage);
+  auto *shieldGroupLayout = new QVBoxLayout(shieldGroup);
+  shieldGroupLayout->setSpacing(10);
+
+  const bool shieldEnabled = adBlocker_ && adBlocker_->isEnabled();
+  const AdBlocker::Mode shieldMode =
+      adBlocker_ ? adBlocker_->mode() : AdBlocker::Mode::Standard;
+  auto *shieldEnabledBox = new QCheckBox(
+      "เปิด Shield — บล็อกโฆษณาและคำขอติดตามที่รู้จัก", shieldGroup);
+  shieldEnabledBox->setChecked(shieldEnabled);
+
+  auto *standardShieldRadio = new QRadioButton(
+      "มาตรฐาน (แนะนำ): บล็อกเฉพาะโฆษณา third-party ที่รู้จัก", shieldGroup);
+  auto *aggressiveShieldRadio = new QRadioButton(
+      "เข้มงวด: เพิ่มการบล็อก tracker — บางเว็บอาจต้องปิด Shield เฉพาะเว็บ",
+      shieldGroup);
+  standardShieldRadio->setChecked(shieldMode == AdBlocker::Mode::Standard);
+  aggressiveShieldRadio->setChecked(shieldMode == AdBlocker::Mode::Aggressive);
+  standardShieldRadio->setEnabled(shieldEnabled);
+  aggressiveShieldRadio->setEnabled(shieldEnabled);
+  connect(shieldEnabledBox, &QCheckBox::toggled, standardShieldRadio,
+          &QWidget::setEnabled);
+  connect(shieldEnabledBox, &QCheckBox::toggled, aggressiveShieldRadio,
+          &QWidget::setEnabled);
+
+  auto *shieldDescription = new QLabel(
+      "Shield ไม่บล็อกการเปิดหน้าเว็บหลัก, CAPTCHA, หน้าเข้าสู่ระบบ หรือ "
+      "คำขอจากเว็บที่คุณยกเว้นไว้ เพื่อให้วิดีโอและเว็บแอปมีโอกาสทำงานได้ปกติ",
+      shieldGroup);
+  shieldDescription->setWordWrap(true);
+  shieldDescription->setStyleSheet(
+      QString("color: %1; font-size: 12px;").arg(subTextColor));
+
+  auto *ruleStatus = new QLabel(
+      QString("ชุดกฎที่ฝังมากับ LiteWave: %1 กฎเครือข่าย")
+          .arg(adBlocker_ ? adBlocker_->ruleCount() : 0),
+      shieldGroup);
+  ruleStatus->setStyleSheet(
+      QString("color: %1; font-size: 12px; font-weight: 600;")
+          .arg(isDark ? "#86efac" : "#15803d"));
+
+  shieldGroupLayout->addWidget(shieldEnabledBox);
+  shieldGroupLayout->addWidget(standardShieldRadio);
+  shieldGroupLayout->addWidget(aggressiveShieldRadio);
+  shieldGroupLayout->addWidget(shieldDescription);
+  shieldGroupLayout->addWidget(ruleStatus);
+  shieldLayout->addWidget(shieldGroup);
+
+  auto *exceptionsGroup = new QGroupBox(
+      "เว็บไซต์ที่ปิด Shield ไว้ (Allowlist)", shieldPage);
+  auto *exceptionsLayout = new QVBoxLayout(exceptionsGroup);
+  auto *shieldAllowedList = new QListWidget(exceptionsGroup);
+  shieldAllowedList->setMinimumHeight(105);
+  const QStringList existingAllowedSites =
+      adBlocker_ ? adBlocker_->allowedSites() : QStringList{};
+  for (const QString &site : existingAllowedSites) {
+    auto *item = new QListWidgetItem(site, shieldAllowedList);
+    item->setData(Qt::UserRole, site);
+  }
+  if (shieldAllowedList->count() == 0) {
+    auto *emptyItem = new QListWidgetItem("ยังไม่มีเว็บไซต์ที่ยกเว้น", shieldAllowedList);
+    emptyItem->setFlags(Qt::NoItemFlags);
+    emptyItem->setForeground(QColor(subTextColor));
+  }
+
+  auto *removeAllowedSiteBtn =
+      new QPushButton("นำเว็บไซต์ที่เลือกออกจากรายการ", exceptionsGroup);
+  connect(removeAllowedSiteBtn, &QPushButton::clicked, &dialog,
+          [shieldAllowedList] {
+            auto *item = shieldAllowedList->currentItem();
+            if (!item || !item->data(Qt::UserRole).isValid())
+              return;
+            delete shieldAllowedList->takeItem(shieldAllowedList->row(item));
+          });
+
+  auto *exceptionsHint = new QLabel(
+      "ถ้าเว็บใดมีปัญหา ให้กด Shield บนแถบด้านบน แล้วเลือก “ปิด Shield สำหรับเว็บนี้”",
+      exceptionsGroup);
+  exceptionsHint->setWordWrap(true);
+  exceptionsHint->setStyleSheet(
+      QString("color: %1; font-size: 12px;").arg(subTextColor));
+  exceptionsLayout->addWidget(shieldAllowedList);
+  exceptionsLayout->addWidget(removeAllowedSiteBtn);
+  exceptionsLayout->addWidget(exceptionsHint);
+  shieldLayout->addWidget(exceptionsGroup);
+  shieldLayout->addStretch();
+  stacked->addWidget(shieldPage);
+
+  // ---------------- Page 5: Privacy & Secure DNS ----------------
   auto *page4 = new QWidget();
   auto *p4Layout = new QVBoxLayout(page4);
   p4Layout->setSpacing(16);
@@ -3069,6 +3302,36 @@ void MainWindow::showSettingsDialog() {
     }
 
     st.setValue("dntEnabled", dntBox->isChecked());
+
+    if (adBlocker_) {
+      const bool shieldWasEnabled = adBlocker_->isEnabled();
+      const AdBlocker::Mode shieldWasMode = adBlocker_->mode();
+      const QStringList previousAllowedSites = adBlocker_->allowedSites();
+      QStringList selectedAllowedSites;
+      for (int i = 0; i < shieldAllowedList->count(); ++i) {
+        const auto *item = shieldAllowedList->item(i);
+        if (item && item->data(Qt::UserRole).isValid())
+          selectedAllowedSites.append(item->data(Qt::UserRole).toString());
+      }
+      selectedAllowedSites.sort(Qt::CaseInsensitive);
+
+      adBlocker_->setEnabled(shieldEnabledBox->isChecked());
+      adBlocker_->setMode(aggressiveShieldRadio->isChecked()
+                              ? AdBlocker::Mode::Aggressive
+                              : AdBlocker::Mode::Standard);
+      adBlocker_->setAllowedSites(selectedAllowedSites);
+
+      QStringList normalizedPrevious = previousAllowedSites;
+      normalizedPrevious.sort(Qt::CaseInsensitive);
+      const bool shieldChanged =
+          shieldWasEnabled != adBlocker_->isEnabled() ||
+          shieldWasMode != adBlocker_->mode() ||
+          normalizedPrevious != selectedAllowedSites;
+      if (shieldChanged) {
+        refreshShieldUi();
+        reloadCurrentView();
+      }
+    }
 
     const bool secureDnsChanged =
         st.value("secureDnsEnabled", false).toBool() != secureDnsBox->isChecked() ||

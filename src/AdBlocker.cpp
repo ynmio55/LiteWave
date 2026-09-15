@@ -1,0 +1,357 @@
+#include "AdBlocker.h"
+
+#include <QSettings>
+
+namespace {
+
+const QSet<QByteArray> &advertisingDomains()
+{
+    static const QSet<QByteArray> domains = {
+        "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+        "adservice.google.com", "adnxs.com", "adsrvr.org",
+        "amazon-adsystem.com", "criteo.com", "rubiconproject.com",
+        "pubmatic.com", "openx.net", "casalemedia.com", "contextweb.com",
+        "taboola.com", "outbrain.com", "revcontent.com", "mgid.com",
+        "sharethrough.com", "smartadserver.com", "smaato.net", "adform.net",
+        "advertising.com", "yieldmo.com", "spotxchange.com", "teads.tv",
+        "bidswitch.net", "adroll.com", "demdex.net", "bluekai.com",
+        "quantserve.com", "rlcdn.com", "trafficjunky.com", "exoclick.com",
+        "juicyads.com", "popads.net", "popcash.net", "propellerads.com",
+        "adsterra.com", "a-ads.com", "hilltopads.com", "clickadu.com",
+        "monetag.com", "adcash.com", "ad-maven.com", "trafficstars.com",
+        "tsyndicate.com", "adskeeper.com", "realsrv.com", "exosrv.com",
+        "ero-advertising.com", "adxpansion.com", "clicksor.com"
+    };
+    return domains;
+}
+
+const QSet<QByteArray> &trackerDomains()
+{
+    // These are opt-in because analytics providers can occasionally be used
+    // by site features. Standard mode intentionally leaves them alone.
+    static const QSet<QByteArray> domains = {
+        "google-analytics.com", "googletagmanager.com",
+        "scorecardresearch.com", "hotjar.com", "fullstory.com",
+        "mixpanel.com", "segment.io", "amplitude.com", "clarity.ms",
+        "mouseflow.com", "crazyegg.com", "mathtag.com", "liveramp.com",
+        "moatads.com", "doubleverify.com", "integralads.com"
+    };
+    return domains;
+}
+
+bool isWebUrl(const QUrl &url)
+{
+    return url.isValid() && (url.scheme() == "http" || url.scheme() == "https");
+}
+
+} // namespace
+
+AdBlocker::AdBlocker(QObject *parent, bool persistent)
+    : QWebEngineUrlRequestInterceptor(parent), persistent_(persistent)
+{
+    if (!persistent_)
+        return;
+
+    QSettings settings("LiteWave", "LiteWave");
+    enabled_.storeRelease(settings.value("shield/enabled", true).toBool());
+    const QString configuredMode =
+        settings.value("shield/mode", QStringLiteral("standard")).toString();
+    mode_.storeRelease(configuredMode == "aggressive"
+                           ? static_cast<int>(Mode::Aggressive)
+                           : static_cast<int>(Mode::Standard));
+
+    for (const QString &site : settings.value("shield/allowedSites").toStringList()) {
+        const QByteArray key = normalizedHost(site);
+        if (!key.isEmpty())
+            allowedSites_.insert(key);
+    }
+}
+
+void AdBlocker::setEnabled(bool enabled)
+{
+    if (isEnabled() == enabled)
+        return;
+    enabled_.storeRelease(enabled ? 1 : 0);
+    saveSettings();
+    emit configurationChanged();
+}
+
+bool AdBlocker::isEnabled() const
+{
+    return enabled_.loadAcquire() != 0;
+}
+
+void AdBlocker::setMode(Mode mode)
+{
+    if (this->mode() == mode)
+        return;
+    mode_.storeRelease(static_cast<int>(mode));
+    saveSettings();
+    emit configurationChanged();
+}
+
+AdBlocker::Mode AdBlocker::mode() const
+{
+    return mode_.loadAcquire() == static_cast<int>(Mode::Aggressive)
+               ? Mode::Aggressive
+               : Mode::Standard;
+}
+
+bool AdBlocker::isSiteAllowed(const QUrl &url) const
+{
+    const QByteArray key = siteKey(url);
+    if (key.isEmpty())
+        return false;
+
+    QReadLocker guard(&lock_);
+    return allowedSites_.contains(key);
+}
+
+void AdBlocker::setSiteAllowed(const QUrl &url, bool allowed)
+{
+    const QByteArray key = siteKey(url);
+    if (key.isEmpty())
+        return;
+
+    bool changed = false;
+    {
+        QWriteLocker guard(&lock_);
+        if (allowed) {
+            changed = !allowedSites_.contains(key);
+            allowedSites_.insert(key);
+        } else {
+            changed = allowedSites_.remove(key);
+        }
+    }
+    if (!changed)
+        return;
+
+    saveSettings();
+    emit configurationChanged();
+}
+
+QStringList AdBlocker::allowedSites() const
+{
+    QReadLocker guard(&lock_);
+    QStringList sites;
+    sites.reserve(allowedSites_.size());
+    for (const QByteArray &site : allowedSites_)
+        sites.append(QString::fromLatin1(site));
+    sites.sort(Qt::CaseInsensitive);
+    return sites;
+}
+
+void AdBlocker::setAllowedSites(const QStringList &sites)
+{
+    QSet<QByteArray> normalized;
+    for (const QString &site : sites) {
+        const QByteArray key = normalizedHost(site);
+        if (!key.isEmpty())
+            normalized.insert(key);
+    }
+
+    bool changed = false;
+    {
+        QWriteLocker guard(&lock_);
+        if (allowedSites_ != normalized) {
+            allowedSites_ = normalized;
+            changed = true;
+        }
+    }
+    if (!changed)
+        return;
+
+    saveSettings();
+    emit configurationChanged();
+}
+
+bool AdBlocker::isEnabledForUrl(const QUrl &url) const
+{
+    return isEnabled() && isWebUrl(url) && !isSiteAllowed(url);
+}
+
+bool AdBlocker::shouldBlock(
+    const QUrl &request, const QUrl &firstParty,
+    QWebEngineUrlRequestInfo::ResourceType resourceType) const
+{
+    using RequestInfo = QWebEngineUrlRequestInfo;
+
+    if (!isEnabledForUrl(firstParty) || !isWebUrl(request))
+        return false;
+
+    // Do not interfere with typed links, redirects, OAuth returns, downloads,
+    // or top-level documents. A broken site must always be recoverable by
+    // simply turning Shield off for that site.
+    if (resourceType == RequestInfo::ResourceTypeMainFrame ||
+        resourceType == RequestInfo::ResourceTypeNavigationPreloadMainFrame)
+        return false;
+
+    if (isVerificationOrChallenge(request))
+        return false;
+
+    if (isKnownSameSiteAdEndpoint(request, firstParty))
+        return true;
+
+    // Standard mode blocks only third-party advertising infrastructure. This
+    // protects video players, CDNs, sign-in, checkout, and embedded apps that
+    // frequently use first-party or partner subdomains.
+    if (!isThirdParty(request, firstParty))
+        return false;
+
+    const QByteArray host = normalizedHost(request.host());
+    if (matchesDomain(host, advertisingDomains()))
+        return true;
+
+    return mode() == Mode::Aggressive && matchesDomain(host, trackerDomains());
+}
+
+void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
+{
+    if (!shouldBlock(info.requestUrl(), info.firstPartyUrl(), info.resourceType()))
+        return;
+
+    info.block(true);
+    blockedCount_.fetchAndAddRelaxed(1);
+}
+
+int AdBlocker::blockedCount() const
+{
+    return blockedCount_.loadAcquire();
+}
+
+void AdBlocker::resetBlockedCount()
+{
+    blockedCount_.storeRelease(0);
+}
+
+int AdBlocker::ruleCount() const
+{
+    // Three same-site advertising endpoints are also checked explicitly.
+    return advertisingDomains().size() + trackerDomains().size() + 3;
+}
+
+QString AdBlocker::cosmeticCss()
+{
+    return QStringLiteral(R"CSS(
+/* LiteWave Shield: only known ad networks and explicit ad slots. */
+iframe[src*="doubleclick.net"],
+iframe[src*="googlesyndication.com"],
+iframe[src*="googleadservices.com"],
+iframe[src*="adnxs.com"],
+iframe[src*="taboola.com"],
+iframe[src*="outbrain.com"],
+iframe[src*="trafficjunky.com"],
+iframe[src*="exoclick.com"],
+iframe[src*="juicyads.com"],
+.adsbygoogle,
+ins.adsbygoogle,
+[data-ad-client],
+[data-ad-slot],
+[data-google-query-id] {
+  display: none !important;
+  visibility: hidden !important;
+}
+)CSS");
+}
+
+QByteArray AdBlocker::normalizedHost(const QString &host)
+{
+    QString normalized = host.trimmed().toLower();
+    while (normalized.endsWith('.'))
+        normalized.chop(1);
+    return QUrl::toAce(normalized).toLower();
+}
+
+QByteArray AdBlocker::siteKey(const QUrl &url)
+{
+    const QByteArray host = normalizedHost(url.host());
+    const QList<QByteArray> labels = host.split('.');
+    if (labels.size() < 3)
+        return host;
+
+    const QByteArray twoPartSuffix =
+        labels.at(labels.size() - 2) + "." + labels.last();
+    static const QSet<QByteArray> multiPartSuffixes = {
+        "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au",
+        "co.nz", "co.jp", "co.kr", "co.th", "co.in", "com.br", "com.mx",
+        "com.tr", "com.sg", "com.cn", "com.tw", "com.hk", "co.za", "com.ar"
+    };
+    if (labels.size() >= 3 && multiPartSuffixes.contains(twoPartSuffix))
+        return labels.at(labels.size() - 3) + "." + twoPartSuffix;
+    return twoPartSuffix;
+}
+
+bool AdBlocker::matchesDomain(const QByteArray &host,
+                              const QSet<QByteArray> &domains)
+{
+    if (host.isEmpty())
+        return false;
+
+    QByteArray candidate = host;
+    while (!candidate.isEmpty()) {
+        if (domains.contains(candidate))
+            return true;
+        const int dot = candidate.indexOf('.');
+        if (dot < 0)
+            break;
+        candidate = candidate.mid(dot + 1);
+    }
+    return false;
+}
+
+bool AdBlocker::isThirdParty(const QUrl &request, const QUrl &firstParty)
+{
+    const QByteArray requestSite = siteKey(request);
+    const QByteArray firstPartySite = siteKey(firstParty);
+    return !requestSite.isEmpty() && !firstPartySite.isEmpty() &&
+           requestSite != firstPartySite;
+}
+
+bool AdBlocker::isVerificationOrChallenge(const QUrl &url)
+{
+    const QByteArray host = normalizedHost(url.host());
+    if (matchesDomain(host, QSet<QByteArray>{"recaptcha.net", "hcaptcha.com"}))
+        return true;
+    if (host == "challenges.cloudflare.com")
+        return true;
+    if ((host == "www.google.com" || host == "www.gstatic.com") &&
+        (url.path().startsWith("/recaptcha/") ||
+         url.path().startsWith("/sorry/")))
+        return true;
+    return false;
+}
+
+bool AdBlocker::isKnownSameSiteAdEndpoint(const QUrl &request,
+                                          const QUrl &firstParty)
+{
+    const QByteArray firstPartyHost = normalizedHost(firstParty.host());
+    const QByteArray requestHost = normalizedHost(request.host());
+    const QString path = request.path();
+
+    const bool youtubePage = matchesDomain(firstPartyHost,
+                                           QSet<QByteArray>{"youtube.com",
+                                                            "youtube-nocookie.com"});
+    if (youtubePage && matchesDomain(requestHost, QSet<QByteArray>{"youtube.com"})) {
+        return path.startsWith("/api/stats/ads") ||
+               path.startsWith("/pagead/") ||
+               path == "/get_midroll_info";
+    }
+
+    if ((requestHost == "www.google.com" || requestHost == "google.com") &&
+        (path.startsWith("/pagead/") || path.startsWith("/ads/ga-audiences")))
+        return true;
+
+    return false;
+}
+
+void AdBlocker::saveSettings() const
+{
+    if (!persistent_)
+        return;
+
+    QSettings settings("LiteWave", "LiteWave");
+    settings.setValue("shield/enabled", isEnabled());
+    settings.setValue("shield/mode",
+                      mode() == Mode::Aggressive ? "aggressive" : "standard");
+    settings.setValue("shield/allowedSites", allowedSites());
+}
