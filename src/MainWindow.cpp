@@ -5,6 +5,8 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCompleter>
+#include <QStringListModel>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDialog>

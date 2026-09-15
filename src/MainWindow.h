@@ -16,6 +16,7 @@ class QToolBar;
 class QAction;
 class QLabel;
 class QToolButton;
+class QCompleter;
 
 class MainWindow final : public QMainWindow
 {
@@ -76,6 +77,7 @@ private:
 
     QList<DownloadRecord> downloadRecords_;
     QToolButton *menuBtn_ = nullptr;
+    QCompleter *urlCompleter_ = nullptr;
 
     void setupShortcuts();
     void refreshShield();
@@ -89,4 +91,5 @@ private:
     void showDownloadsDialog();
     void clearBrowsingDataDialog();
     void showSettingsDialog();
+    void setupUrlBarCompleter();
 };
