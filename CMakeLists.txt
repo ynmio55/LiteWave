@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets PrintSupport WebEngineWidgets Network Concurrent)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets PrintSupport WebEngineWidgets WebEngineCore Network Concurrent)
 
 qt_add_executable(LiteWave
     src/main.cpp
@@ -23,6 +23,7 @@ target_link_libraries(LiteWave PRIVATE
     Qt6::Widgets
     Qt6::PrintSupport
     Qt6::WebEngineWidgets
+    Qt6::WebEngineCore
     Qt6::Network
     Qt6::Concurrent
 )

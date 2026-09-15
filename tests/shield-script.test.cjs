@@ -102,4 +102,4 @@ assert.equal(yt.state.style, null);
 assert.equal(yt.state.timers.size, 0);
 assert.equal(yt.events.size, 0);
 assert(yt.state.observers.every(o => !o.connected));
-console.log('PASS: cosmetic lifecycle, site scope, skip controls, hidden tabs, YouTube ad fast-skipper');
+console.log('PASS: cosmetic lifecycle, site scope, visible skip controls, hidden tabs, no media/request mutation');

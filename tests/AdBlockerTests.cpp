@@ -86,11 +86,28 @@ private slots:
         QVERIFY(shield->shouldBlock(ad, site, Info::ResourceTypeScript));
     }
     void popupPolicy() {
-        QVERIFY(shield->shouldBlockPopup(QUrl("https://example.net/"), site, false));
+        // Standard permits benign login/payment popups instead of blocking every
+        // window.open() call. Known ad domains remain blocked.
+        QVERIFY(!shield->shouldBlockPopup(QUrl("https://example.net/"), site, false));
         QVERIFY(shield->shouldBlockPopup(QUrl("https://popads.net/"), site, true));
         QVERIFY(!shield->shouldBlockPopup(QUrl("https://accounts.google.com/"), site, true));
+        shield->setAggressive(true);
+        QVERIFY(shield->shouldBlockPopup(QUrl("https://example.net/"), site, false));
         shield->setSiteAllowed(site, true);
         QVERIFY(!shield->shouldBlockPopup(QUrl("https://example.net/"), site, false));
+    }
+    void standardAndAggressiveModes() {
+        const QUrl app("https://shop.example/");
+        const QUrl tagManager("https://www.googletagmanager.com/gtm.js");
+        QVERIFY(!shield->isAggressive());
+        QVERIFY(!shield->shouldBlock(tagManager, app, Info::ResourceTypeScript));
+        shield->setAggressive(true);
+        QVERIFY(shield->shouldBlock(tagManager, app, Info::ResourceTypeScript));
+        // Explicit YouTube ad endpoints stay blocked even in compatibility mode.
+        shield->setAggressive(false);
+        QVERIFY(shield->shouldBlock(
+            QUrl("https://www.youtube.com/pagead/adview"), app,
+            Info::ResourceTypeXhr));
     }
     void parserAndUpdateSafety() {
         bool ok = false;

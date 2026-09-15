@@ -18,6 +18,10 @@ public:
     explicit AdBlocker(QObject *parent = nullptr, bool persistent = true);
     void setEnabled(bool enabled);
     bool isEnabled() const { return enabled_.loadAcquire() != 0; }
+    // Standard keeps web apps compatible; Aggressive also blocks first-party
+    // tracker endpoints and unsolicited third-party popups.
+    void setAggressive(bool enabled);
+    bool isAggressive() const { return aggressive_.loadAcquire() != 0; }
     bool isEnabledForUrl(const QUrl &url) const;
     bool isSiteAllowed(const QUrl &url) const;
     void setSiteAllowed(const QUrl &url, bool allowed);
@@ -48,10 +52,12 @@ private:
     void saveSettings() const;
     QString cacheFile() const;
     QAtomicInt enabled_ = 1;
+    QAtomicInt aggressive_ = 0;
     QAtomicInt blockedCount_ = 0;
     mutable QReadWriteLock lock_;
     QSet<QByteArray> exactHosts_;
     QSet<QByteArray> familyHosts_;
+    QSet<QByteArray> aggressiveHosts_;
     QSet<QByteArray> allowedSites_;
     bool persistent_ = true;
     bool updating_ = false; // GUI thread only

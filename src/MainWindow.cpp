@@ -2,6 +2,7 @@
 #include "AdBlocker.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -12,6 +13,7 @@
 #include <QDialog>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QDir>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -53,7 +55,9 @@
 #include <QWebEngineFullScreenRequest>
 #include <QWebEngineNewWindowRequest>
 #include <QWebEnginePage>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
 #include <QWebEnginePermission>
+#endif
 #include <QWebEngineProfile>
 #include <QWebEngineScript>
 #include <QWebEngineScriptCollection>
@@ -113,15 +117,6 @@ public:
       : QWebEnginePage(profile, parent), mw_(mw), view_(view) {}
 
 protected:
-  QWebEnginePage *createWindow(WebWindowType type) override {
-    Q_UNUSED(type);
-    if (mw_) {
-      auto *newView = mw_->createView(QUrl());
-      return newView->page();
-    }
-    return QWebEnginePage::createWindow(type);
-  }
-
   bool acceptNavigationRequest(const QUrl &url, NavigationType type,
                                bool isMainFrame) override {
     if (isMainFrame && mw_ && view_)
@@ -185,9 +180,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   static QWebEngineProfile *normalProfile =
       new QWebEngineProfile("LiteWave", qApp);
   profile_ = privateMode_ ? new QWebEngineProfile(this) : normalProfile;
-  profile_->setHttpUserAgent(
-      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-      "Chrome/128.0.0.0 Safari/537.36");
+  // Keep Qt WebEngine's real runtime user agent. A stale Linux-only Chrome
+  // spoof makes responsive, DRM, login, and payment pages select the wrong
+  // compatibility branch—especially on Windows.
   profile_->setHttpAcceptLanguage("th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
   if (!privateMode_) {
     profile_->setPersistentStoragePath(storagePath);
@@ -327,6 +322,25 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     adBlocker_->setSiteAllowed(currentView()->url(), !enabled);
     reloadCurrentView();
   });
+  auto *modeMenu = shieldMenu->addMenu("ระดับการบล็อก");
+  auto *modeGroup = new QActionGroup(modeMenu);
+  modeGroup->setExclusive(true);
+  auto *standardMode = modeMenu->addAction("มาตรฐาน — เน้นเว็บใช้งานได้");
+  auto *aggressiveMode = modeMenu->addAction("เข้มงวด — บล็อก tracker เพิ่ม");
+  standardMode->setCheckable(true);
+  aggressiveMode->setCheckable(true);
+  modeGroup->addAction(standardMode);
+  modeGroup->addAction(aggressiveMode);
+  standardMode->setChecked(!adBlocker_->isAggressive());
+  aggressiveMode->setChecked(adBlocker_->isAggressive());
+  connect(standardMode, &QAction::triggered, this, [this] {
+    adBlocker_->setAggressive(false);
+    reloadCurrentView();
+  });
+  connect(aggressiveMode, &QAction::triggered, this, [this] {
+    adBlocker_->setAggressive(true);
+    reloadCurrentView();
+  });
   shieldMenu->addSeparator();
   filterInfoAction_ = shieldMenu->addAction(adBlocker_->filterStatus());
   filterInfoAction_->setEnabled(false);
@@ -356,7 +370,13 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   shieldBtn_->setCursor(Qt::PointingHandCursor);
   toolbar_->addWidget(shieldBtn_);
   connect(shieldMenu, &QMenu::aboutToShow, this,
-          [this] { updateShieldBadge(adBlocker_->blockedCount()); });
+          [this, standardMode, aggressiveMode] {
+            const QSignalBlocker standardGuard(standardMode);
+            const QSignalBlocker aggressiveGuard(aggressiveMode);
+            standardMode->setChecked(!adBlocker_->isAggressive());
+            aggressiveMode->setChecked(adBlocker_->isAggressive());
+            updateShieldBadge(adBlocker_->blockedCount());
+          });
   connect(adBlocker_, &AdBlocker::configurationChanged, this,
           &MainWindow::refreshShield);
 
@@ -373,6 +393,12 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   themeBtn_->setCursor(Qt::PointingHandCursor);
   connect(themeBtn_, &QToolButton::clicked, this, &MainWindow::toggleTheme);
   toolbar_->addWidget(themeBtn_);
+
+  // Settings stays one click away; it is also in the main menu and Ctrl+,.
+  auto *settingsAction = toolbar_->addAction("⚙");
+  settingsAction->setToolTip("การตั้งค่า LiteWave (Ctrl+,)");
+  connect(settingsAction, &QAction::triggered, this,
+          &MainWindow::showSettingsDialog);
 
   // Main Menu Button (Brave style main menu)
   menuBtn_ = new QToolButton(this);
@@ -475,21 +501,24 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   auto *s = view->settings();
   s->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
   s->setAttribute(QWebEngineSettings::LocalStorageEnabled, true);
-  s->setAttribute(QWebEngineSettings::PluginsEnabled, true);
   s->setAttribute(QWebEngineSettings::DnsPrefetchEnabled, true);
   s->setAttribute(QWebEngineSettings::WebGLEnabled, true);
   s->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
   s->setAttribute(QWebEngineSettings::AutoLoadImages, true);
-  s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, true);
+  // A popup is routed through newWindowRequested below; it is not silently
+  // allowed or dropped by an overridden createWindow implementation.
   s->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, true);
-  s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, true);
-  s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
   s->setAttribute(QWebEngineSettings::PdfViewerEnabled, true);
   s->setAttribute(QWebEngineSettings::AllowRunningInsecureContent, false);
   s->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
   s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
   s->setAttribute(QWebEngineSettings::WebRTCPublicInterfacesOnly, true);
   s->setAttribute(QWebEngineSettings::FocusOnNavigationEnabled, true);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+  // Permission is still requested from the user before a site can share a
+  // screen; this only enables standards-compliant capture support.
+  s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
+#endif
   const int index = tabBar_->addTab("LiteWave");
   tabStack_->addWidget(view);
   tabBar_->setCurrentIndex(index);
@@ -546,7 +575,10 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
             request.openIn(newView->page());
           });
 
-  // Compatible with Qt 6.4+; never grant sensitive permissions silently.
+  // Qt 6.4 uses the legacy feature signal; Qt 6.6+ uses the richer
+  // QWebEnginePermission API. In both cases sensitive capabilities always
+  // require an explicit answer.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
   connect(page, &QWebEnginePage::permissionRequested, this,
           [this](QWebEnginePermission permission) {
             if (permission.state() != QWebEnginePermission::State::Ask)
@@ -568,9 +600,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
             case QWebEnginePermission::PermissionType::Notifications:
               capability = "notifications";
               break;
-            case QWebEnginePermission::PermissionType::ClipboardReadWrite:
-              capability = "clipboard access";
-              break;
+            case QWebEnginePermission::PermissionType::DesktopVideoCapture:
             case QWebEnginePermission::PermissionType::DesktopAudioVideoCapture:
               capability = "screen capture";
               break;
@@ -583,12 +613,51 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
                 permission.origin().toDisplayString() + "\nAllow access to " +
                     capability + "?",
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-            if (answer == QMessageBox::Yes) {
+            if (answer == QMessageBox::Yes)
               permission.grant();
-            } else {
+            else
               permission.deny();
-            }
           });
+#else
+  connect(page, &QWebEnginePage::featurePermissionRequested, this,
+          [this, page](const QUrl &origin, QWebEnginePage::Feature feature) {
+            QString capability;
+            switch (feature) {
+            case QWebEnginePage::MediaAudioCapture:
+              capability = "microphone";
+              break;
+            case QWebEnginePage::MediaVideoCapture:
+              capability = "camera";
+              break;
+            case QWebEnginePage::MediaAudioVideoCapture:
+              capability = "camera and microphone";
+              break;
+            case QWebEnginePage::Geolocation:
+              capability = "location";
+              break;
+            case QWebEnginePage::Notifications:
+              capability = "notifications";
+              break;
+            case QWebEnginePage::DesktopVideoCapture:
+            case QWebEnginePage::DesktopAudioVideoCapture:
+              capability = "screen capture";
+              break;
+            default:
+              page->setFeaturePermission(
+                  origin, feature, QWebEnginePage::PermissionDeniedByUser);
+              return;
+            }
+            const auto answer = QMessageBox::question(
+                this, "Site permission",
+                origin.toDisplayString() + "\nAllow access to " + capability + "?",
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            page->setFeaturePermission(
+                origin, feature,
+                answer == QMessageBox::Yes
+                    ? QWebEnginePage::PermissionGrantedByUser
+                    : QWebEnginePage::PermissionDeniedByUser);
+          });
+#endif
 
   connect(
       profile_, &QWebEngineProfile::downloadRequested, view,
@@ -737,6 +806,7 @@ void MainWindow::setupShortcuts() {
     w->show();
   });
   key("Ctrl+J", [this] { showDownloadsDialog(); });
+  key("Ctrl+,", [this] { showSettingsDialog(); });
   key("Ctrl+Shift+Del", [this] { clearBrowsingDataDialog(); });
   key("Ctrl+W", [this] { closeTab(tabBar_->currentIndex()); });
   key("Ctrl+Shift+T", [this] {
@@ -1019,7 +1089,8 @@ void MainWindow::updateShieldBadge(int count) {
     return;
   const auto url = currentView() ? currentView()->url() : QUrl();
   const bool enabled = adBlocker_->isEnabledForUrl(url);
-  const QString label = enabled ? QString("Shield · %1").arg(count)
+  const QString mode = adBlocker_->isAggressive() ? "A" : "S";
+  const QString label = enabled ? QString("Shield %1 · %2").arg(mode).arg(count)
                         : adBlocker_->isEnabled() ? "Shield · ปิดเว็บนี้"
                                                   : "Shield · ปิด";
   if (shieldBtn_->text() != label)
@@ -2885,6 +2956,16 @@ void MainWindow::showSettingsDialog() {
   auto *shieldBox = new QCheckBox("เปิดใช้งาน LiteWave Shield (บล็อกโฆษณาและตัวสะกดรอยอัตโนมัติ)", grpShield);
   shieldBox->setChecked(adBlocker_ ? adBlocker_->isEnabled() : true);
 
+  auto *shieldStandardBox = new QRadioButton(
+      "มาตรฐาน (แนะนำ) — บล็อกโฆษณา/ป๊อปอัปของบุคคลที่สาม โดยไม่ตัดระบบล็อกอินหรือเว็บแอป",
+      grpShield);
+  auto *shieldAggressiveBox = new QRadioButton(
+      "เข้มงวด — บล็อกตัวติดตามเพิ่มและป๊อปอัปบุคคลที่สามที่ไม่ได้กดเอง; บางเว็บอาจต้องปิด Shield เฉพาะเว็บ",
+      grpShield);
+  const bool currentAggressive = adBlocker_ && adBlocker_->isAggressive();
+  shieldAggressiveBox->setChecked(currentAggressive);
+  shieldStandardBox->setChecked(!currentAggressive);
+
   auto *dntBox = new QCheckBox("ส่งคำขอ Do Not Track (DNT) ไปยังทุกเว็บไซต์", grpShield);
   dntBox->setChecked(st.value("dntEnabled", true).toBool());
 
@@ -2894,6 +2975,8 @@ void MainWindow::showSettingsDialog() {
   });
 
   grpShieldLayout->addWidget(shieldBox);
+  grpShieldLayout->addWidget(shieldStandardBox);
+  grpShieldLayout->addWidget(shieldAggressiveBox);
   grpShieldLayout->addWidget(dntBox);
   grpShieldLayout->addWidget(clearDataBtn);
   p3Layout->addWidget(grpShield);
@@ -2911,10 +2994,10 @@ void MainWindow::showSettingsDialog() {
   grpDnsLayout->setSpacing(10);
 
   auto *secureDnsBox = new QCheckBox("เปิดใช้งาน Secure DNS (DNS-over-HTTPS)", grpDns);
-  secureDnsBox->setChecked(st.value("secureDnsEnabled", true).toBool());
+  secureDnsBox->setChecked(st.value("secureDnsEnabled", false).toBool());
 
   auto *lblDnsDesc = new QLabel(
-      "เข้ารหัสคำขอค้นหาชื่อโดเมน (DNS) เพื่อป้องกันการสะกดรอย เพิ่มความปลอดภัยและความเร็วในการท่องเว็บ",
+      "เป็นตัวเลือกเสริมสำหรับเครือข่ายที่รองรับ DNS-over-HTTPS; หากเว็บไซต์หรือ Wi-Fi สาธารณะเข้าไม่ได้ ให้ปิดหรือเลือก OS Default แล้วเปิด LiteWave ใหม่",
       grpDns);
   lblDnsDesc->setWordWrap(true);
   lblDnsDesc->setStyleSheet(QString("color: %1; font-size: 12px; margin-bottom: 6px;").arg(subTextColor));
@@ -2928,9 +3011,9 @@ void MainWindow::showSettingsDialog() {
   dnsCombo->addItem("AdGuard DNS (บล็อกโฆษณาและความเป็นส่วนตัว)", "AdGuard");
   dnsCombo->addItem("กำหนด DoH Server URL เอง (Custom)", "Custom");
 
-  const QString curProvider = st.value("dnsProvider", "Cloudflare").toString();
+  const QString curProvider = st.value("dnsProvider", "OS Default").toString();
   int pIdx = dnsCombo->findData(curProvider);
-  if (pIdx < 0) pIdx = 1;
+  if (pIdx < 0) pIdx = 0;
   dnsCombo->setCurrentIndex(pIdx);
 
   auto *customDnsEdit = new QLineEdit(grpDns);
@@ -3068,7 +3151,7 @@ void MainWindow::showSettingsDialog() {
 
     if (adBlocker_) {
       adBlocker_->setEnabled(shieldBox->isChecked());
-      st.setValue("shieldEnabled", shieldBox->isChecked());
+      adBlocker_->setAggressive(shieldAggressiveBox->isChecked());
       refreshShield();
     }
     st.setValue("dntEnabled", dntBox->isChecked());
