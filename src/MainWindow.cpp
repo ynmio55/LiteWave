@@ -46,6 +46,7 @@
 #include <QUrlQuery>
 #include <QUuid>
 #include <QVBoxLayout>
+#include <QWindow>
 #include <QWebEngineDownloadRequest>
 #include <QWebEngineFullScreenRequest>
 #include <QWebEngineNewWindowRequest>
@@ -155,9 +156,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   mainLayout->setSpacing(0);
   setCentralWidget(centralWidget);
 
-  // Header Widget (Main Header Container)
   headerWidget_ = new QWidget(this);
   headerWidget_->setObjectName("headerWidget");
+  headerWidget_->installEventFilter(this);
   auto *headerLayout = new QVBoxLayout(headerWidget_);
   headerLayout->setContentsMargins(0, 0, 0, 0);
   headerLayout->setSpacing(0);
@@ -166,6 +167,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   tabBarContainer_ = new QWidget(this);
   tabBarContainer_->setObjectName("tabBarContainer");
   tabBarContainer_->installEventFilter(this);
+  tabBar_->installEventFilter(this);
   auto *tabBarLayout = new QHBoxLayout(tabBarContainer_);
   tabBarLayout->setContentsMargins(6, 4, 6, 0);
   tabBarLayout->setSpacing(4);
@@ -188,31 +190,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   tabBarLayout->addWidget(newTabBtn);
   tabBarLayout->addStretch(); // Keeps + button right next to the tabs!
 
-  // Window Controls on far right of Tab Bar Row (CSD Controls)
-  auto *minBtn = new QToolButton(this);
-  minBtn->setObjectName("windowMinButton");
-  minBtn->setText("—");
-  minBtn->setToolTip("ย่อหน้าต่าง");
-  minBtn->setFixedSize(28, 28);
-  minBtn->setCursor(Qt::PointingHandCursor);
-  connect(minBtn, &QToolButton::clicked, this, &QMainWindow::showMinimized);
-
-  maxBtn_ = new QToolButton(this);
-  maxBtn_->setObjectName("windowMaxButton");
-  maxBtn_->setText("□");
-  maxBtn_->setToolTip("ขยายหน้าต่าง");
-  maxBtn_->setFixedSize(28, 28);
-  maxBtn_->setCursor(Qt::PointingHandCursor);
-  connect(maxBtn_, &QToolButton::clicked, this, [this] {
-    if (isMaximized()) {
-      showNormal();
-      maxBtn_->setText("□");
-    } else {
-      showMaximized();
-      maxBtn_->setText("❐");
-    }
-  });
-
+  // Window Control on far right of Tab Bar Row (Only Close button)
   auto *closeWinBtn = new QToolButton(this);
   closeWinBtn->setObjectName("windowCloseButton");
   closeWinBtn->setText("✕");
@@ -221,8 +199,6 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   closeWinBtn->setCursor(Qt::PointingHandCursor);
   connect(closeWinBtn, &QToolButton::clicked, this, &QMainWindow::close);
 
-  tabBarLayout->addWidget(minBtn);
-  tabBarLayout->addWidget(maxBtn_);
   tabBarLayout->addWidget(closeWinBtn);
 
   headerLayout->addWidget(tabBarContainer_);
@@ -383,10 +359,14 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
-  if (watched == tabBarContainer_) {
+  if (watched == tabBarContainer_ || watched == headerWidget_ || watched == tabBar_) {
     if (event->type() == QEvent::MouseButtonPress) {
       auto *mouseEvent = static_cast<QMouseEvent *>(event);
       if (mouseEvent->button() == Qt::LeftButton) {
+        if (windowHandle()) {
+          windowHandle()->startSystemMove();
+          return true;
+        }
         dragPosition_ =
             mouseEvent->globalPosition().toPoint() - frameGeometry().topLeft();
         return false;
@@ -396,8 +376,6 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
       if (mouseEvent->buttons() & Qt::LeftButton) {
         if (isMaximized()) {
           showNormal();
-          if (maxBtn_)
-            maxBtn_->setText("□");
         }
         move(mouseEvent->globalPosition().toPoint() - dragPosition_);
         return true;
@@ -407,12 +385,8 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
       if (mouseEvent->button() == Qt::LeftButton) {
         if (isMaximized()) {
           showNormal();
-          if (maxBtn_)
-            maxBtn_->setText("□");
         } else {
           showMaximized();
-          if (maxBtn_)
-            maxBtn_->setText("❐");
         }
         return true;
       }
@@ -1461,16 +1435,16 @@ body {
   padding: 80px 20px 40px;
 }
 .brand {
-  font-size: 52px;
-  font-weight: 700;
-  letter-spacing: -1px;
+  font-size: 58px;
+  font-weight: 800;
+  letter-spacing: -1.5px;
   margin-bottom: 8px;
   user-select: none;
+  background: linear-gradient(90deg, #1e3a8a 0%, #1d4ed8 35%, #2563eb 70%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
 }
-.brand .c-blue { color: #4285F4; }
-.brand .c-red { color: #EA4335; }
-.brand .c-yellow { color: #FBBC05; }
-.brand .c-green { color: #34A853; }
 .subtitle {
   font-size: 14px;
   color: %4;
@@ -1494,7 +1468,7 @@ body {
 }
 .search-box:focus-within, .search-box:hover {
   box-shadow: 0 4px 18px rgba(32, 33, 36, 0.16);
-  border-color: #4285F4;
+  border-color: #2563eb;
 }
 .search-icon {
   display: flex;
@@ -1528,7 +1502,7 @@ body {
   outline: none;
 }
 .search-box button {
-  background-color: #1a73e8;
+  background-color: #2563eb;
   color: #ffffff;
   border: none;
   border-radius: 20px;
@@ -1539,7 +1513,7 @@ body {
   transition: background-color 0.15s ease, transform 0.1s ease;
 }
 .search-box button:hover {
-  background-color: #1557b0;
+  background-color: #1d4ed8;
 }
 .search-box button:active {
   transform: scale(0.98);
@@ -1570,8 +1544,8 @@ body {
   position: relative;
   background-color: %2;
   border: 1px solid %5;
-  border-radius: 12px;
-  padding: 20px 12px;
+  border-radius: 14px;
+  padding: 18px 12px;
   text-align: center;
   cursor: pointer;
   text-decoration: none;
@@ -1584,26 +1558,70 @@ body {
   transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 .site-card:hover {
-  border-color: #4285F4;
+  border-color: #2563eb;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.08);
 }
-.site-icon {
-  width: 32px;
-  height: 32px;
+.card-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.site-card:hover .card-actions {
+  opacity: 1;
+}
+.action-btn {
+  background: rgba(0,0,0,0.08);
+  color: %3;
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 11px;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  font-weight: 700;
-  border-radius: 50%;
 }
-.custom-avatar {
-  background-color: #e8f0fe;
-  color: #1a73e8;
+.action-btn:hover {
+  background: #2563eb;
+  color: #ffffff;
+}
+.del-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+.site-icon-box {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid %5;
+  overflow: hidden;
+}
+.site-favicon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+.site-icon-fallback {
   width: 36px;
   height: 36px;
   border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .site-name {
   font-size: 13px;
@@ -1611,42 +1629,22 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100px;
-}
-.del-btn {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  background: rgba(0,0,0,0.1);
-  color: %3;
-  border: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  font-size: 12px;
-  cursor: pointer;
-  display: none;
-  align-items: center;
-  justify-content: center;
-}
-.site-card:hover .del-btn {
-  display: flex;
-}
-.del-btn:hover {
-  background: #ea4335;
-  color: #fff;
+  max-width: 110px;
 }
 .add-card {
   border: 2px dashed %5;
   background-color: transparent;
 }
 .add-card:hover {
-  border-color: #4285F4;
+  border-color: #2563eb;
   background-color: %2;
 }
-.add-icon {
-  font-size: 24px;
-  color: #4285F4;
+.add-icon-box {
+  font-size: 22px;
+  font-weight: bold;
+  color: #2563eb;
+  background: transparent;
+  border: none;
 }
 .modal-overlay {
   position: fixed;
@@ -1687,7 +1685,7 @@ body {
   outline: none;
 }
 .modal input:focus {
-  border-color: #4285F4;
+  border-color: #2563eb;
 }
 .modal-buttons {
   display: flex;
@@ -1708,11 +1706,11 @@ body {
   color: %4;
 }
 .btn-save {
-  background: #1a73e8;
+  background: #2563eb;
   color: #fff;
 }
 .btn-save:hover {
-  background: #1557b0;
+  background: #1d4ed8;
 }
 .footer-note {
   margin-top: auto;
@@ -1724,9 +1722,7 @@ body {
 </head>
 <body>
 
-<div class="brand">
-  <span class="c-blue">Lite</span><span class="c-red">W</span><span class="c-yellow">a</span><span class="c-green">v</span><span class="c-red">e</span>
-</div>
+<div class="brand">LiteWave</div>
 <div class="subtitle">ค้นหาและท่องเว็บ · ควบคุมโฆษณาและตัวติดตามด้วย Shield</div>
 
 <div class="search-container">
@@ -1753,12 +1749,12 @@ body {
 
 <div class="modal-overlay" id="addModal">
   <div class="modal">
-    <h3>เพิ่มทางลัดเว็บไซต์</h3>
-    <input id="shortcutName" placeholder="ชื่อเว็บไซต์ (เช่น Pantip)" autocomplete="off">
-    <input id="shortcutUrl" placeholder="ที่อยู่เว็บ (เช่น https://pantip.com)" autocomplete="off">
+    <h3 id="modalTitle">เพิ่มทางลัดเว็บไซต์</h3>
+    <input id="shortcutName" placeholder="ชื่อเว็บไซต์ (เช่น Instagram)" autocomplete="off">
+    <input id="shortcutUrl" placeholder="ที่อยู่เว็บ (เช่น https://instagram.com)" autocomplete="off">
     <div class="modal-buttons">
-      <button type="button" class="btn-cancel" onclick="closeAddModal()">ยกเลิก</button>
-      <button type="button" class="btn-save" onclick="saveCustomShortcut()">บันทึก</button>
+      <button type="button" class="btn-cancel" onclick="closeModal()">ยกเลิก</button>
+      <button type="button" class="btn-save" onclick="saveShortcut()">บันทึก</button>
     </div>
   </div>
 </div>
@@ -1776,39 +1772,74 @@ function submitSearch(event) {
   return false;
 }
 
-const defaultSites = [
-  { name: 'Google', url: 'https://www.google.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>' },
-  { name: 'YouTube', url: 'https://www.youtube.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24"><path fill="#FF0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>' },
-  { name: 'GitHub', url: 'https://github.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>' },
-  { name: 'ChatGPT', url: 'https://chatgpt.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9 6.065 6.065 0 0 0-4.975-2.484 6.05 6.05 0 0 0-5.784 4.098 6.02 6.02 0 0 0-4.636 3.3 6.062 6.062 0 0 0 .734 6.643 5.985 5.985 0 0 0 .517 4.911 6.047 6.047 0 0 0 6.51 2.9 6.056 6.056 0 0 0 4.976 2.484 6.05 6.05 0 0 0 5.784-4.097 6.016 6.016 0 0 0 4.635-3.3 6.063 6.063 0 0 0-.749-6.644zM12.001 20.407a4.417 4.417 0 0 1-2.896-1.077l.147-.084 3.738-2.158a.834.834 0 0 0 .42-.724v-5.269l1.579.912a.08.08 0 0 1 .042.062v4.416a4.432 4.432 0 0 1-3.03 3.922zm-7.669-4.708a4.423 4.423 0 0 1-.535-3.037l.149.088 3.737 2.157a.835.835 0 0 0 .838 0l4.563-2.634v1.824a.08.08 0 0 1-.038.069l-3.824 2.208a4.434 4.434 0 0 1-4.89-.675zm-1.127-8.98a4.418 4.418 0 0 1 2.361-1.961l.002.172v4.316a.835.835 0 0 0 .419.724l4.562 2.634-1.578.911a.08.08 0 0 1-.079 0l-3.824-2.207a4.433 4.433 0 0 1-1.861-4.589zm14.862 3.652-4.563-2.634 1.579-.911a.08.08 0 0 1 .079 0l3.824 2.207a4.434 4.434 0 0 1 1.86 4.589 4.417 4.417 0 0 1-2.36 1.962v-4.488a.836.836 0 0 0-.419-.725zm2.146-2.585a4.43 4.43 0 0 1 .536 3.038l-.149-.087-3.738-2.158a.833.833 0 0 0-.837 0l-4.563 2.634v-1.824a.08.08 0 0 1 .038-.069l3.824-2.208a4.434 4.434 0 0 1 4.889.674zM12 13.722l-2.686-1.551 2.686-1.55 2.686 1.55-2.686 1.551z"/></svg>' },
-  { name: 'Facebook', url: 'https://www.facebook.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>' },
-  { name: 'Wikipedia', url: 'https://www.wikipedia.org', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12.09 13.118l-2.072-4.78h-.056l-2.1 4.78h4.228zM1.4 5.312h4.545v.852H4.492l3.414 7.828 2.502-5.748h-1.026v-.852h4.15v.852h-1.028l2.673 6.136 3.255-7.488h-1.572v-.852h4.74v.852h-1.2l-4.78 10.99H14.45L11.5 10.934l-2.928 6.726H7.333L2.73 6.164H1.4v-.852z"/></svg>' },
-  { name: 'Reddit', url: 'https://www.reddit.com', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="#FF4500"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.196-.491.961 0 1.741.78 1.741 1.74 0 .61-.315 1.144-.792 1.45.023.19.034.381.034.574 0 2.924-3.387 5.295-7.564 5.295-4.178 0-7.565-2.371-7.565-5.295 0-.19.011-.38.033-.57-.481-.307-.798-.842-.798-1.45 0-.96.78-1.74 1.741-1.74.47 0 .895.186 1.204.499 1.198-.859 2.859-1.42 4.689-1.487l.926-4.341 3.204.675a1.247 1.247 0 0 1 1.207-.852zm-8.01 8.875c-.687 0-1.243.557-1.243 1.244 0 .687.556 1.244 1.243 1.244.688 0 1.244-.557 1.244-1.244 0-.687-.556-1.244-1.244-1.244zm6.002 0c-.687 0-1.244.557-1.244 1.244 0 .687.557 1.244 1.244 1.244.688 0 1.243-.557 1.243-1.244 0-.687-.555-1.244-1.244-1.244zm-5.466 3.655a.39.39 0 0 0-.27.666c.883.882 2.316.882 3.199 0a.39.39 0 1 0-.55-.552c-.579.578-1.518.578-2.097 0a.386.386 0 0 0-.282-.114z"/></svg>' },
-  { name: 'Twitch', url: 'https://twitch.tv', icon: '<svg width="26" height="26" viewBox="0 0 24 24" fill="#9146FF"><path d="M11.571 4.714h1.715v5.143H11.571V4.714zm4.715 0H18v5.143h-1.714V4.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0H6zm14.571 11.143l-3.428 3.429h-3.429l-3 3v-3H6.857V1.714h13.714v9.429z"/></svg>' }
+const defaultList = [
+  { name: 'Google', url: 'https://www.google.com' },
+  { name: 'YouTube', url: 'https://www.youtube.com' },
+  { name: 'GitHub', url: 'https://github.com' },
+  { name: 'ChatGPT', url: 'https://chatgpt.com' },
+  { name: 'Facebook', url: 'https://www.facebook.com' },
+  { name: 'Wikipedia', url: 'https://www.wikipedia.org' },
+  { name: 'Reddit', url: 'https://www.reddit.com' },
+  { name: 'Twitch', url: 'https://twitch.tv' }
 ];
+
+function getShortcuts() {
+  const saved = localStorage.getItem('litewave_all_shortcuts');
+  if (!saved) {
+    localStorage.setItem('litewave_all_shortcuts', JSON.stringify(defaultList));
+    return defaultList;
+  }
+  try {
+    return JSON.parse(saved);
+  } catch(e) {
+    return defaultList;
+  }
+}
+
+function saveShortcuts(list) {
+  localStorage.setItem('litewave_all_shortcuts', JSON.stringify(list));
+}
+
+function getDomain(urlStr) {
+  try {
+    const u = new URL(urlStr.startsWith('http') ? urlStr : 'https://' + urlStr);
+    return u.hostname;
+  } catch(e) {
+    return urlStr;
+  }
+}
+
+function getFaviconUrl(urlStr) {
+  const domain = getDomain(urlStr);
+  return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
+}
+
+let editIndex = -1;
 
 function renderShortcuts() {
   const grid = document.getElementById('sitesGrid');
   if (!grid) return;
   grid.innerHTML = '';
 
-  defaultSites.forEach(s => {
-    const card = document.createElement('a');
-    card.className = 'site-card';
-    card.href = s.url;
-    card.innerHTML = `<div class="site-icon">${s.icon}</div><div class="site-name">${s.name}</div>`;
-    grid.appendChild(card);
-  });
-
-  const custom = JSON.parse(localStorage.getItem('litewave_custom_shortcuts') || '[]');
-  custom.forEach((s, idx) => {
+  const shortcuts = getShortcuts();
+  shortcuts.forEach((s, idx) => {
     const card = document.createElement('div');
     card.className = 'site-card';
     card.onclick = () => window.location.href = s.url;
+
+    const domain = getDomain(s.url);
+    const favicon = getFaviconUrl(s.url);
     const initial = (s.name || 'W').charAt(0).toUpperCase();
+
     card.innerHTML = `
-      <button class="del-btn" title="ลบทางลัด" onclick="deleteShortcut(event, ${idx})">✕</button>
-      <div class="site-icon custom-avatar">${initial}</div>
+      <div class="card-actions">
+        <button class="action-btn edit-btn" title="แก้ไขทางลัด" onclick="openEditModal(event, ${idx})">✏️</button>
+        <button class="action-btn del-btn" title="ลบทางลัด" onclick="deleteShortcut(event, ${idx})">✕</button>
+      </div>
+      <div class="site-icon-box">
+        <img src="${favicon}" class="site-favicon" onerror="this.onerror=null; this.src='https://icon.horse/icon/${domain}'; this.onerror=function(){this.style.display='none'; this.nextElementSibling.style.display='flex';};" alt="${s.name}" />
+        <div class="site-icon-fallback" style="display:none;">${initial}</div>
+      </div>
       <div class="site-name">${s.name}</div>
     `;
     grid.appendChild(card);
@@ -1818,42 +1849,62 @@ function renderShortcuts() {
   addBtn.className = 'site-card add-card';
   addBtn.onclick = openAddModal;
   addBtn.innerHTML = `
-    <div class="site-icon add-icon">+</div>
+    <div class="site-icon-box add-icon-box">+</div>
     <div class="site-name">เพิ่มทางลัด</div>
   `;
   grid.appendChild(addBtn);
 }
 
 function openAddModal() {
+  editIndex = -1;
+  document.getElementById('modalTitle').innerText = 'เพิ่มทางลัดเว็บไซต์';
+  document.getElementById('shortcutName').value = '';
+  document.getElementById('shortcutUrl').value = '';
   document.getElementById('addModal').classList.add('active');
   document.getElementById('shortcutName').focus();
 }
 
-function closeAddModal() {
-  document.getElementById('addModal').classList.remove('active');
-  document.getElementById('shortcutName').value = '';
-  document.getElementById('shortcutUrl').value = '';
+function openEditModal(e, idx) {
+  e.stopPropagation();
+  editIndex = idx;
+  const shortcuts = getShortcuts();
+  const item = shortcuts[idx];
+  if (!item) return;
+  document.getElementById('modalTitle').innerText = 'แก้ไขทางลัดเว็บไซต์';
+  document.getElementById('shortcutName').value = item.name;
+  document.getElementById('shortcutUrl').value = item.url;
+  document.getElementById('addModal').classList.add('active');
+  document.getElementById('shortcutName').focus();
 }
 
-function saveCustomShortcut() {
+function closeModal() {
+  document.getElementById('addModal').classList.remove('active');
+}
+
+function saveShortcut() {
   const name = document.getElementById('shortcutName').value.trim();
   let url = document.getElementById('shortcutUrl').value.trim();
   if (!name || !url) return;
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
-  const custom = JSON.parse(localStorage.getItem('litewave_custom_shortcuts') || '[]');
-  custom.push({ name, url });
-  localStorage.setItem('litewave_custom_shortcuts', JSON.stringify(custom));
-  closeAddModal();
+
+  const shortcuts = getShortcuts();
+  if (editIndex >= 0 && editIndex < shortcuts.length) {
+    shortcuts[editIndex] = { name, url };
+  } else {
+    shortcuts.push({ name, url });
+  }
+  saveShortcuts(shortcuts);
+  closeModal();
   renderShortcuts();
 }
 
 function deleteShortcut(e, idx) {
   e.stopPropagation();
-  const custom = JSON.parse(localStorage.getItem('litewave_custom_shortcuts') || '[]');
-  custom.splice(idx, 1);
-  localStorage.setItem('litewave_custom_shortcuts', JSON.stringify(custom));
+  const shortcuts = getShortcuts();
+  shortcuts.splice(idx, 1);
+  saveShortcuts(shortcuts);
   renderShortcuts();
 }
 
