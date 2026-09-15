@@ -296,6 +296,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   urlBar_->setMinimumHeight(32);
   toolbar_->addWidget(urlBar_);
   connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
+  setupUrlBarCompleter();
 
   auto *bookmark = addNavAction("★", "บันทึกหน้าเว็บนี้ (Ctrl+D)");
   connect(bookmark, &QAction::triggered, this, &MainWindow::addBookmark);
@@ -1087,6 +1088,7 @@ void MainWindow::addBookmark() {
                             : currentView()->title();
   QSettings settings("LiteWave", "LiteWave");
   settings.setValue("bookmarks/" + currentView()->url().toString(), title);
+  setupUrlBarCompleter();
   statusBar()->showMessage("บันทึกเว็บแล้ว: " + title, 3000);
 }
 
@@ -1331,6 +1333,16 @@ void MainWindow::applyTheme() {
                 background-color: #ff5500;
                 color: #ffffff;
             }
+            QAbstractItemView {
+                background-color: #2b2d35;
+                color: #f1f3f4;
+                border: 1px solid #383a42;
+                border-radius: 8px;
+                padding: 4px;
+                selection-background-color: #ff5500;
+                selection-color: #ffffff;
+                outline: none;
+            }
         )QSS"));
   } else {
     qApp->setStyleSheet(QStringLiteral(R"QSS(
@@ -1545,8 +1557,63 @@ void MainWindow::applyTheme() {
                 background-color: #ff5500;
                 color: #ffffff;
             }
+            QAbstractItemView {
+                background-color: #ffffff;
+                color: #202124;
+                border: 1px solid #d0d2d6;
+                border-radius: 8px;
+                padding: 4px;
+                selection-background-color: #ff5500;
+                selection-color: #ffffff;
+                outline: none;
+            }
         )QSS"));
   }
+}
+
+void MainWindow::setupUrlBarCompleter() {
+  if (!urlCompleter_) {
+    urlCompleter_ = new QCompleter(this);
+    urlCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
+    urlCompleter_->setFilterMode(Qt::MatchContains);
+    urlCompleter_->setCompletionMode(QCompleter::PopupCompletion);
+    urlCompleter_->setMaxVisibleItems(10);
+    urlBar_->setCompleter(urlCompleter_);
+  }
+
+  QStringList suggestions = {
+      "google.com", "youtube.com", "github.com", "chatgpt.com",
+      "facebook.com", "wikipedia.org", "reddit.com", "twitter.com",
+      "x.com", "instagram.com", "twitch.tv", "pantip.com",
+      "sanook.com", "thairath.co.th", "netflix.com", "amazon.com",
+      "bing.com", "duckduckgo.com", "brave.com", "canva.com",
+      "shopee.co.th", "lazada.co.th", "stackoverflow.com"
+  };
+
+  QSettings st("LiteWave", "LiteWave");
+  const QVariantList history = st.value("history").toList();
+  for (const auto &var : history) {
+    const QVariantMap map = var.toMap();
+    const QString urlStr = map.value("url").toString();
+    const QString title = map.value("title").toString();
+    if (!urlStr.isEmpty() && !suggestions.contains(urlStr)) {
+      suggestions.append(urlStr);
+    }
+    if (!title.isEmpty() && !suggestions.contains(title)) {
+      suggestions.append(title);
+    }
+  }
+
+  st.beginGroup("bookmarks");
+  for (const QString &bmUrl : st.allKeys()) {
+    if (!suggestions.contains(bmUrl)) {
+      suggestions.append(bmUrl);
+    }
+  }
+  st.endGroup();
+
+  auto *model = new QStringListModel(suggestions, urlCompleter_);
+  urlCompleter_->setModel(model);
 }
 
 void MainWindow::loadHome(QWebEngineView *view) {
@@ -1595,9 +1662,50 @@ body {
   font-weight: 400;
 }
 .search-container {
+  position: relative;
   width: 100%;
   max-width: 740px;
   margin-bottom: 44px;
+}
+.suggestions-box {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background-color: %2;
+  border: 1px solid %5;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 500;
+  padding: 6px 0;
+}
+.suggestions-box.active {
+  display: flex;
+}
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  font-size: 15px;
+  color: %3;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.suggestion-item:hover, .suggestion-item.selected {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+.suggestion-icon {
+  color: %4;
+  display: flex;
+  align-items: center;
+}
+.suggestion-item:hover .suggestion-icon, .suggestion-item.selected .suggestion-icon {
+  color: #ffffff;
 }
 .search-box {
   display: flex;
@@ -1908,9 +2016,10 @@ body {
       <option value="google">Google Search</option>
       <option value="duckduckgo">DuckDuckGo</option>
     </select>
-    <input id="q" name="q" type="search" autofocus placeholder="ค้นหาบน Google หรือป้อนที่อยู่เว็บไซต์..." autocomplete="off">
+    <input id="q" name="q" type="search" autofocus placeholder="ค้นหาบน Google หรือป้อนที่อยู่เว็บไซต์..." autocomplete="off" oninput="onSearchInput(this.value)" onkeydown="onSearchKeyDown(event)">
     <button type="submit">ค้นหา</button>
   </form>
+  <div id="suggestionsBox" class="suggestions-box"></div>
 </div>
 
 <div class="sites-section">
@@ -2106,6 +2215,91 @@ function deleteShortcut(e, idx) {
 }
 
 renderShortcuts();
+
+const searchSuggestionsList = [
+  'github', 'github desktop', 'github copilot', 'github login', 'github repository',
+  'google', 'google translate', 'google maps', 'google drive', 'google docs',
+  'youtube', 'youtube music', 'chatgpt', 'openai', 'facebook', 'instagram',
+  'wikipedia', 'reddit', 'twitter', 'x.com', 'twitch', 'pantip',
+  'sanook', 'thairath', 'netflix', 'canva', 'binance', 'shopee', 'lazada',
+  'stackoverflow', 'python', 'cpp', 'qt framework', 'web development'
+];
+
+let currentSuggestions = [];
+let activeSuggestionIndex = -1;
+
+function onSearchInput(val) {
+  const box = document.getElementById('suggestionsBox');
+  if (!box) return;
+  const q = val.trim().toLowerCase();
+  if (!q) {
+    box.classList.remove('active');
+    box.innerHTML = '';
+    currentSuggestions = [];
+    activeSuggestionIndex = -1;
+    return;
+  }
+
+  const shortcuts = getShortcuts().map(s => s.name);
+  const pool = Array.from(new Set([...searchSuggestionsList, ...shortcuts]));
+  currentSuggestions = pool.filter(item => item.toLowerCase().includes(q)).slice(0, 7);
+
+  if (currentSuggestions.length === 0) {
+    box.classList.remove('active');
+    box.innerHTML = '';
+    activeSuggestionIndex = -1;
+    return;
+  }
+
+  activeSuggestionIndex = -1;
+  renderSuggestions();
+  box.classList.add('active');
+}
+
+function renderSuggestions() {
+  const box = document.getElementById('suggestionsBox');
+  if (!box) return;
+  box.innerHTML = currentSuggestions.map((item, idx) => `
+    <div class="suggestion-item ${idx === activeSuggestionIndex ? 'selected' : ''}" onclick="selectSuggestion('${item.replace(/'/g, "\\'")}')">
+      <div class="suggestion-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </div>
+      <span>${item}</span>
+    </div>
+  `).join('');
+}
+
+function selectSuggestion(text) {
+  document.getElementById('q').value = text;
+  document.getElementById('suggestionsBox').classList.remove('active');
+  submitSearch({ preventDefault: () => {} });
+}
+
+function onSearchKeyDown(e) {
+  const box = document.getElementById('suggestionsBox');
+  if (!box || !box.classList.contains('active') || currentSuggestions.length === 0) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    activeSuggestionIndex = (activeSuggestionIndex + 1) % currentSuggestions.length;
+    renderSuggestions();
+    document.getElementById('q').value = currentSuggestions[activeSuggestionIndex];
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    activeSuggestionIndex = (activeSuggestionIndex - 1 + currentSuggestions.length) % currentSuggestions.length;
+    renderSuggestions();
+    document.getElementById('q').value = currentSuggestions[activeSuggestionIndex];
+  } else if (e.key === 'Escape') {
+    box.classList.remove('active');
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const box = document.getElementById('suggestionsBox');
+  if (box && !e.target.closest('.search-container')) {
+    box.classList.remove('active');
+  }
+});
 </script>
 </body>
 </html>
@@ -2137,6 +2331,7 @@ void MainWindow::addHistoryItem(const QString &title, const QUrl &url) {
   if (history.size() > 100)
     history.removeLast();
   st.setValue("history", history);
+  setupUrlBarCompleter();
 }
 
 void MainWindow::populateHistoryMenu(QMenu *historyMenu) {
