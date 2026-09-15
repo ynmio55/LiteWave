@@ -113,6 +113,15 @@ public:
       : QWebEnginePage(profile, parent), mw_(mw), view_(view) {}
 
 protected:
+  QWebEnginePage *createWindow(WebWindowType type) override {
+    Q_UNUSED(type);
+    if (mw_) {
+      auto *newView = mw_->createView(QUrl());
+      return newView->page();
+    }
+    return QWebEnginePage::createWindow(type);
+  }
+
   bool acceptNavigationRequest(const QUrl &url, NavigationType type,
                                bool isMainFrame) override {
     if (isMainFrame && mw_ && view_)
@@ -176,7 +185,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   static QWebEngineProfile *normalProfile =
       new QWebEngineProfile("LiteWave", qApp);
   profile_ = privateMode_ ? new QWebEngineProfile(this) : normalProfile;
-  // Keep the engine's real version and platform for capability detection.
+  profile_->setHttpUserAgent(
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+      "Chrome/128.0.0.0 Safari/537.36");
   profile_->setHttpAcceptLanguage("th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
   if (!privateMode_) {
     profile_->setPersistentStoragePath(storagePath);
@@ -469,15 +480,16 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   s->setAttribute(QWebEngineSettings::WebGLEnabled, true);
   s->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
   s->setAttribute(QWebEngineSettings::AutoLoadImages, true);
-  s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, false);
+  s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, true);
   s->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, true);
-  s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript,
-                  false);
+  s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, true);
   s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
   s->setAttribute(QWebEngineSettings::PdfViewerEnabled, true);
   s->setAttribute(QWebEngineSettings::AllowRunningInsecureContent, false);
   s->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
   s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
+  s->setAttribute(QWebEngineSettings::WebRTCPublicInterfacesOnly, true);
+  s->setAttribute(QWebEngineSettings::FocusOnNavigationEnabled, true);
   const int index = tabBar_->addTab("LiteWave");
   tabStack_->addWidget(view);
   tabBar_->setCurrentIndex(index);

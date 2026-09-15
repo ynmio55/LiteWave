@@ -54,6 +54,7 @@ AdBlocker::AdBlocker(QObject *parent, bool persistent)
     static const QStringList initialDomains = {
         "doubleclick.net", "googlesyndication.com", "googleadservices.com",
         "adservice.google.com", "pagead2.googlesyndication.com", "ad.doubleclick.net",
+        "google-analytics.com", "googletagmanager.com",
         "securepubads.g.doubleclick.net", "stats.g.doubleclick.net", "video-stats.l.google.com",
         "tpc.googlesyndication.com", "ads.yahoo.com", "adnxs.com", "adform.net",
         "taboola.com", "outbrain.com", "popads.net", "popcash.net", "exoclick.com",
