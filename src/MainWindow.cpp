@@ -1711,6 +1711,7 @@ void MainWindow::setupUrlBarCompleter() {
 }
 
 void MainWindow::loadHome(QWebEngineView *view) {
+  const int blockedCount = adBlocker_ ? adBlocker_->blockedCount() : 0;
   const QString bg = darkMode_ ? "#111827" : "#ffffff";
   const QString cardBg = darkMode_ ? "#1f2937" : "#f9fafb";
   const QString textCol = darkMode_ ? "#f9fafc" : "#111827";
@@ -2098,7 +2099,7 @@ body {
 <body>
 
 <div class="brand">LiteWave</div>
-<div class="subtitle">ค้นหาและท่องเว็บ · เข้าถึงทุกเว็บไซต์ได้อย่างอิสระ</div>
+<div class="subtitle">ค้นหาและท่องเว็บ · ควบคุมโฆษณาและตัวติดตามด้วย Shield</div>
 
 <div class="search-container">
   <form class="search-box" onsubmit="return submitSearch(event)">
@@ -2135,10 +2136,10 @@ body {
   </div>
 </div>
 
-<div class="footer-note">LiteWave Browser</div>
+<div class="footer-note">Shield · บล็อกคำขอแล้ว %6 รายการ</div>
 
 )HTML"
-                               R"HTML(<script>
+R"HTML(<script>
 function submitSearch(event) {
   event.preventDefault();
   const query = document.getElementById('q').value.trim();
@@ -2155,9 +2156,9 @@ const defaultList = [
   { name: 'GitHub', url: 'https://github.com' },
   { name: 'ChatGPT', url: 'https://chatgpt.com' },
   { name: 'Facebook', url: 'https://www.facebook.com' },
-  { name: 'Instagram', url: 'https://www.instagram.com' },
-  { name: 'X (Twitter)', url: 'https://x.com' },
-  { name: 'Reddit', url: 'https://www.reddit.com' }
+  { name: 'Wikipedia', url: 'https://www.wikipedia.org' },
+  { name: 'Reddit', url: 'https://www.reddit.com' },
+  { name: 'Twitch', url: 'https://twitch.tv' }
 ];
 
 function getShortcuts() {
@@ -2191,90 +2192,91 @@ function getFaviconUrl(urlStr) {
   return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
 }
 
+let editIndex = -1;
+
 function renderShortcuts() {
   const grid = document.getElementById('sitesGrid');
   if (!grid) return;
   grid.innerHTML = '';
 
   const shortcuts = getShortcuts();
-  shortcuts.forEach((site, index) => {
+  shortcuts.forEach((s, idx) => {
     const card = document.createElement('div');
     card.className = 'site-card';
-    card.onclick = () => window.location.href = site.url;
+    card.onclick = () => window.location.href = s.url;
 
-    const domain = getDomain(site.url);
-    const favicon = getFaviconUrl(site.url);
-    const initial = (site.name || 'W').charAt(0).toUpperCase();
+    const domain = getDomain(s.url);
+    const favicon = getFaviconUrl(s.url);
+    const initial = (s.name || 'W').charAt(0).toUpperCase();
 
     card.innerHTML = `
-      <button class="options-btn" title="ตัวเลือกทางลัด" onclick="toggleDropdown(event, ${index})">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="5" r="1.5"></circle><circle cx="12" cy="19" r="1.5"></circle></svg>
+      <button class="options-btn" title="ตัวเลือก" onclick="toggleCardDropdown(event, ${idx})">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="12" cy="19" r="2.2"></circle></svg>
       </button>
-      <div class="card-dropdown" id="dropdown-${index}" onclick="event.stopPropagation()">
-        <div class="dropdown-item" onclick="openEditModal(event, ${index})">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-          แก้ไข
+      <div class="card-dropdown" id="dropdown-${idx}">
+        <div class="dropdown-item" onclick="openEditModal(event, ${idx})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+          <span>แก้ไขทางลัด</span>
         </div>
-        <div class="dropdown-item danger-item" onclick="deleteShortcut(event, ${index})">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2 2v2"></path></svg>
-          ลบ
+        <div class="dropdown-item danger-item" onclick="deleteShortcut(event, ${idx})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <span>ลบทางลัด</span>
         </div>
       </div>
       <div class="site-icon-box">
-        <img src="${favicon}" class="site-favicon" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" alt="${site.name}" />
+        <img src="${favicon}" class="site-favicon" onerror="this.onerror=null; this.src='https://icon.horse/icon/${domain}'; this.onerror=function(){this.style.display='none'; this.nextElementSibling.style.display='flex';};" alt="${s.name}" />
         <div class="site-icon-fallback" style="display:none;">${initial}</div>
       </div>
-      <div class="site-name">${site.name}</div>
+      <div class="site-name">${s.name}</div>
     `;
     grid.appendChild(card);
   });
 
-  const addCard = document.createElement('div');
-  addCard.className = 'site-card add-card';
-  addCard.onclick = openAddModal;
-  addCard.innerHTML = `
+  const addBtn = document.createElement('div');
+  addBtn.className = 'site-card add-card';
+  addBtn.onclick = openAddModal;
+  addBtn.innerHTML = `
     <div class="site-icon-box add-icon-box">+</div>
     <div class="site-name">เพิ่มทางลัด</div>
   `;
-  grid.appendChild(addCard);
+  grid.appendChild(addBtn);
 }
 
-let editingIndex = -1;
-
-function closeAllDropdowns() {
-  document.querySelectorAll('.card-dropdown').forEach(dd => dd.classList.remove('active'));
+function toggleCardDropdown(e, idx) {
+  e.stopPropagation();
+  const allDropdowns = document.querySelectorAll('.card-dropdown');
+  allDropdowns.forEach((d, i) => {
+    if (i !== idx) d.classList.remove('active');
+  });
+  const menu = document.getElementById('dropdown-' + idx);
+  if (menu) menu.classList.toggle('active');
 }
 
-function toggleDropdown(e, idx) {
-  if (e) e.stopPropagation();
-  const targetDd = document.getElementById('dropdown-' + idx);
-  const wasActive = targetDd ? targetDd.classList.contains('active') : false;
-  closeAllDropdowns();
-  if (targetDd && !wasActive) {
-    targetDd.classList.add('active');
-  }
-}
+document.addEventListener('click', () => {
+  const allDropdowns = document.querySelectorAll('.card-dropdown');
+  allDropdowns.forEach(d => d.classList.remove('active'));
+});
 
 function openAddModal() {
-  closeAllDropdowns();
-  editingIndex = -1;
-  document.getElementById('modalTitle').textContent = 'เพิ่มทางลัดเว็บไซต์';
+  editIndex = -1;
+  document.getElementById('modalTitle').innerText = 'เพิ่มทางลัดเว็บไซต์';
   document.getElementById('shortcutName').value = '';
   document.getElementById('shortcutUrl').value = '';
   document.getElementById('addModal').classList.add('active');
+  document.getElementById('shortcutName').focus();
 }
 
 function openEditModal(e, idx) {
-  if (e) e.stopPropagation();
-  closeAllDropdowns();
+  e.stopPropagation();
+  editIndex = idx;
   const shortcuts = getShortcuts();
-  if (idx < 0 || idx >= shortcuts.length) return;
-  editingIndex = idx;
-  const site = shortcuts[idx];
-  document.getElementById('modalTitle').textContent = 'แก้ไขทางลัดเว็บไซต์';
-  document.getElementById('shortcutName').value = site.name || '';
-  document.getElementById('shortcutUrl').value = site.url || '';
+  const item = shortcuts[idx];
+  if (!item) return;
+  document.getElementById('modalTitle').innerText = 'แก้ไขทางลัดเว็บไซต์';
+  document.getElementById('shortcutName').value = item.name;
+  document.getElementById('shortcutUrl').value = item.url;
   document.getElementById('addModal').classList.add('active');
+  document.getElementById('shortcutName').focus();
 }
 
 function closeModal() {
@@ -2288,31 +2290,25 @@ function saveShortcut() {
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
+
   const shortcuts = getShortcuts();
-  if (editingIndex >= 0) {
-    shortcuts[editingIndex] = { name, url };
+  if (editIndex >= 0 && editIndex < shortcuts.length) {
+    shortcuts[editIndex] = { name, url };
   } else {
     shortcuts.push({ name, url });
   }
   saveShortcuts(shortcuts);
-  renderShortcuts();
   closeModal();
+  renderShortcuts();
 }
 
 function deleteShortcut(e, idx) {
-  if (e) e.stopPropagation();
-  closeAllDropdowns();
+  e.stopPropagation();
   const shortcuts = getShortcuts();
   shortcuts.splice(idx, 1);
   saveShortcuts(shortcuts);
   renderShortcuts();
 }
-
-document.addEventListener('click', function(e) {
-  if (!e.target.closest('.card-dropdown') && !e.target.closest('.options-btn')) {
-    closeAllDropdowns();
-  }
-});
 
 renderShortcuts();
 
@@ -2340,7 +2336,10 @@ function onSearchInput(val) {
     return;
   }
 
-  currentSuggestions = searchSuggestionsList.filter(item => item.startsWith(q)).slice(0, 5);
+  const shortcuts = getShortcuts().map(s => s.name);
+  const pool = Array.from(new Set([...searchSuggestionsList, ...shortcuts]));
+  currentSuggestions = pool.filter(item => item.toLowerCase().includes(q)).slice(0, 7);
+
   if (currentSuggestions.length === 0) {
     box.classList.remove('active');
     box.innerHTML = '';
@@ -2356,20 +2355,20 @@ function onSearchInput(val) {
 function renderSuggestions() {
   const box = document.getElementById('suggestionsBox');
   if (!box) return;
-  box.innerHTML = '';
-  currentSuggestions.forEach((item, index) => {
-    const div = document.createElement('div');
-    div.className = 'suggestion-item' + (index === activeSuggestionIndex ? ' selected' : '');
-    div.textContent = item;
-    div.onclick = () => selectSuggestion(item);
-    box.appendChild(div);
-  });
+  box.innerHTML = currentSuggestions.map((item, idx) => `
+    <div class="suggestion-item ${idx === activeSuggestionIndex ? 'selected' : ''}" onclick="selectSuggestion('${item.replace(/'/g, "\\'")}')">
+      <div class="suggestion-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </div>
+      <span>${item}</span>
+    </div>
+  `).join('');
 }
 
-function selectSuggestion(val) {
-  document.getElementById('q').value = val;
+function selectSuggestion(text) {
+  document.getElementById('q').value = text;
   document.getElementById('suggestionsBox').classList.remove('active');
-  submitSearch(new Event('submit'));
+  submitSearch({ preventDefault: () => {} });
 }
 
 function onSearchKeyDown(e) {
@@ -2401,7 +2400,8 @@ document.addEventListener('click', (e) => {
 </body>
 </html>
 )HTML")
-                           .arg(bg, cardBg, textCol, subCol, borderCol);
+                           .arg(bg, cardBg, textCol, subCol, borderCol)
+                           .arg(blockedCount);
 
   view->setHtml(html, QUrl("https://litewave.home/"));
 }
