@@ -290,7 +290,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 
   // Omnibox Address Bar
   urlBar_->setPlaceholderText("ค้นหาด้วย Google หรือระบุ URL...");
-  urlBar_->setClearButtonEnabled(true);
+  urlBar_->setClearButtonEnabled(false);
   urlBar_->setMinimumHeight(32);
   toolbar_->addWidget(urlBar_);
   connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
@@ -1254,7 +1254,7 @@ void MainWindow::applyTheme() {
                 color: #f1f3f4;
                 border: 1px solid #383a42;
                 border-radius: 17px;
-                padding: 5px 30px 5px 14px;
+                padding: 5px 14px 5px 14px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
@@ -1468,7 +1468,7 @@ void MainWindow::applyTheme() {
                 color: #202124;
                 border: 1px solid #e0e2e5;
                 border-radius: 17px;
-                padding: 5px 30px 5px 14px;
+                padding: 5px 14px 5px 14px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
