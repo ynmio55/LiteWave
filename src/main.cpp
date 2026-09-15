@@ -31,22 +31,20 @@ QString dohTemplateFor(const QSettings &settings)
 
 int main(int argc, char *argv[])
 {
-    // Do not disable Chromium security, component updates, or reliability services.
-    // Forced DNS-over-HTTPS is opt-in: captive portals and some networks fail with it.
     QSettings settings("LiteWave", "LiteWave");
     const QString dohTemplate = dohTemplateFor(settings);
+
+    QByteArray flags = "--enable-smooth-scrolling --enable-gpu-rasterization --enable-accelerated-2d-canvas --enable-zero-copy --ignore-gpu-blocklist --enable-features=SmoothScrolling,TouchpadOverscrollHistoryNavigation,CanvasOverscrollEffect";
     if (!dohTemplate.isEmpty()) {
-        const QByteArray flags =
-            QByteArrayLiteral("--enable-features=DnsOverHttps --doh-templates=") +
-            dohTemplate.toUtf8();
-        qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags);
+        flags += " --doh-templates=" + dohTemplate.toUtf8();
     }
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags);
 
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
     QApplication::setOrganizationName("LiteWave");
     QApplication::setApplicationName("LiteWave");
-    QApplication::setApplicationVersion("0.9.0");
+    QApplication::setApplicationVersion("1.0.0");
     QGuiApplication::setDesktopFileName("LiteWave");
     app.setWindowIcon(QIcon(":/icons/litewave.svg"));
 

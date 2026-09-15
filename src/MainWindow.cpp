@@ -514,6 +514,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
   s->setAttribute(QWebEngineSettings::WebRTCPublicInterfacesOnly, true);
   s->setAttribute(QWebEngineSettings::FocusOnNavigationEnabled, true);
+  s->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, true);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
   // Permission is still requested from the user before a site can share a
   // screen; this only enables standards-compliant capture support.
@@ -1715,6 +1716,7 @@ void MainWindow::loadHome(QWebEngineView *view) {
 <title>LiteWave</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
+html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
 body {
   background-color: %1;
