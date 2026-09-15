@@ -2904,7 +2904,8 @@ void MainWindow::showSettingsDialog() {
     pIdx = 0;
   // Avoid a confusing "enabled" state that still means OS DNS. The first
   // opt-in starts with Cloudflare; users can still choose any provider.
-  if (secureDnsBox->isChecked() &&\n      dnsCombo->itemData(pIdx).toString() == "OS Default")
+  if (secureDnsBox->isChecked() &&
+      dnsCombo->itemData(pIdx).toString() == "OS Default")
     pIdx = dnsCombo->findData("Cloudflare");
   dnsCombo->setCurrentIndex(pIdx);
 
