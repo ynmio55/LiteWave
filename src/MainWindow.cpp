@@ -2126,7 +2126,8 @@ body {
 
 <div class="footer-note">Shield · บล็อกคำขอแล้ว %6 รายการ</div>
 
-<script>
+)HTML"
+R"HTML(<script>
 function submitSearch(event) {
   event.preventDefault();
   const query = document.getElementById('q').value.trim();
