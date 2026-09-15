@@ -22,7 +22,18 @@ function fixture(host = 'www.youtube.com') {
         getElementById() { return state.style; },
         querySelector(selector) {
             if (selector.includes('#movie_player')) return player;
-            if (selector === 'video') return { muted: false, playbackRate: 1, duration: 10, currentTime: 0 };
+            if (selector === 'video') {
+                if (!state.video) {
+                    state.video = {
+                        muted: false, playbackRate: 1, duration: 10, currentTime: 0,
+                        attrs: new Set(),
+                        hasAttribute(n) { return this.attrs.has(n); },
+                        setAttribute(n, v) { this.attrs.add(n); },
+                        removeAttribute(n) { this.attrs.delete(n); }
+                    };
+                }
+                return state.video;
+            }
             return null;
         },
         querySelectorAll: (selector) => {

@@ -12,6 +12,7 @@
     let observer = null;
     const isYouTube = location.hostname === 'youtube.com' ||
         location.hostname.endsWith('.youtube.com');
+
     const style = document.createElement('style');
     style.id = 'litewave-ad-style';
     style.textContent = [
@@ -50,25 +51,37 @@
 
         const video = document.querySelector('video');
         if (isAdShowing && video) {
-            video.muted = true;
-            video.playbackRate = 16.0;
+            if (!video.hasAttribute('data-litewave-ad-muted')) {
+                video.setAttribute('data-litewave-ad-muted', '1');
+                video.muted = true;
+                video.playbackRate = 16.0;
+            }
+        } else if (video && video.hasAttribute('data-litewave-ad-muted')) {
+            video.removeAttribute('data-litewave-ad-muted');
+            video.playbackRate = 1.0;
+            video.muted = false;
         }
 
         // Auto-click Skip Ad buttons safely
         const skipButtons = document.querySelectorAll(
             '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, ' +
             '.ytp-skip-ad-button, .ytp-ad-skip-button-slot, ' +
-            '.ytp-ad-overlay-close-button'
+            '.ytp-ad-skip-button-container, .ytp-ad-overlay-close-button, ' +
+            'button.ytp-ad-skip-button-single, .ytp-ad-skip-button-text, ' +
+            'button[id^="skip-button"], .ytp-ad-preview-container'
         );
         skipButtons.forEach(btn => {
-            if (btn && !btn.disabled && btn.getClientRects().length) {
-                try { btn.click(); } catch(e) {}
+            if (btn && !btn.disabled) {
+                try {
+                    btn.click();
+                    if (typeof btn.onclick === 'function') btn.onclick();
+                } catch (e) {}
             }
         });
     }
 
     function schedule() {
-        if (active && !document.hidden && !timer) timer = setTimeout(cleanYouTube, 400);
+        if (active && !document.hidden && !timer) timer = setTimeout(cleanYouTube, 200);
     }
 
     function watch() {
