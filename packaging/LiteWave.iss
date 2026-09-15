@@ -17,6 +17,7 @@ SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#AppExeName}
+SetupIconFile=..\assets\litewave.ico
 WizardStyle=modern
 
 [Files]

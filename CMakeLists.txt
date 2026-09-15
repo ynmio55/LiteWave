@@ -28,6 +28,7 @@ target_link_libraries(LiteWave PRIVATE
 
 if(WIN32)
     set_target_properties(LiteWave PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_sources(LiteWave PRIVATE assets/litewave.rc)
 endif()
 
 include(GNUInstallDirs)

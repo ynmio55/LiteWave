@@ -232,7 +232,29 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   tabBarLayout->addWidget(newTabBtn);
   tabBarLayout->addStretch(); // Keeps + button right next to the tabs!
 
-  // Window Control on far right of Tab Bar Row (Only Close button)
+  // Window Controls on far right of Tab Bar Row (Minimize, Maximize/Restore, Close)
+  auto *minWinBtn = new QToolButton(this);
+  minWinBtn->setObjectName("windowMinButton");
+  minWinBtn->setText("—");
+  minWinBtn->setToolTip("ย่อหน้าต่าง (Ctrl+M)");
+  minWinBtn->setFixedSize(28, 28);
+  minWinBtn->setCursor(Qt::PointingHandCursor);
+  connect(minWinBtn, &QToolButton::clicked, this, &QMainWindow::showMinimized);
+
+  auto *maxWinBtn = new QToolButton(this);
+  maxWinBtn->setObjectName("windowMaxButton");
+  maxWinBtn->setText("▢");
+  maxWinBtn->setToolTip("ขยายหน้าต่าง / คืนขนาด");
+  maxWinBtn->setFixedSize(28, 28);
+  maxWinBtn->setCursor(Qt::PointingHandCursor);
+  connect(maxWinBtn, &QToolButton::clicked, this, [this]() {
+    if (isMaximized()) {
+      showNormal();
+    } else {
+      showMaximized();
+    }
+  });
+
   auto *closeWinBtn = new QToolButton(this);
   closeWinBtn->setObjectName("windowCloseButton");
   closeWinBtn->setText("✕");
@@ -241,6 +263,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   closeWinBtn->setCursor(Qt::PointingHandCursor);
   connect(closeWinBtn, &QToolButton::clicked, this, &QMainWindow::close);
 
+  tabBarLayout->addWidget(minWinBtn);
+  tabBarLayout->addWidget(maxWinBtn);
   tabBarLayout->addWidget(closeWinBtn);
 
   headerLayout->addWidget(tabBarContainer_);
@@ -363,31 +387,20 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
     if (event->type() == QEvent::MouseButtonPress) {
       auto *mouseEvent = static_cast<QMouseEvent *>(event);
       if (mouseEvent->button() == Qt::LeftButton) {
-        if (watched == tabBar_) {
-          if (tabBar_->tabAt(mouseEvent->pos()) != -1) {
-            return false;
-          }
+        if (watched == tabBar_ && tabBar_->tabAt(mouseEvent->pos()) != -1) {
+          return false;
         }
         if (windowHandle()) {
           windowHandle()->startSystemMove();
           return true;
         }
-        dragPosition_ =
-            mouseEvent->globalPosition().toPoint() - frameGeometry().topLeft();
-        return false;
-      }
-    } else if (event->type() == QEvent::MouseMove) {
-      auto *mouseEvent = static_cast<QMouseEvent *>(event);
-      if (mouseEvent->buttons() & Qt::LeftButton) {
-        if (isMaximized()) {
-          showNormal();
-        }
-        move(mouseEvent->globalPosition().toPoint() - dragPosition_);
-        return true;
       }
     } else if (event->type() == QEvent::MouseButtonDblClick) {
       auto *mouseEvent = static_cast<QMouseEvent *>(event);
       if (mouseEvent->button() == Qt::LeftButton) {
+        if (watched == tabBar_ && tabBar_->tabAt(mouseEvent->pos()) != -1) {
+          return false;
+        }
         if (isMaximized()) {
           showNormal();
         } else {
@@ -2004,9 +2017,9 @@ const defaultList = [
   { name: 'GitHub', url: 'https://github.com' },
   { name: 'ChatGPT', url: 'https://chatgpt.com' },
   { name: 'Facebook', url: 'https://www.facebook.com' },
-  { name: 'Wikipedia', url: 'https://www.wikipedia.org' },
-  { name: 'Reddit', url: 'https://www.reddit.com' },
-  { name: 'Twitch', url: 'https://twitch.tv' }
+  { name: 'Instagram', url: 'https://www.instagram.com' },
+  { name: 'X (Twitter)', url: 'https://x.com' },
+  { name: 'Reddit', url: 'https://www.reddit.com' }
 ];
 
 function getShortcuts() {
