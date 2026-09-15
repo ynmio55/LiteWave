@@ -39,6 +39,7 @@ void saveSecureDnsStatus(QSettings &settings, const QString &status, const QStri
 {
     settings.setValue("secureDnsRuntimeStatus", status);
     settings.setValue("secureDnsRuntimeDetail", detail);
+    settings.sync();
 }
 
 void configureSecureDns(QSettings &settings)
