@@ -409,6 +409,11 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
     if (event->type() == QEvent::MouseButtonPress) {
       auto *mouseEvent = static_cast<QMouseEvent *>(event);
       if (mouseEvent->button() == Qt::LeftButton) {
+        if (watched == tabBar_) {
+          if (tabBar_->tabAt(mouseEvent->pos()) != -1) {
+            return false;
+          }
+        }
         if (windowHandle()) {
           windowHandle()->startSystemMove();
           return true;
