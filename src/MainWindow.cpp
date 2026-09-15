@@ -360,9 +360,13 @@ QWebEngineView *MainWindow::createView(const QUrl &url)
                 statusBar()->showMessage("กำลังดาวน์โหลด: " + name, 2500);
             });
 
-    connect(view, &QWebEngineView::urlChanged, this, &MainWindow::updateCurrentUrl);
+    connect(view, &QWebEngineView::urlChanged, this, [this, view](const QUrl &u) {
+        configurePageShield(view, u, false);
+        if (view == currentView()) updateCurrentUrl(u);
+    });
     connect(view, &QWebEngineView::titleChanged, this, &MainWindow::updateTabTitle);
     connect(view, &QWebEngineView::loadProgress, progress_, &QProgressBar::setValue);
+    configurePageShield(view, url, false);
     if (url.isValid() && !url.isEmpty())
         view->setUrl(url);
     return view;
