@@ -13,13 +13,13 @@ QString dohTemplateFor(const QSettings &settings)
 
     const QString provider = settings.value("dnsProvider", "OS Default").toString();
     if (provider == "Cloudflare")
-        return QStringLiteral("https://cloudflare-dns.com/dns-query");
+        return QStringLiteral("https://chrome.cloudflare-dns.com/dns-query{?dns}");
     if (provider == "Google")
         return QStringLiteral("https://dns.google/dns-query{?dns}");
     if (provider == "Quad9")
-        return QStringLiteral("https://dns.quad9.net/dns-query");
+        return QStringLiteral("https://dns.quad9.net/dns-query{?dns}");
     if (provider == "AdGuard")
-        return QStringLiteral("https://dns.adguard-dns.com/dns-query");
+        return QStringLiteral("https://dns.adguard-dns.com/dns-query{?dns}");
     if (provider == "Custom") {
         const QUrl custom(settings.value("customDnsUrl").toString().trimmed());
         if (custom.isValid() && custom.scheme() == "https" && !custom.host().isEmpty())
