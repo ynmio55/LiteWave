@@ -120,7 +120,7 @@ void AdBlocker::setSiteAllowed(const QUrl &url, bool allowed)
             changed = !allowedSites_.contains(key);
             allowedSites_.insert(key);
         } else {
-            changed = allowedSites_.remove(key) > 0;
+            changed = allowedSites_.remove(key);
         }
     }
     if (!changed)
