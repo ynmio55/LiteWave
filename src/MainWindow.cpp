@@ -564,7 +564,7 @@ void MainWindow::configurePageShield(QWebEngineView *view, const QUrl &url, bool
     QWebEngineScript script;
     script.setName("LiteWaveShield");
     script.setSourceCode(AdBlocker::cosmeticScript(adBlocker_->isEnabledForUrl(url)));
-    script.setInjectionPoint(QWebEngineScript::DocumentReady);
+    script.setInjectionPoint(QWebEngineScript::DocumentCreation);
     script.setWorldId(QWebEngineScript::ApplicationWorld);
     // The top-page owns cosmetic state; subframe requests are still network-filtered.
     script.setRunsOnSubFrames(false);

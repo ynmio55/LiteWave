@@ -13,6 +13,71 @@
     const isYouTube = location.hostname === 'youtube.com' ||
         location.hostname.endsWith('.youtube.com');
 
+    // YouTube Player API Response Interceptor
+    // Intercepts fetch & XHR for youtubei/v1/player to strip ad manifests before playback
+    if (isYouTube && !globalThis.__litewaveYtPatched) {
+        globalThis.__litewaveYtPatched = true;
+
+        const cleanYtJson = (json) => {
+            if (!json || typeof json !== 'object') return json;
+            delete json.adPlacements;
+            delete json.playerAds;
+            delete json.adSlots;
+            delete json.adBreakHeartbeatParams;
+            if (json.playerResponse) {
+                delete json.playerResponse.adPlacements;
+                delete json.playerResponse.playerAds;
+                delete json.playerResponse.adSlots;
+            }
+            return json;
+        };
+
+        if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+            const origFetch = window.fetch;
+            window.fetch = async function(...args) {
+                const response = await origFetch.apply(this, args);
+                const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
+                if (url.includes('/youtubei/v1/player')) {
+                    try {
+                        const clone = response.clone();
+                        const json = await clone.json();
+                        const cleaned = cleanYtJson(json);
+                        return new Response(JSON.stringify(cleaned), {
+                            status: response.status,
+                            statusText: response.statusText,
+                            headers: response.headers
+                        });
+                    } catch (e) {}
+                }
+                return response;
+            };
+        }
+
+        if (typeof window !== 'undefined' && typeof window.XMLHttpRequest === 'function') {
+            const origOpen = window.XMLHttpRequest.prototype.open;
+            const origSend = window.XMLHttpRequest.prototype.send;
+            window.XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                this.__litewaveUrl = url;
+                return origOpen.call(this, method, url, ...rest);
+            };
+            window.XMLHttpRequest.prototype.send = function(...args) {
+                if (this.__litewaveUrl && typeof this.__litewaveUrl === 'string' && this.__litewaveUrl.includes('/youtubei/v1/player')) {
+                    this.addEventListener('readystatechange', function() {
+                        if (this.readyState === 4 && this.responseText) {
+                            try {
+                                const json = JSON.parse(this.responseText);
+                                const cleaned = cleanYtJson(json);
+                                Object.defineProperty(this, 'responseText', { value: JSON.stringify(cleaned) });
+                                Object.defineProperty(this, 'response', { value: JSON.stringify(cleaned) });
+                            } catch (e) {}
+                        }
+                    }, { once: true });
+                }
+                return origSend.apply(this, args);
+            };
+        }
+    }
+
     const style = document.createElement('style');
     style.id = 'litewave-ad-style';
     style.textContent = [
@@ -51,12 +116,15 @@
 
         const video = document.querySelector('video');
         if (isAdShowing && video) {
-            if (!video.hasAttribute('data-litewave-ad-muted')) {
-                video.setAttribute('data-litewave-ad-muted', '1');
-                video.muted = true;
-                video.playbackRate = 16.0;
+            video.muted = true;
+            video.playbackRate = 16.0;
+            if (!isNaN(video.duration) && video.duration > 0 && isFinite(video.duration)) {
+                video.currentTime = video.duration;
             }
-        } else if (video && video.hasAttribute('data-litewave-ad-muted')) {
+            if (typeof video.setAttribute === 'function') {
+                video.setAttribute('data-litewave-ad-muted', '1');
+            }
+        } else if (video && typeof video.hasAttribute === 'function' && video.hasAttribute('data-litewave-ad-muted')) {
             video.removeAttribute('data-litewave-ad-muted');
             video.playbackRate = 1.0;
             video.muted = false;
