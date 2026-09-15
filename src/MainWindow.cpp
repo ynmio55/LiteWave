@@ -2038,9 +2038,19 @@ function renderShortcuts() {
     const initial = (site.name || 'W').charAt(0).toUpperCase();
 
     card.innerHTML = `
-      <button class="options-btn" title="ลบทางลัด" onclick="deleteShortcut(event, ${index})">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      <button class="options-btn" title="ตัวเลือกทางลัด" onclick="toggleDropdown(event, ${index})">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="5" r="1.5"></circle><circle cx="12" cy="19" r="1.5"></circle></svg>
       </button>
+      <div class="card-dropdown" id="dropdown-${index}" onclick="event.stopPropagation()">
+        <div class="dropdown-item" onclick="openEditModal(event, ${index})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          แก้ไข
+        </div>
+        <div class="dropdown-item danger-item" onclick="deleteShortcut(event, ${index})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2 2v2"></path></svg>
+          ลบ
+        </div>
+      </div>
       <div class="site-icon-box">
         <img src="${favicon}" class="site-favicon" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" alt="${site.name}" />
         <div class="site-icon-fallback" style="display:none;">${initial}</div>
@@ -2062,11 +2072,39 @@ function renderShortcuts() {
 
 let editingIndex = -1;
 
+function closeAllDropdowns() {
+  document.querySelectorAll('.card-dropdown').forEach(dd => dd.classList.remove('active'));
+}
+
+function toggleDropdown(e, idx) {
+  if (e) e.stopPropagation();
+  const targetDd = document.getElementById('dropdown-' + idx);
+  const wasActive = targetDd ? targetDd.classList.contains('active') : false;
+  closeAllDropdowns();
+  if (targetDd && !wasActive) {
+    targetDd.classList.add('active');
+  }
+}
+
 function openAddModal() {
+  closeAllDropdowns();
   editingIndex = -1;
   document.getElementById('modalTitle').textContent = 'เพิ่มทางลัดเว็บไซต์';
   document.getElementById('shortcutName').value = '';
   document.getElementById('shortcutUrl').value = '';
+  document.getElementById('addModal').classList.add('active');
+}
+
+function openEditModal(e, idx) {
+  if (e) e.stopPropagation();
+  closeAllDropdowns();
+  const shortcuts = getShortcuts();
+  if (idx < 0 || idx >= shortcuts.length) return;
+  editingIndex = idx;
+  const site = shortcuts[idx];
+  document.getElementById('modalTitle').textContent = 'แก้ไขทางลัดเว็บไซต์';
+  document.getElementById('shortcutName').value = site.name || '';
+  document.getElementById('shortcutUrl').value = site.url || '';
   document.getElementById('addModal').classList.add('active');
 }
 
@@ -2093,12 +2131,19 @@ function saveShortcut() {
 }
 
 function deleteShortcut(e, idx) {
-  e.stopPropagation();
+  if (e) e.stopPropagation();
+  closeAllDropdowns();
   const shortcuts = getShortcuts();
   shortcuts.splice(idx, 1);
   saveShortcuts(shortcuts);
   renderShortcuts();
 }
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.card-dropdown') && !e.target.closest('.options-btn')) {
+    closeAllDropdowns();
+  }
+});
 
 renderShortcuts();
 
