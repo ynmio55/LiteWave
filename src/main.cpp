@@ -34,7 +34,19 @@ int main(int argc, char *argv[])
     QSettings settings("LiteWave", "LiteWave");
     const QString dohTemplate = dohTemplateFor(settings);
 
-    QByteArray flags = "--enable-smooth-scrolling --enable-gpu-rasterization --enable-accelerated-2d-canvas --enable-zero-copy --ignore-gpu-blocklist --enable-features=SmoothScrolling,TouchpadOverscrollHistoryNavigation,CanvasOverscrollEffect";
+    QByteArray flags =
+        "--process-per-site "
+        "--js-flags=\"--max-old-space-size=128 --optimize-for-size\" "
+        "--disk-cache-size=33554432 "
+        "--media-cache-size=16777216 "
+        "--disable-background-networking "
+        "--disable-component-update "
+        "--disable-domain-reliability "
+        "--disable-speech-api "
+        "--disable-breakpad "
+        "--disable-sync "
+        "--disable-features=Translate,Autofill,OptimizationHints,MediaRouter";
+
     if (!dohTemplate.isEmpty()) {
         flags += " --doh-templates=" + dohTemplate.toUtf8();
     }

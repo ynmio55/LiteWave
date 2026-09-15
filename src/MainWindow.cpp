@@ -190,7 +190,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     profile_->setPersistentCookiesPolicy(
         QWebEngineProfile::AllowPersistentCookies);
     profile_->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
-    profile_->setHttpCacheMaximumSize(64 * 1024 * 1024);
+    profile_->setHttpCacheMaximumSize(32 * 1024 * 1024);
   }
 
   // Profile request interceptor setup
@@ -501,7 +501,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   auto *s = view->settings();
   s->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
   s->setAttribute(QWebEngineSettings::LocalStorageEnabled, true);
-  s->setAttribute(QWebEngineSettings::DnsPrefetchEnabled, true);
+  s->setAttribute(QWebEngineSettings::DnsPrefetchEnabled, false);
   s->setAttribute(QWebEngineSettings::WebGLEnabled, true);
   s->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
   s->setAttribute(QWebEngineSettings::AutoLoadImages, true);
@@ -514,7 +514,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
   s->setAttribute(QWebEngineSettings::WebRTCPublicInterfacesOnly, true);
   s->setAttribute(QWebEngineSettings::FocusOnNavigationEnabled, true);
-  s->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, true);
+  s->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, false);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
   // Permission is still requested from the user before a site can share a
   // screen; this only enables standards-compliant capture support.
