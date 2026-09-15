@@ -68,7 +68,7 @@
     }
 
     function schedule() {
-        if (active && !document.hidden && !timer) timer = setTimeout(cleanYouTube, 200);
+        if (active && !document.hidden && !timer) timer = setTimeout(cleanYouTube, 400);
     }
 
     function watch() {

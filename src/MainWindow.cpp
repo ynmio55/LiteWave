@@ -105,6 +105,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
         profile_->setCachePath(cachePath);
         profile_->setPersistentCookiesPolicy(QWebEngineProfile::AllowPersistentCookies);
         profile_->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
+        profile_->setHttpCacheMaximumSize(64 * 1024 * 1024);
     }
 
     // Profile request interceptor setup
