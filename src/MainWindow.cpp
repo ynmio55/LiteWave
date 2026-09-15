@@ -2880,8 +2880,9 @@ void MainWindow::showSettingsDialog() {
   secureDnsBox->setChecked(st.value("secureDnsEnabled", false).toBool());
 
   auto *lblDnsDesc = new QLabel(
-      "เป็นตัวเลือกเสริมสำหรับเครือข่ายที่รองรับ DNS-over-HTTPS; หากเว็บไซต์หรือ Wi-Fi "
-      "สาธารณะเข้าไม่ได้ ให้ปิดหรือเลือก OS Default แล้วเปิด LiteWave ใหม่",
+      "เมื่อเลือกผู้ให้บริการ LiteWave จะใช้ DNS-over-HTTPS ของผู้ให้บริการนั้นโดยตรง "
+      "(Secure-only) ไม่ย้อนกลับไปใช้ DNS ของระบบ จึงเหมาะกับเครือข่ายที่ DNS "
+      "ของระบบบล็อกเว็บไซต์บางแห่ง",
       grpDns);
   lblDnsDesc->setWordWrap(true);
   lblDnsDesc->setStyleSheet(
@@ -2901,6 +2902,10 @@ void MainWindow::showSettingsDialog() {
   int pIdx = dnsCombo->findData(curProvider);
   if (pIdx < 0)
     pIdx = 0;
+  // Avoid a confusing "enabled" state that still means OS DNS. The first
+  // opt-in starts with Cloudflare; users can still choose any provider.
+  if (secureDnsBox->isChecked() && dnsCombo->itemData(pIdx) == "OS Default")
+    pIdx = dnsCombo->findData("Cloudflare");
   dnsCombo->setCurrentIndex(pIdx);
 
   auto *customDnsEdit = new QLineEdit(grpDns);
@@ -2914,14 +2919,32 @@ void MainWindow::showSettingsDialog() {
                                       "Custom");
           });
 
+  const QString dnsRuntimeStatus =
+      st.value("secureDnsRuntimeStatus", "unknown").toString();
+  const QString dnsRuntimeDetail =
+      st.value("secureDnsRuntimeDetail").toString();
+  const bool dnsActive = dnsRuntimeStatus == "secure-only";
+  const bool dnsProblem =
+      dnsRuntimeStatus == "error" || dnsRuntimeStatus == "unsupported";
+  const QString dnsStatusText =
+      dnsRuntimeStatus == "unknown"
+          ? QStringLiteral("สถานะ: จะตรวจการตั้งค่าเมื่อเปิด LiteWave ครั้งถัดไป")
+          : QStringLiteral("สถานะของการเปิดครั้งล่าสุด: %1").arg(dnsRuntimeDetail);
+  auto *lblDnsStatus = new QLabel(dnsStatusText, grpDns);
+  lblDnsStatus->setWordWrap(true);
+  lblDnsStatus->setStyleSheet(
+      QString("color: %1; font-size: 12px; font-weight: 600;")
+          .arg(dnsActive ? "#16a34a" : (dnsProblem ? "#ef4444" : subTextColor)));
+
   auto *lblDnsNote = new QLabel(
-      "หมายเหตุ: การเปลี่ยน Secure DNS จะมีผลสมบูรณ์เมื่อเปิดเบราว์เซอร์ใหม่ครั้งถัดไป",
+      "การเปลี่ยน Secure DNS จะมีผลหลังปิด LiteWave ทุกหน้าต่างแล้วเปิดใหม่",
       grpDns);
   lblDnsNote->setStyleSheet(
       "color: #f59e0b; font-size: 11px; margin-top: 4px;");
 
   grpDnsLayout->addWidget(secureDnsBox);
   grpDnsLayout->addWidget(lblDnsDesc);
+  grpDnsLayout->addWidget(lblDnsStatus);
   grpDnsLayout->addWidget(lblProvider);
   grpDnsLayout->addWidget(dnsCombo);
   grpDnsLayout->addWidget(customDnsEdit);
@@ -3052,6 +3075,11 @@ void MainWindow::showSettingsDialog() {
 
     st.setValue("dntEnabled", dntBox->isChecked());
 
+    const bool secureDnsChanged =
+        st.value("secureDnsEnabled", false).toBool() != secureDnsBox->isChecked() ||
+        st.value("dnsProvider", "OS Default").toString() !=
+            dnsCombo->currentData().toString() ||
+        st.value("customDnsUrl", "").toString() != customDnsEdit->text().trimmed();
     st.setValue("secureDnsEnabled", secureDnsBox->isChecked());
     st.setValue("dnsProvider", dnsCombo->currentData().toString());
     st.setValue("customDnsUrl", customDnsEdit->text().trimmed());
@@ -3059,6 +3087,13 @@ void MainWindow::showSettingsDialog() {
     st.setValue("downloadDirectory", downloadPathEdit->text().trimmed());
     st.setValue("askDownloadLocation", askDownloadBox->isChecked());
 
+    if (secureDnsChanged) {
+      QMessageBox::information(
+          this, "ต้องเปิด LiteWave ใหม่",
+          "บันทึก Secure DNS แล้ว\n\n"
+          "เพื่อให้ LiteWave ใช้ DNS-over-HTTPS จริง ให้ปิด LiteWave ทุกหน้าต่าง "
+          "แล้วเปิดโปรแกรมใหม่หนึ่งครั้ง");
+    }
     statusBar()->showMessage("บันทึกการตั้งค่าเรียบร้อยแล้ว", 3000);
   }
 }
