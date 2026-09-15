@@ -216,6 +216,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   tabBar_->setMovable(true);
   tabBar_->setDrawBase(false);
   tabBar_->setIconSize(QSize(16, 16));
+  tabBar_->setUsesScrollButtons(false);
+  tabBar_->setElideMode(Qt::ElideRight);
 
   tabBarLayout->addWidget(tabBar_);
 
@@ -1061,6 +1063,14 @@ void MainWindow::applyTheme() {
                 border: none;
                 qproperty-drawBase: 0;
             }
+            QTabBar::scroller {
+                width: 0px;
+                height: 0px;
+            }
+            QTabBar::left-button, QTabBar::right-button {
+                width: 0px;
+                height: 0px;
+            }
             QTabBar::tab {
                 background-color: transparent;
                 color: #9e9ea0;
@@ -1284,6 +1294,14 @@ void MainWindow::applyTheme() {
                 background-color: transparent;
                 border: none;
                 qproperty-drawBase: 0;
+            }
+            QTabBar::scroller {
+                width: 0px;
+                height: 0px;
+            }
+            QTabBar::left-button, QTabBar::right-button {
+                width: 0px;
+                height: 0px;
             }
             QTabBar::tab {
                 background-color: transparent;
