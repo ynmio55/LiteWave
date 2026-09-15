@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+set -eu
+
+app_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+export LD_LIBRARY_PATH="$app_dir/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export QT_PLUGIN_PATH="$app_dir/plugins"
+export QT_QPA_PLATFORM_PLUGIN_PATH="$app_dir/plugins/platforms"
+export QTWEBENGINEPROCESS_PATH="$app_dir/libexec/QtWebEngineProcess"
+export QTWEBENGINE_RESOURCES_PATH="$app_dir/resources"
+export QTWEBENGINE_LOCALES_PATH="$app_dir/translations/qtwebengine_locales"
+
+exec "$app_dir/bin/LiteWave" "$@"
