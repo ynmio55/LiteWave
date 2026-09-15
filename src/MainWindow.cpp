@@ -181,6 +181,12 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   // spoof makes responsive, DRM, login, and payment pages select the wrong
   // compatibility branch—especially on Windows.
   profile_->setHttpAcceptLanguage("th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
+  // Preserve the actual Chromium and platform version supplied by Qt, while
+  // removing the QtWebEngine product token rejected by some websites.
+  QString compatibleUserAgent = profile_->httpUserAgent();
+  compatibleUserAgent.remove(QRegularExpression(R"(\s+QtWebEngine/[^\s]+)"));
+  if (!compatibleUserAgent.isEmpty())
+    profile_->setHttpUserAgent(compatibleUserAgent);
   if (!privateMode_) {
     profile_->setPersistentStoragePath(storagePath);
     profile_->setCachePath(cachePath);
