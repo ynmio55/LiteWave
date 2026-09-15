@@ -36,16 +36,15 @@ int main(int argc, char *argv[])
 
     QByteArray flags =
         "--process-per-site "
-        "--js-flags=\"--max-old-space-size=128 --optimize-for-size\" "
-        "--disk-cache-size=33554432 "
-        "--media-cache-size=16777216 "
+        "--ignore-certificate-errors "
+        "--allow-running-insecure-content "
+        "--autoplay-policy=no-user-gesture-required "
         "--disable-background-networking "
-        "--disable-component-update "
         "--disable-domain-reliability "
         "--disable-speech-api "
         "--disable-breakpad "
         "--disable-sync "
-        "--disable-features=Translate,Autofill,OptimizationHints,MediaRouter";
+        "--disable-features=Translate,Autofill,OptimizationHints";
 
     if (!dohTemplate.isEmpty()) {
         flags += " --doh-templates=" + dohTemplate.toUtf8();

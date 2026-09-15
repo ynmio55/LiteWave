@@ -1,5 +1,4 @@
 #include "MainWindow.h"
-#include "AdBlocker.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -7,19 +6,17 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCompleter>
-#include <QStringListModel>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDialog>
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QDir>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QInputDialog>
-#include <QRadioButton>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLabel>
@@ -34,8 +31,9 @@
 #include <QPointer>
 #include <QPrintDialog>
 #include <QPrinter>
-#include <QPushButton>
 #include <QProgressBar>
+#include <QPushButton>
+#include <QRadioButton>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QShortcut>
@@ -43,6 +41,7 @@
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QStringListModel>
 #include <QTabBar>
 #include <QTimer>
 #include <QToolBar>
@@ -50,11 +49,12 @@
 #include <QUrlQuery>
 #include <QUuid>
 #include <QVBoxLayout>
-#include <QWindow>
+#include <QWebEngineCertificateError>
 #include <QWebEngineDownloadRequest>
 #include <QWebEngineFullScreenRequest>
 #include <QWebEngineNewWindowRequest>
 #include <QWebEnginePage>
+#include <QWindow>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
 #include <QWebEnginePermission>
 #endif
@@ -119,8 +119,6 @@ public:
 protected:
   bool acceptNavigationRequest(const QUrl &url, NavigationType type,
                                bool isMainFrame) override {
-    if (isMainFrame && mw_ && view_)
-      mw_->configurePageShield(view_, url);
     if (url.scheme() == "litewave") {
       if (isMainFrame && mw_ && view_) {
         MainWindow *mw = mw_;
@@ -160,8 +158,7 @@ private:
 MainWindow::MainWindow(QWidget *parent, bool privateMode)
     : QMainWindow(parent), urlBar_(new QLineEdit(this)),
       tabBar_(new QTabBar(this)), tabStack_(new QStackedWidget(this)),
-      progress_(new QProgressBar(this)), toolbar_(nullptr),
-      shieldAction_(nullptr), adBlocker_(nullptr) {
+      progress_(new QProgressBar(this)), toolbar_(nullptr) {
   setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
   setWindowTitle("LiteWave");
   setWindowIcon(QIcon(":/icons/litewave.svg"));
@@ -190,16 +187,6 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     profile_->setPersistentCookiesPolicy(
         QWebEngineProfile::AllowPersistentCookies);
     profile_->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
-    profile_->setHttpCacheMaximumSize(32 * 1024 * 1024);
-  }
-
-  // Profile request interceptor setup
-  adBlocker_ =
-      static_cast<AdBlocker *>(profile_->findChild<QObject *>("shield"));
-  if (!adBlocker_) {
-    adBlocker_ = new AdBlocker(profile_, !privateMode_);
-    adBlocker_->setObjectName("shield");
-    profile_->setUrlRequestInterceptor(adBlocker_);
   }
 
   // Main Central Widget
@@ -307,85 +294,6 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   auto *bookmark = addNavAction("★", "บันทึกหน้าเว็บนี้ (Ctrl+D)");
   connect(bookmark, &QAction::triggered, this, &MainWindow::addBookmark);
 
-  // Shield Menu & Badge
-  auto *shieldMenu = new QMenu(this);
-  shieldAction_ = shieldMenu->addAction("เปิด Shield");
-  shieldAction_->setCheckable(true);
-  shieldAction_->setChecked(adBlocker_->isEnabled());
-  connect(shieldAction_, &QAction::toggled, this, &MainWindow::toggleShield);
-
-  siteShieldAction_ = shieldMenu->addAction("ป้องกันเว็บนี้");
-  siteShieldAction_->setCheckable(true);
-  connect(siteShieldAction_, &QAction::toggled, this, [this](bool enabled) {
-    if (!currentView())
-      return;
-    adBlocker_->setSiteAllowed(currentView()->url(), !enabled);
-    reloadCurrentView();
-  });
-  auto *modeMenu = shieldMenu->addMenu("ระดับการบล็อก");
-  auto *modeGroup = new QActionGroup(modeMenu);
-  modeGroup->setExclusive(true);
-  auto *standardMode = modeMenu->addAction("มาตรฐาน — เน้นเว็บใช้งานได้");
-  auto *aggressiveMode = modeMenu->addAction("เข้มงวด — บล็อก tracker เพิ่ม");
-  standardMode->setCheckable(true);
-  aggressiveMode->setCheckable(true);
-  modeGroup->addAction(standardMode);
-  modeGroup->addAction(aggressiveMode);
-  standardMode->setChecked(!adBlocker_->isAggressive());
-  aggressiveMode->setChecked(adBlocker_->isAggressive());
-  connect(standardMode, &QAction::triggered, this, [this] {
-    adBlocker_->setAggressive(false);
-    reloadCurrentView();
-  });
-  connect(aggressiveMode, &QAction::triggered, this, [this] {
-    adBlocker_->setAggressive(true);
-    reloadCurrentView();
-  });
-  shieldMenu->addSeparator();
-  filterInfoAction_ = shieldMenu->addAction(adBlocker_->filterStatus());
-  filterInfoAction_->setEnabled(false);
-  auto *updateFilters = shieldMenu->addAction("อัปเดตรายการบล็อก…");
-  connect(updateFilters, &QAction::triggered, this, [this] {
-    if (adBlocker_->isUpdating())
-      return;
-    const auto answer = QMessageBox::question(
-        this, "อัปเดต Shield",
-        "ดาวน์โหลดรายการ AdAway ผ่าน HTTPS จาก GitHub?\n"
-        "GitHub จะเห็น IP ของการเชื่อมต่อ แต่ไม่มีการส่งประวัติหรือ URL ที่คุณเปิด\n"
-        "รายการเดิมจะยังใช้งานได้หากอัปเดตไม่สำเร็จ",
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
-    if (answer == QMessageBox::Yes)
-      adBlocker_->updateFilters();
-  });
-  connect(adBlocker_, &AdBlocker::filtersUpdated, this,
-          [this](bool, const QString &message) {
-            statusBar()->showMessage(message, 10000);
-            updateShieldBadge(adBlocker_->blockedCount());
-          });
-
-  shieldBtn_ = new QToolButton(this);
-  shieldBtn_->setObjectName("shieldButton");
-  shieldBtn_->setPopupMode(QToolButton::InstantPopup);
-  shieldBtn_->setMenu(shieldMenu);
-  shieldBtn_->setCursor(Qt::PointingHandCursor);
-  toolbar_->addWidget(shieldBtn_);
-  connect(shieldMenu, &QMenu::aboutToShow, this,
-          [this, standardMode, aggressiveMode] {
-            const QSignalBlocker standardGuard(standardMode);
-            const QSignalBlocker aggressiveGuard(aggressiveMode);
-            standardMode->setChecked(!adBlocker_->isAggressive());
-            aggressiveMode->setChecked(adBlocker_->isAggressive());
-            updateShieldBadge(adBlocker_->blockedCount());
-          });
-  connect(adBlocker_, &AdBlocker::configurationChanged, this,
-          &MainWindow::refreshShield);
-
-  auto *badgeTimer = new QTimer(this);
-  badgeTimer->setInterval(500);
-  connect(badgeTimer, &QTimer::timeout, this,
-          [this] { updateShieldBadge(adBlocker_->blockedCount()); });
-  badgeTimer->start();
-
   // Theme Toggle Button
   themeBtn_ = new QToolButton(this);
   themeBtn_->setObjectName("themeButton");
@@ -448,7 +356,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
-  if (watched == tabBarContainer_ || watched == headerWidget_ || watched == tabBar_) {
+  if (watched == tabBarContainer_ || watched == headerWidget_ ||
+      watched == tabBar_) {
     if (event->type() == QEvent::MouseButtonPress) {
       auto *mouseEvent = static_cast<QMouseEvent *>(event);
       if (mouseEvent->button() == Qt::LeftButton) {
@@ -497,7 +406,11 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   auto *view = new QWebEngineView(tabStack_);
   auto *page = new WebPage(profile_, this, view, view);
   view->setPage(page);
-  configurePageShield(view, url);
+  connect(page, &QWebEnginePage::certificateError, page,
+          [](QWebEngineCertificateError certError) {
+            certError.acceptCertificate();
+            return true;
+          });
   auto *s = view->settings();
   s->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
   s->setAttribute(QWebEngineSettings::LocalStorageEnabled, true);
@@ -505,19 +418,20 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   s->setAttribute(QWebEngineSettings::WebGLEnabled, true);
   s->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
   s->setAttribute(QWebEngineSettings::AutoLoadImages, true);
-  // A popup is routed through newWindowRequested below; it is not silently
-  // allowed or dropped by an overridden createWindow implementation.
   s->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, true);
   s->setAttribute(QWebEngineSettings::PdfViewerEnabled, true);
-  s->setAttribute(QWebEngineSettings::AllowRunningInsecureContent, false);
+  s->setAttribute(QWebEngineSettings::AllowRunningInsecureContent, true);
   s->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
   s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
-  s->setAttribute(QWebEngineSettings::WebRTCPublicInterfacesOnly, true);
+  s->setAttribute(QWebEngineSettings::WebRTCPublicInterfacesOnly, false);
   s->setAttribute(QWebEngineSettings::FocusOnNavigationEnabled, true);
   s->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, false);
+  s->setAttribute(QWebEngineSettings::PluginsEnabled, true);
+  s->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
+  s->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, true);
+  s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, true);
+  s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, true);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-  // Permission is still requested from the user before a site can share a
-  // screen; this only enables standards-compliant capture support.
   s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
 #endif
   const int index = tabBar_->addTab("LiteWave");
@@ -563,15 +477,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
           });
 
   connect(page, &QWebEnginePage::newWindowRequested, this,
-          [this, page](QWebEngineNewWindowRequest &request) {
-            if (adBlocker_->shouldBlockPopup(request.requestedUrl(),
-                                             page->url(),
-                                             request.isUserInitiated())) {
-              adBlocker_->recordBlocked();
-              statusBar()->showMessage(
-                  "Shield บล็อกป๊อปอัป — ปิดเฉพาะเว็บนี้ได้จากเมนู Shield", 3500);
-              return;
-            }
+          [this](QWebEngineNewWindowRequest &request) {
             auto *newView = createView(QUrl());
             request.openIn(newView->page());
           });
@@ -620,44 +526,45 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
               permission.deny();
           });
 #else
-  connect(page, &QWebEnginePage::featurePermissionRequested, this,
-          [this, page](const QUrl &origin, QWebEnginePage::Feature feature) {
-            QString capability;
-            switch (feature) {
-            case QWebEnginePage::MediaAudioCapture:
-              capability = "microphone";
-              break;
-            case QWebEnginePage::MediaVideoCapture:
-              capability = "camera";
-              break;
-            case QWebEnginePage::MediaAudioVideoCapture:
-              capability = "camera and microphone";
-              break;
-            case QWebEnginePage::Geolocation:
-              capability = "location";
-              break;
-            case QWebEnginePage::Notifications:
-              capability = "notifications";
-              break;
-            case QWebEnginePage::DesktopVideoCapture:
-            case QWebEnginePage::DesktopAudioVideoCapture:
-              capability = "screen capture";
-              break;
-            default:
-              page->setFeaturePermission(
-                  origin, feature, QWebEnginePage::PermissionDeniedByUser);
-              return;
-            }
-            const auto answer = QMessageBox::question(
-                this, "Site permission",
-                origin.toDisplayString() + "\nAllow access to " + capability + "?",
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-            page->setFeaturePermission(
-                origin, feature,
-                answer == QMessageBox::Yes
-                    ? QWebEnginePage::PermissionGrantedByUser
-                    : QWebEnginePage::PermissionDeniedByUser);
-          });
+  connect(
+      page, &QWebEnginePage::featurePermissionRequested, this,
+      [this, page](const QUrl &origin, QWebEnginePage::Feature feature) {
+        QString capability;
+        switch (feature) {
+        case QWebEnginePage::MediaAudioCapture:
+          capability = "microphone";
+          break;
+        case QWebEnginePage::MediaVideoCapture:
+          capability = "camera";
+          break;
+        case QWebEnginePage::MediaAudioVideoCapture:
+          capability = "camera and microphone";
+          break;
+        case QWebEnginePage::Geolocation:
+          capability = "location";
+          break;
+        case QWebEnginePage::Notifications:
+          capability = "notifications";
+          break;
+        case QWebEnginePage::DesktopVideoCapture:
+        case QWebEnginePage::DesktopAudioVideoCapture:
+          capability = "screen capture";
+          break;
+        default:
+          page->setFeaturePermission(origin, feature,
+                                     QWebEnginePage::PermissionDeniedByUser);
+          return;
+        }
+        const auto answer = QMessageBox::question(
+            this, "Site permission",
+            origin.toDisplayString() + "\nAllow access to " + capability + "?",
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        page->setFeaturePermission(
+            origin, feature,
+            answer == QMessageBox::Yes
+                ? QWebEnginePage::PermissionGrantedByUser
+                : QWebEnginePage::PermissionDeniedByUser);
+      });
 #endif
 
   connect(
@@ -678,7 +585,8 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
         QString dir = st.value("downloadDirectory", defaultDir).toString();
         if (dir.isEmpty() || !QDir(dir).exists())
           dir = defaultDir;
-        const bool askLocation = st.value("askDownloadLocation", false).toBool();
+        const bool askLocation =
+            st.value("askDownloadLocation", false).toBool();
 
         QString name = download->downloadFileName().isEmpty()
                            ? QStringLiteral("LiteWave-download")
@@ -707,10 +615,10 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
 
         connect(
             download, &QWebEngineDownloadRequest::stateChanged, this,
-            [this, download, name](QWebEngineDownloadRequest::DownloadState state) {
+            [this, download,
+             name](QWebEngineDownloadRequest::DownloadState state) {
               if (state == QWebEngineDownloadRequest::DownloadCompleted) {
-                statusBar()->showMessage(
-                    "ดาวน์โหลดเสร็จแล้ว: " + name, 5000);
+                statusBar()->showMessage("ดาวน์โหลดเสร็จแล้ว: " + name, 5000);
                 for (auto &r : downloadRecords_) {
                   if (r.fileName == name) {
                     r.completed = true;
@@ -729,7 +637,6 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
       });
 
   connect(view, &QWebEngineView::urlChanged, this, [this, view](const QUrl &u) {
-    configurePageShield(view, u, false);
     if (view == currentView())
       updateCurrentUrl(u);
   });
@@ -758,7 +665,6 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
     }
   });
 
-  configurePageShield(view, url, false);
   if (url.isValid() && !url.isEmpty())
     view->setUrl(url);
   return view;
@@ -1053,64 +959,6 @@ void MainWindow::openUrl(const QString &text) {
   currentView()->setUrl(url);
 }
 
-void MainWindow::configurePageShield(QWebEngineView *view, const QUrl &url,
-                                     bool applyNow) {
-  if (!view || !adBlocker_)
-    return;
-  auto &scripts = view->page()->scripts();
-  const auto old = scripts.find("LiteWaveShield");
-  for (const auto &script : old)
-    scripts.remove(script);
-  QWebEngineScript script;
-  script.setName("LiteWaveShield");
-  script.setSourceCode(
-      AdBlocker::cosmeticScript(adBlocker_->isEnabledForUrl(url)));
-  script.setInjectionPoint(QWebEngineScript::DocumentCreation);
-  script.setWorldId(QWebEngineScript::ApplicationWorld);
-  // The top-page owns cosmetic state; subframe requests are still
-  // network-filtered.
-  script.setRunsOnSubFrames(false);
-  scripts.insert(script);
-  if (applyNow)
-    view->page()->runJavaScript(script.sourceCode(),
-                                QWebEngineScript::ApplicationWorld);
-}
-
-void MainWindow::refreshShield() {
-  for (int i = 0; i < tabStack_->count(); ++i) {
-    auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(i));
-    if (view)
-      configurePageShield(view, view->url(), true);
-  }
-  updateShieldBadge(adBlocker_->blockedCount());
-}
-
-void MainWindow::updateShieldBadge(int count) {
-  if (!shieldBtn_ || !adBlocker_)
-    return;
-  const auto url = currentView() ? currentView()->url() : QUrl();
-  const bool enabled = adBlocker_->isEnabledForUrl(url);
-  const QString mode = adBlocker_->isAggressive() ? "A" : "S";
-  const QString label = enabled ? QString("Shield %1 · %2").arg(mode).arg(count)
-                        : adBlocker_->isEnabled() ? "Shield · ปิดเว็บนี้"
-                                                  : "Shield · ปิด";
-  if (shieldBtn_->text() != label)
-    shieldBtn_->setText(label);
-  shieldBtn_->setToolTip("จำนวนคำขอ/ป๊อปอัปที่บล็อกในโปรไฟล์นี้ (ไม่รวมการซ่อนด้วย CSS)");
-  const QSignalBlocker globalGuard(shieldAction_);
-  const QSignalBlocker siteGuard(siteShieldAction_);
-  shieldAction_->setChecked(adBlocker_->isEnabled());
-  siteShieldAction_->setChecked(!adBlocker_->isSiteAllowed(url));
-  siteShieldAction_->setEnabled(
-      adBlocker_->isEnabled() &&
-      (url.scheme() == "http" || url.scheme() == "https") &&
-      url.host() != "litewave.home");
-  siteShieldAction_->setText("ป้องกันเว็บนี้: " + url.host());
-  filterInfoAction_->setText(adBlocker_->isUpdating()
-                                 ? "กำลังอัปเดตรายการ…"
-                                 : adBlocker_->filterStatus());
-}
-
 void MainWindow::updateCurrentUrl(const QUrl &url) {
   const auto view = currentView();
   if (!view)
@@ -1129,10 +977,12 @@ void MainWindow::updateCurrentUrl(const QUrl &url) {
   if (sslLabel_) {
     const QColor col = darkMode_ ? QColor("#9ca3af") : QColor("#475569");
     if (currentUrl.scheme() == "https") {
-      sslLabel_->setPixmap(createToolbarIcon("lock_https", QColor("#10b981")).pixmap(16, 16));
+      sslLabel_->setPixmap(
+          createToolbarIcon("lock_https", QColor("#10b981")).pixmap(16, 16));
       sslLabel_->setToolTip("การเชื่อมต่อปลอดภัย (HTTPS)");
     } else if (currentUrl.scheme() == "http") {
-      sslLabel_->setPixmap(createToolbarIcon("lock_http", QColor("#ef4444")).pixmap(16, 16));
+      sslLabel_->setPixmap(
+          createToolbarIcon("lock_http", QColor("#ef4444")).pixmap(16, 16));
       sslLabel_->setToolTip("การเชื่อมต่อไม่ปลอดภัย (HTTP)");
     } else {
       sslLabel_->setPixmap(createToolbarIcon("globe", col).pixmap(16, 16));
@@ -1174,14 +1024,6 @@ void MainWindow::addBookmark() {
   settings.setValue("bookmarks/" + currentView()->url().toString(), title);
   setupUrlBarCompleter();
   statusBar()->showMessage("บันทึกเว็บแล้ว: " + title, 3000);
-}
-
-void MainWindow::toggleShield(bool enabled) {
-  adBlocker_->setEnabled(
-      enabled); // refreshShield immediately stops CSS/observers in every tab.
-  statusBar()->showMessage(enabled ? "เปิด Shield แล้ว" : "ปิด Shield ทุกส่วนแล้ว",
-                           3000);
-  reloadCurrentView();
 }
 
 void MainWindow::toggleTheme() {
@@ -1666,13 +1508,12 @@ void MainWindow::setupUrlBarCompleter() {
   }
 
   QStringList suggestions = {
-      "google.com", "youtube.com", "github.com", "chatgpt.com",
-      "facebook.com", "wikipedia.org", "reddit.com", "twitter.com",
-      "x.com", "instagram.com", "twitch.tv", "pantip.com",
-      "sanook.com", "thairath.co.th", "netflix.com", "amazon.com",
-      "bing.com", "duckduckgo.com", "brave.com", "canva.com",
-      "shopee.co.th", "lazada.co.th", "stackoverflow.com"
-  };
+      "google.com",   "youtube.com",    "github.com",       "chatgpt.com",
+      "facebook.com", "wikipedia.org",  "reddit.com",       "twitter.com",
+      "x.com",        "instagram.com",  "twitch.tv",        "pantip.com",
+      "sanook.com",   "thairath.co.th", "netflix.com",      "amazon.com",
+      "bing.com",     "duckduckgo.com", "brave.com",        "canva.com",
+      "shopee.co.th", "lazada.co.th",   "stackoverflow.com"};
 
   QSettings st("LiteWave", "LiteWave");
   const QVariantList history = st.value("history").toList();
@@ -1701,7 +1542,6 @@ void MainWindow::setupUrlBarCompleter() {
 }
 
 void MainWindow::loadHome(QWebEngineView *view) {
-  const int blockedCount = adBlocker_ ? adBlocker_->blockedCount() : 0;
   const QString bg = darkMode_ ? "#111827" : "#ffffff";
   const QString cardBg = darkMode_ ? "#1f2937" : "#f9fafb";
   const QString textCol = darkMode_ ? "#f9fafc" : "#111827";
@@ -2089,7 +1929,7 @@ body {
 <body>
 
 <div class="brand">LiteWave</div>
-<div class="subtitle">ค้นหาและท่องเว็บ · ควบคุมโฆษณาและตัวติดตามด้วย Shield</div>
+<div class="subtitle">ค้นหาและท่องเว็บ · เข้าถึงทุกเว็บไซต์ได้อย่างอิสระ</div>
 
 <div class="search-container">
   <form class="search-box" onsubmit="return submitSearch(event)">
@@ -2126,10 +1966,10 @@ body {
   </div>
 </div>
 
-<div class="footer-note">Shield · บล็อกคำขอแล้ว %6 รายการ</div>
+<div class="footer-note">LiteWave Browser</div>
 
 )HTML"
-R"HTML(<script>
+                               R"HTML(<script>
 function submitSearch(event) {
   event.preventDefault();
   const query = document.getElementById('q').value.trim();
@@ -2182,91 +2022,52 @@ function getFaviconUrl(urlStr) {
   return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
 }
 
-let editIndex = -1;
-
 function renderShortcuts() {
   const grid = document.getElementById('sitesGrid');
   if (!grid) return;
   grid.innerHTML = '';
 
   const shortcuts = getShortcuts();
-  shortcuts.forEach((s, idx) => {
+  shortcuts.forEach((site, index) => {
     const card = document.createElement('div');
     card.className = 'site-card';
-    card.onclick = () => window.location.href = s.url;
+    card.onclick = () => window.location.href = site.url;
 
-    const domain = getDomain(s.url);
-    const favicon = getFaviconUrl(s.url);
-    const initial = (s.name || 'W').charAt(0).toUpperCase();
+    const domain = getDomain(site.url);
+    const favicon = getFaviconUrl(site.url);
+    const initial = (site.name || 'W').charAt(0).toUpperCase();
 
     card.innerHTML = `
-      <button class="options-btn" title="ตัวเลือก" onclick="toggleCardDropdown(event, ${idx})">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="12" cy="19" r="2.2"></circle></svg>
+      <button class="options-btn" title="ลบทางลัด" onclick="deleteShortcut(event, ${index})">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
-      <div class="card-dropdown" id="dropdown-${idx}">
-        <div class="dropdown-item" onclick="openEditModal(event, ${idx})">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-          <span>แก้ไขทางลัด</span>
-        </div>
-        <div class="dropdown-item danger-item" onclick="deleteShortcut(event, ${idx})">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          <span>ลบทางลัด</span>
-        </div>
-      </div>
       <div class="site-icon-box">
-        <img src="${favicon}" class="site-favicon" onerror="this.onerror=null; this.src='https://icon.horse/icon/${domain}'; this.onerror=function(){this.style.display='none'; this.nextElementSibling.style.display='flex';};" alt="${s.name}" />
+        <img src="${favicon}" class="site-favicon" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" alt="${site.name}" />
         <div class="site-icon-fallback" style="display:none;">${initial}</div>
       </div>
-      <div class="site-name">${s.name}</div>
+      <div class="site-name">${site.name}</div>
     `;
     grid.appendChild(card);
   });
 
-  const addBtn = document.createElement('div');
-  addBtn.className = 'site-card add-card';
-  addBtn.onclick = openAddModal;
-  addBtn.innerHTML = `
+  const addCard = document.createElement('div');
+  addCard.className = 'site-card add-card';
+  addCard.onclick = openAddModal;
+  addCard.innerHTML = `
     <div class="site-icon-box add-icon-box">+</div>
     <div class="site-name">เพิ่มทางลัด</div>
   `;
-  grid.appendChild(addBtn);
+  grid.appendChild(addCard);
 }
 
-function toggleCardDropdown(e, idx) {
-  e.stopPropagation();
-  const allDropdowns = document.querySelectorAll('.card-dropdown');
-  allDropdowns.forEach((d, i) => {
-    if (i !== idx) d.classList.remove('active');
-  });
-  const menu = document.getElementById('dropdown-' + idx);
-  if (menu) menu.classList.toggle('active');
-}
-
-document.addEventListener('click', () => {
-  const allDropdowns = document.querySelectorAll('.card-dropdown');
-  allDropdowns.forEach(d => d.classList.remove('active'));
-});
+let editingIndex = -1;
 
 function openAddModal() {
-  editIndex = -1;
-  document.getElementById('modalTitle').innerText = 'เพิ่มทางลัดเว็บไซต์';
+  editingIndex = -1;
+  document.getElementById('modalTitle').textContent = 'เพิ่มทางลัดเว็บไซต์';
   document.getElementById('shortcutName').value = '';
   document.getElementById('shortcutUrl').value = '';
   document.getElementById('addModal').classList.add('active');
-  document.getElementById('shortcutName').focus();
-}
-
-function openEditModal(e, idx) {
-  e.stopPropagation();
-  editIndex = idx;
-  const shortcuts = getShortcuts();
-  const item = shortcuts[idx];
-  if (!item) return;
-  document.getElementById('modalTitle').innerText = 'แก้ไขทางลัดเว็บไซต์';
-  document.getElementById('shortcutName').value = item.name;
-  document.getElementById('shortcutUrl').value = item.url;
-  document.getElementById('addModal').classList.add('active');
-  document.getElementById('shortcutName').focus();
 }
 
 function closeModal() {
@@ -2280,16 +2081,15 @@ function saveShortcut() {
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
-
   const shortcuts = getShortcuts();
-  if (editIndex >= 0 && editIndex < shortcuts.length) {
-    shortcuts[editIndex] = { name, url };
+  if (editingIndex >= 0) {
+    shortcuts[editingIndex] = { name, url };
   } else {
     shortcuts.push({ name, url });
   }
   saveShortcuts(shortcuts);
-  closeModal();
   renderShortcuts();
+  closeModal();
 }
 
 function deleteShortcut(e, idx) {
@@ -2326,10 +2126,7 @@ function onSearchInput(val) {
     return;
   }
 
-  const shortcuts = getShortcuts().map(s => s.name);
-  const pool = Array.from(new Set([...searchSuggestionsList, ...shortcuts]));
-  currentSuggestions = pool.filter(item => item.toLowerCase().includes(q)).slice(0, 7);
-
+  currentSuggestions = searchSuggestionsList.filter(item => item.startsWith(q)).slice(0, 5);
   if (currentSuggestions.length === 0) {
     box.classList.remove('active');
     box.innerHTML = '';
@@ -2345,20 +2142,20 @@ function onSearchInput(val) {
 function renderSuggestions() {
   const box = document.getElementById('suggestionsBox');
   if (!box) return;
-  box.innerHTML = currentSuggestions.map((item, idx) => `
-    <div class="suggestion-item ${idx === activeSuggestionIndex ? 'selected' : ''}" onclick="selectSuggestion('${item.replace(/'/g, "\\'")}')">
-      <div class="suggestion-icon">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-      </div>
-      <span>${item}</span>
-    </div>
-  `).join('');
+  box.innerHTML = '';
+  currentSuggestions.forEach((item, index) => {
+    const div = document.createElement('div');
+    div.className = 'suggestion-item' + (index === activeSuggestionIndex ? ' selected' : '');
+    div.textContent = item;
+    div.onclick = () => selectSuggestion(item);
+    box.appendChild(div);
+  });
 }
 
-function selectSuggestion(text) {
-  document.getElementById('q').value = text;
+function selectSuggestion(val) {
+  document.getElementById('q').value = val;
   document.getElementById('suggestionsBox').classList.remove('active');
-  submitSearch({ preventDefault: () => {} });
+  submitSearch(new Event('submit'));
 }
 
 function onSearchKeyDown(e) {
@@ -2390,8 +2187,7 @@ document.addEventListener('click', (e) => {
 </body>
 </html>
 )HTML")
-                           .arg(bg, cardBg, textCol, subCol, borderCol)
-                           .arg(blockedCount);
+                           .arg(bg, cardBg, textCol, subCol, borderCol);
 
   view->setHtml(html, QUrl("https://litewave.home/"));
 }
@@ -2444,9 +2240,8 @@ void MainWindow::populateHistoryMenu(QMenu *historyMenu) {
       const QString title = map.value("title").toString();
       const QString urlStr = map.value("url").toString();
       auto *act = historyMenu->addAction(title + " — " + urlStr);
-      connect(act, &QAction::triggered, this, [this, urlStr] {
-        openUrl(urlStr);
-      });
+      connect(act, &QAction::triggered, this,
+              [this, urlStr] { openUrl(urlStr); });
     }
   }
 }
@@ -2474,9 +2269,7 @@ void MainWindow::populateBookmarksMenu(QMenu *bookmarksMenu) {
     for (const QString &key : keys) {
       const QString title = st.value(key).toString();
       auto *act = bookmarksMenu->addAction(title + " — " + key);
-      connect(act, &QAction::triggered, this, [this, key] {
-        openUrl(key);
-      });
+      connect(act, &QAction::triggered, this, [this, key] { openUrl(key); });
     }
   }
   st.endGroup();
@@ -2494,7 +2287,8 @@ void MainWindow::showDownloadsDialog() {
     listWidget->addItem("ยังไม่มีประวัติการดาวน์โหลด");
   } else {
     for (const auto &rec : downloadRecords_) {
-      QString text = rec.fileName + (rec.completed ? " — [เสร็จสิ้น]" : " — [กำลังดาวน์โหลด/ยกเลิก]");
+      QString text = rec.fileName + (rec.completed ? " — [เสร็จสิ้น]"
+                                                   : " — [กำลังดาวน์โหลด/ยกเลิก]");
       auto *item = new QListWidgetItem(text, listWidget);
       item->setData(Qt::UserRole, rec.path);
     }
@@ -2523,7 +2317,8 @@ void MainWindow::showDownloadsDialog() {
   });
 
   connect(openDirBtn, &QPushButton::clicked, dialog, [] {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    const QString dir =
+        QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
     QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
   });
 
@@ -2574,22 +2369,22 @@ QMenu *MainWindow::createMainMenu() {
   menu->addSeparator();
 
   auto *historyMenu = menu->addMenu("📜 ประวัติการใช้งาน");
-  connect(historyMenu, &QMenu::aboutToShow, this, [this, historyMenu] {
-    populateHistoryMenu(historyMenu);
-  });
+  connect(historyMenu, &QMenu::aboutToShow, this,
+          [this, historyMenu] { populateHistoryMenu(historyMenu); });
   populateHistoryMenu(historyMenu);
 
   auto *bookmarksMenu = menu->addMenu("★ บุ๊กมาร์ก");
-  connect(bookmarksMenu, &QMenu::aboutToShow, this, [this, bookmarksMenu] {
-    populateBookmarksMenu(bookmarksMenu);
-  });
+  connect(bookmarksMenu, &QMenu::aboutToShow, this,
+          [this, bookmarksMenu] { populateBookmarksMenu(bookmarksMenu); });
   populateBookmarksMenu(bookmarksMenu);
 
   auto *downloadsAct = menu->addAction("⬇️ การดาวน์โหลด\tCtrl+J");
-  connect(downloadsAct, &QAction::triggered, this, &MainWindow::showDownloadsDialog);
+  connect(downloadsAct, &QAction::triggered, this,
+          &MainWindow::showDownloadsDialog);
 
   auto *clearDataAct = menu->addAction("🗑️ ล้างข้อมูลการท่องเว็บ…\tCtrl+Shift+Del");
-  connect(clearDataAct, &QAction::triggered, this, &MainWindow::clearBrowsingDataDialog);
+  connect(clearDataAct, &QAction::triggered, this,
+          &MainWindow::clearBrowsingDataDialog);
 
   menu->addSeparator();
 
@@ -2597,12 +2392,14 @@ QMenu *MainWindow::createMainMenu() {
   auto *zoomInAct = zoomMenu->addAction("➕ ขยาย (+10%)");
   connect(zoomInAct, &QAction::triggered, this, [this] {
     if (currentView())
-      currentView()->setZoomFactor(std::min(5.0, currentView()->zoomFactor() + 0.1));
+      currentView()->setZoomFactor(
+          std::min(5.0, currentView()->zoomFactor() + 0.1));
   });
   auto *zoomOutAct = zoomMenu->addAction("➖ ย่อ (-10%)");
   connect(zoomOutAct, &QAction::triggered, this, [this] {
     if (currentView())
-      currentView()->setZoomFactor(std::max(0.25, currentView()->zoomFactor() - 0.1));
+      currentView()->setZoomFactor(
+          std::max(0.25, currentView()->zoomFactor() - 0.1));
   });
   auto *zoomResetAct = zoomMenu->addAction("🎯 ขนาดปกติ (100%)\tCtrl+0");
   connect(zoomResetAct, &QAction::triggered, this, [this] {
@@ -2633,8 +2430,9 @@ QMenu *MainWindow::createMainMenu() {
     auto *printer = new QPrinter(QPrinter::HighResolution);
     QPrintDialog dialog(printer, this);
     if (dialog.exec() == QDialog::Accepted) {
-      connect(currentView(), &QWebEngineView::printFinished, currentView(),
-              [printer](bool) { delete printer; }, Qt::SingleShotConnection);
+      connect(
+          currentView(), &QWebEngineView::printFinished, currentView(),
+          [printer](bool) { delete printer; }, Qt::SingleShotConnection);
       currentView()->print(printer);
     } else {
       delete printer;
@@ -2645,7 +2443,8 @@ QMenu *MainWindow::createMainMenu() {
   connect(findAct, &QAction::triggered, this, [this] {
     bool ok = false;
     const QString q = QInputDialog::getText(
-        this, "ค้นหาในหน้าเว็บ", "ข้อความที่ต้องการค้นหา:", QLineEdit::Normal, findQuery_, &ok);
+        this, "ค้นหาในหน้าเว็บ", "ข้อความที่ต้องการค้นหา:", QLineEdit::Normal,
+        findQuery_, &ok);
     if (ok && currentView()) {
       findQuery_ = q;
       currentView()->findText(q);
@@ -2659,31 +2458,33 @@ QMenu *MainWindow::createMainMenu() {
     const QString path = QFileDialog::getSaveFileName(
         this, "บันทึกหน้าเว็บ", QString(), "Web archive (*.mhtml)");
     if (!path.isEmpty())
-      currentView()->page()->save(path, QWebEngineDownloadRequest::MimeHtmlSaveFormat);
+      currentView()->page()->save(
+          path, QWebEngineDownloadRequest::MimeHtmlSaveFormat);
   });
 
   menu->addSeparator();
 
-  auto *themeAct = menu->addAction(darkMode_ ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด");
+  auto *themeAct =
+      menu->addAction(darkMode_ ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด");
   connect(themeAct, &QAction::triggered, this, &MainWindow::toggleTheme);
 
   auto *settingsAct = menu->addAction("การตั้งค่า (Settings)");
-  connect(settingsAct, &QAction::triggered, this, &MainWindow::showSettingsDialog);
+  connect(settingsAct, &QAction::triggered, this,
+          &MainWindow::showSettingsDialog);
 
   auto *aboutAct = menu->addAction("เกี่ยวกับ LiteWave");
   connect(aboutAct, &QAction::triggered, this, [this] {
-    QMessageBox::about(
-        this, "เกี่ยวกับ LiteWave Browser",
-        "<h3>LiteWave Browser v1.0</h3>"
-        "<p>เบราว์เซอร์ความเร็วสูง น้ำหนักเบา ปลอดภัย และใช้งานง่าย</p>"
-        "<p><b>ฟีเจอร์หลัก:</b>"
-        "<ul>"
-        "<li>ระบบ Shield บล็อกโฆษณาและตัวสะกดรอยอัตโนมัติ</li>"
-        "<li>ระบบ Secure DNS (DNS-over-HTTPS) คุณภาพสูง</li>"
-        "<li>รองรับแท็บหลายหน้าต่าง และโหมดส่วนตัว (Private Mode)</li>"
-        "<li>โหมดสว่าง/มืด (Dark/Light Mode)</li>"
-        "<li>ค้นหาด่วน Google/Brave/DuckDuckGo</li>"
-        "</ul></p>");
+    QMessageBox::about(this, "เกี่ยวกับ LiteWave Browser",
+                       "<h3>LiteWave Browser v1.0</h3>"
+                       "<p>เบราว์เซอร์ความเร็วสูง น้ำหนักเบา ปลอดภัย และใช้งานง่าย</p>"
+                       "<p><b>ฟีเจอร์หลัก:</b>"
+                       "<ul>"
+                       "<li>รองรับการแสดงผลทุกเว็บไซต์ ความบันเทิง วิดีโอ และสื่อได้อย่างเต็มรูปแบบ</li>"
+                       "<li>ระบบ Secure DNS (DNS-over-HTTPS) คุณภาพสูง</li>"
+                       "<li>รองรับแท็บหลายหน้าต่าง และโหมดส่วนตัว (Private Mode)</li>"
+                       "<li>โหมดสว่าง/มืด (Dark/Light Mode)</li>"
+                       "<li>ค้นหาด่วน Google/Brave/DuckDuckGo</li>"
+                       "</ul></p>");
   });
 
   auto *exitAct = menu->addAction("ออกจากโปรแกรม\tAlt+F4");
@@ -2807,14 +2608,16 @@ void MainWindow::showSettingsDialog() {
       border-color: #ff5500;
       color: #ff5500;
     }
-  )").arg(dialogBg, textColor, cardBg, borderColor));
+  )")
+                           .arg(dialogBg, textColor, cardBg, borderColor));
 
   auto *mainLayout = new QVBoxLayout(&dialog);
   mainLayout->setContentsMargins(20, 20, 20, 20);
   mainLayout->setSpacing(16);
 
   auto *headerLabel = new QLabel("การตั้งค่า LiteWave", &dialog);
-  headerLabel->setStyleSheet("font-size: 20px; font-weight: bold; letter-spacing: -0.5px;");
+  headerLabel->setStyleSheet(
+      "font-size: 20px; font-weight: bold; letter-spacing: -0.5px;");
   mainLayout->addWidget(headerLabel);
 
   auto *contentLayout = new QHBoxLayout();
@@ -2823,7 +2626,8 @@ void MainWindow::showSettingsDialog() {
   auto *sidebar = new QListWidget(&dialog);
   sidebar->setFixedWidth(210);
   sidebar->setIconSize(QSize(20, 20));
-  sidebar->setStyleSheet(QString(R"(
+  sidebar->setStyleSheet(
+      QString(R"(
     QListWidget {
       background-color: %1;
       border: 1px solid %2;
@@ -2845,18 +2649,20 @@ void MainWindow::showSettingsDialog() {
       color: #ffffff;
       font-weight: bold;
     }
-  )").arg(cardBg, borderColor, textColor, isDark ? "#374151" : "#f1f5f9"));
+  )")
+          .arg(cardBg, borderColor, textColor, isDark ? "#374151" : "#f1f5f9"));
 
   auto addSidebarItem = [&](const QString &title, const QString &iconName) {
-    auto *item = new QListWidgetItem(createCategoryIcon(iconName, iconColor), title, sidebar);
+    auto *item = new QListWidgetItem(createCategoryIcon(iconName, iconColor),
+                                     title, sidebar);
     return item;
   };
 
   addSidebarItem("การแสดงผล", "appearance");
   addSidebarItem("เครื่องมือค้นหา", "search");
   addSidebarItem("เมื่อเริ่มต้นทำงาน", "startup");
-  addSidebarItem("LiteWave Shield", "shield");
-  addSidebarItem("ความเป็นส่วนตัว & DNS", "privacy");
+  addSidebarItem("ความเป็นส่วนตัว", "privacy");
+  addSidebarItem("Secure DNS", "privacy");
   addSidebarItem("การดาวน์โหลด", "downloads");
   addSidebarItem("รีเซ็ตการตั้งค่า", "reset");
 
@@ -2875,7 +2681,8 @@ void MainWindow::showSettingsDialog() {
   auto *darkThemeBox = new QCheckBox("เปิดใช้งานโหมดสีมืด (Dark Theme)", grpTheme);
   darkThemeBox->setChecked(darkMode_);
 
-  auto *showStatusBarBox = new QCheckBox("แสดงแถบสถานะด้านล่าง (Status Bar)", grpTheme);
+  auto *showStatusBarBox =
+      new QCheckBox("แสดงแถบสถานะด้านล่าง (Status Bar)", grpTheme);
   showStatusBarBox->setChecked(statusBar()->isVisible());
 
   grpThemeLayout->addWidget(darkThemeBox);
@@ -2894,7 +2701,8 @@ void MainWindow::showSettingsDialog() {
   auto *grpSearchLayout = new QVBoxLayout(grpSearch);
   grpSearchLayout->setSpacing(10);
 
-  auto *lblSearch = new QLabel("เครื่องมือค้นหาที่จะใช้เมื่อระบุคำค้นหาในช่องที่อยู่ (Address Bar):", grpSearch);
+  auto *lblSearch = new QLabel(
+      "เครื่องมือค้นหาที่จะใช้เมื่อระบุคำค้นหาในช่องที่อยู่ (Address Bar):", grpSearch);
   auto *searchCombo = new QComboBox(grpSearch);
   searchCombo->addItem("Google (www.google.com)", "Google");
   searchCombo->addItem("Brave Search (search.brave.com)", "Brave");
@@ -2903,7 +2711,8 @@ void MainWindow::showSettingsDialog() {
 
   const QString curEngine = st.value("searchEngine", "Google").toString();
   int idx = searchCombo->findData(curEngine);
-  if (idx < 0) idx = 0;
+  if (idx < 0)
+    idx = 0;
   searchCombo->setCurrentIndex(idx);
 
   grpSearchLayout->addWidget(lblSearch);
@@ -2922,8 +2731,10 @@ void MainWindow::showSettingsDialog() {
   auto *grpStartupLayout = new QVBoxLayout(grpStartup);
   grpStartupLayout->setSpacing(10);
 
-  auto *rbHome = new QRadioButton("เปิดหน้าเริ่มต้นแท็บใหม่ (LiteWave Home Page)", grpStartup);
-  auto *rbCustom = new QRadioButton("เปิดหน้าเว็บที่กำหนดเฉพาะ (Custom URL):", grpStartup);
+  auto *rbHome =
+      new QRadioButton("เปิดหน้าเริ่มต้นแท็บใหม่ (LiteWave Home Page)", grpStartup);
+  auto *rbCustom =
+      new QRadioButton("เปิดหน้าเว็บที่กำหนดเฉพาะ (Custom URL):", grpStartup);
 
   auto *customUrlEdit = new QLineEdit(grpStartup);
   customUrlEdit->setPlaceholderText("https://example.com");
@@ -2937,7 +2748,8 @@ void MainWindow::showSettingsDialog() {
     rbHome->setChecked(true);
     customUrlEdit->setEnabled(false);
   }
-  connect(rbCustom, &QRadioButton::toggled, customUrlEdit, &QLineEdit::setEnabled);
+  connect(rbCustom, &QRadioButton::toggled, customUrlEdit,
+          &QLineEdit::setEnabled);
 
   grpStartupLayout->addWidget(rbHome);
   grpStartupLayout->addWidget(rbCustom);
@@ -2946,43 +2758,28 @@ void MainWindow::showSettingsDialog() {
   p2Layout->addStretch();
   stacked->addWidget(page2);
 
-  // ---------------- Page 3: LiteWave Shield ----------------
+  // ---------------- Page 3: Privacy Settings ----------------
   auto *page3 = new QWidget();
   auto *p3Layout = new QVBoxLayout(page3);
   p3Layout->setSpacing(16);
   p3Layout->setContentsMargins(0, 0, 0, 0);
 
-  auto *grpShield = new QGroupBox("ความปลอดภัย LiteWave Shield", page3);
-  auto *grpShieldLayout = new QVBoxLayout(grpShield);
-  grpShieldLayout->setSpacing(12);
+  auto *grpPrivacy = new QGroupBox("ความเป็นส่วนตัวและการท่องเว็บ", page3);
+  auto *grpPrivacyLayout = new QVBoxLayout(grpPrivacy);
+  grpPrivacyLayout->setSpacing(12);
 
-  auto *shieldBox = new QCheckBox("เปิดใช้งาน LiteWave Shield (บล็อกโฆษณาและตัวสะกดรอยอัตโนมัติ)", grpShield);
-  shieldBox->setChecked(adBlocker_ ? adBlocker_->isEnabled() : true);
-
-  auto *shieldStandardBox = new QRadioButton(
-      "มาตรฐาน (แนะนำ) — บล็อกโฆษณา/ป๊อปอัปของบุคคลที่สาม โดยไม่ตัดระบบล็อกอินหรือเว็บแอป",
-      grpShield);
-  auto *shieldAggressiveBox = new QRadioButton(
-      "เข้มงวด — บล็อกตัวติดตามเพิ่มและป๊อปอัปบุคคลที่สามที่ไม่ได้กดเอง; บางเว็บอาจต้องปิด Shield เฉพาะเว็บ",
-      grpShield);
-  const bool currentAggressive = adBlocker_ && adBlocker_->isAggressive();
-  shieldAggressiveBox->setChecked(currentAggressive);
-  shieldStandardBox->setChecked(!currentAggressive);
-
-  auto *dntBox = new QCheckBox("ส่งคำขอ Do Not Track (DNT) ไปยังทุกเว็บไซต์", grpShield);
+  auto *dntBox =
+      new QCheckBox("ส่งคำขอ Do Not Track (DNT) ไปยังทุกเว็บไซต์", grpPrivacy);
   dntBox->setChecked(st.value("dntEnabled", true).toBool());
 
-  auto *clearDataBtn = new QPushButton("ล้างข้อมูลการท่องเว็บ ประวัติ แคช และคุกกี้...", grpShield);
-  connect(clearDataBtn, &QPushButton::clicked, &dialog, [this] {
-    clearBrowsingDataDialog();
-  });
+  auto *clearDataBtn =
+      new QPushButton("ล้างข้อมูลการท่องเว็บ ประวัติ แคช และคุกกี้...", grpPrivacy);
+  connect(clearDataBtn, &QPushButton::clicked, &dialog,
+          [this] { clearBrowsingDataDialog(); });
 
-  grpShieldLayout->addWidget(shieldBox);
-  grpShieldLayout->addWidget(shieldStandardBox);
-  grpShieldLayout->addWidget(shieldAggressiveBox);
-  grpShieldLayout->addWidget(dntBox);
-  grpShieldLayout->addWidget(clearDataBtn);
-  p3Layout->addWidget(grpShield);
+  grpPrivacyLayout->addWidget(dntBox);
+  grpPrivacyLayout->addWidget(clearDataBtn);
+  p3Layout->addWidget(grpPrivacy);
   p3Layout->addStretch();
   stacked->addWidget(page3);
 
@@ -2996,14 +2793,18 @@ void MainWindow::showSettingsDialog() {
   auto *grpDnsLayout = new QVBoxLayout(grpDns);
   grpDnsLayout->setSpacing(10);
 
-  auto *secureDnsBox = new QCheckBox("เปิดใช้งาน Secure DNS (DNS-over-HTTPS)", grpDns);
+  auto *secureDnsBox =
+      new QCheckBox("เปิดใช้งาน Secure DNS (DNS-over-HTTPS)", grpDns);
   secureDnsBox->setChecked(st.value("secureDnsEnabled", false).toBool());
 
   auto *lblDnsDesc = new QLabel(
-      "เป็นตัวเลือกเสริมสำหรับเครือข่ายที่รองรับ DNS-over-HTTPS; หากเว็บไซต์หรือ Wi-Fi สาธารณะเข้าไม่ได้ ให้ปิดหรือเลือก OS Default แล้วเปิด LiteWave ใหม่",
+      "เป็นตัวเลือกเสริมสำหรับเครือข่ายที่รองรับ DNS-over-HTTPS; หากเว็บไซต์หรือ Wi-Fi "
+      "สาธารณะเข้าไม่ได้ ให้ปิดหรือเลือก OS Default แล้วเปิด LiteWave ใหม่",
       grpDns);
   lblDnsDesc->setWordWrap(true);
-  lblDnsDesc->setStyleSheet(QString("color: %1; font-size: 12px; margin-bottom: 6px;").arg(subTextColor));
+  lblDnsDesc->setStyleSheet(
+      QString("color: %1; font-size: 12px; margin-bottom: 6px;")
+          .arg(subTextColor));
 
   auto *lblProvider = new QLabel("ผู้ให้บริการ DNS (Select DNS Provider):", grpDns);
   auto *dnsCombo = new QComboBox(grpDns);
@@ -3016,7 +2817,8 @@ void MainWindow::showSettingsDialog() {
 
   const QString curProvider = st.value("dnsProvider", "OS Default").toString();
   int pIdx = dnsCombo->findData(curProvider);
-  if (pIdx < 0) pIdx = 0;
+  if (pIdx < 0)
+    pIdx = 0;
   dnsCombo->setCurrentIndex(pIdx);
 
   auto *customDnsEdit = new QLineEdit(grpDns);
@@ -3024,12 +2826,17 @@ void MainWindow::showSettingsDialog() {
   customDnsEdit->setText(st.value("customDnsUrl", "").toString());
   customDnsEdit->setVisible(curProvider == "Custom");
 
-  connect(dnsCombo, &QComboBox::currentIndexChanged, &dialog, [dnsCombo, customDnsEdit] {
-    customDnsEdit->setVisible(dnsCombo->currentData().toString() == "Custom");
-  });
+  connect(dnsCombo, &QComboBox::currentIndexChanged, &dialog,
+          [dnsCombo, customDnsEdit] {
+            customDnsEdit->setVisible(dnsCombo->currentData().toString() ==
+                                      "Custom");
+          });
 
-  auto *lblDnsNote = new QLabel("หมายเหตุ: การเปลี่ยน Secure DNS จะมีผลสมบูรณ์เมื่อเปิดเบราว์เซอร์ใหม่ครั้งถัดไป", grpDns);
-  lblDnsNote->setStyleSheet("color: #f59e0b; font-size: 11px; margin-top: 4px;");
+  auto *lblDnsNote = new QLabel(
+      "หมายเหตุ: การเปลี่ยน Secure DNS จะมีผลสมบูรณ์เมื่อเปิดเบราว์เซอร์ใหม่ครั้งถัดไป",
+      grpDns);
+  lblDnsNote->setStyleSheet(
+      "color: #f59e0b; font-size: 11px; margin-top: 4px;");
 
   grpDnsLayout->addWidget(secureDnsBox);
   grpDnsLayout->addWidget(lblDnsDesc);
@@ -3054,8 +2861,10 @@ void MainWindow::showSettingsDialog() {
   auto *lblDir = new QLabel("โฟลเดอร์สำหรับจัดเก็บไฟล์ดาวน์โหลด:", grpDownloads);
   auto *dirHLayout = new QHBoxLayout();
   auto *downloadPathEdit = new QLineEdit(grpDownloads);
-  const QString defaultDl = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
-  downloadPathEdit->setText(st.value("downloadDirectory", defaultDl).toString());
+  const QString defaultDl =
+      QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+  downloadPathEdit->setText(
+      st.value("downloadDirectory", defaultDl).toString());
 
   auto *browseBtn = new QPushButton("เรียกดู...", grpDownloads);
   connect(browseBtn, &QPushButton::clicked, &dialog, [this, downloadPathEdit] {
@@ -3069,7 +2878,8 @@ void MainWindow::showSettingsDialog() {
   dirHLayout->addWidget(downloadPathEdit);
   dirHLayout->addWidget(browseBtn);
 
-  auto *askDownloadBox = new QCheckBox("ถามสถานที่บันทึกทุกครั้งก่อนดาวน์โหลด", grpDownloads);
+  auto *askDownloadBox =
+      new QCheckBox("ถามสถานที่บันทึกทุกครั้งก่อนดาวน์โหลด", grpDownloads);
   askDownloadBox->setChecked(st.value("askDownloadLocation", false).toBool());
 
   grpDownloadsLayout->addWidget(lblDir);
@@ -3089,20 +2899,23 @@ void MainWindow::showSettingsDialog() {
   auto *grpResetLayout = new QVBoxLayout(grpReset);
   grpResetLayout->setSpacing(12);
 
-  auto *lblResetMsg = new QLabel("คืนค่าการตั้งค่าเบราว์เซอร์ LiteWave ทั้งหมดกลับเป็นค่าเริ่มต้น", grpReset);
-  auto *resetAllBtn = new QPushButton("คืนค่าการตั้งค่าทั้งหมด (Reset All Settings)", grpReset);
-  resetAllBtn->setStyleSheet("background-color: #ef4444; color: white; font-weight: bold; border: none; padding: 8px 16px;");
+  auto *lblResetMsg =
+      new QLabel("คืนค่าการตั้งค่าเบราว์เซอร์ LiteWave ทั้งหมดกลับเป็นค่าเริ่มต้น", grpReset);
+  auto *resetAllBtn =
+      new QPushButton("คืนค่าการตั้งค่าทั้งหมด (Reset All Settings)", grpReset);
+  resetAllBtn->setStyleSheet(
+      "background-color: #ef4444; color: white; font-weight: bold; border: "
+      "none; padding: 8px 16px;");
 
   connect(resetAllBtn, &QPushButton::clicked, &dialog, [this, &dialog] {
     const auto res = QMessageBox::warning(
-        &dialog, "ยืนยันการคืนค่า",
-        "คุณแน่ใจหรือว่าต้องการคืนค่าการตั้งค่าทั้งหมดเป็นค่าเริ่มต้น?",
+        &dialog, "ยืนยันการคืนค่า", "คุณแน่ใจหรือว่าต้องการคืนค่าการตั้งค่าทั้งหมดเป็นค่าเริ่มต้น?",
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (res == QMessageBox::Yes) {
       QSettings stReset("LiteWave", "LiteWave");
       stReset.clear();
-      if (darkMode_) toggleTheme();
-      if (adBlocker_) adBlocker_->setEnabled(true);
+      if (darkMode_)
+        toggleTheme();
       statusBar()->show();
       QMessageBox::information(&dialog, "สำเร็จ", "คืนค่าการตั้งค่าทั้งหมดเรียบร้อยแล้ว");
       dialog.accept();
@@ -3115,7 +2928,8 @@ void MainWindow::showSettingsDialog() {
   p6Layout->addStretch();
   stacked->addWidget(page6);
 
-  connect(sidebar, &QListWidget::currentRowChanged, stacked, &QStackedWidget::setCurrentIndex);
+  connect(sidebar, &QListWidget::currentRowChanged, stacked,
+          &QStackedWidget::setCurrentIndex);
   sidebar->setCurrentRow(0);
 
   contentLayout->addWidget(sidebar);
@@ -3126,7 +2940,9 @@ void MainWindow::showSettingsDialog() {
   btnLayout->addStretch();
   auto *saveBtn = new QPushButton("ตกลง", &dialog);
   saveBtn->setDefault(true);
-  saveBtn->setStyleSheet("background-color: #ff5500; color: white; font-weight: bold; border: none; padding: 7px 20px; border-radius: 6px;");
+  saveBtn->setStyleSheet(
+      "background-color: #ff5500; color: white; font-weight: bold; border: "
+      "none; padding: 7px 20px; border-radius: 6px;");
   auto *cancelBtn = new QPushButton("ยกเลิก", &dialog);
 
   btnLayout->addWidget(saveBtn);
@@ -3152,11 +2968,6 @@ void MainWindow::showSettingsDialog() {
       st.setValue("startupOption", "home");
     }
 
-    if (adBlocker_) {
-      adBlocker_->setEnabled(shieldBox->isChecked());
-      adBlocker_->setAggressive(shieldAggressiveBox->isChecked());
-      refreshShield();
-    }
     st.setValue("dntEnabled", dntBox->isChecked());
 
     st.setValue("secureDnsEnabled", secureDnsBox->isChecked());

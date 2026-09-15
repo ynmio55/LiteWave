@@ -6,7 +6,6 @@
 #include <QPoint>
 
 class QWebEngineProfile;
-class AdBlocker;
 class QLineEdit;
 class QProgressBar;
 class QTabBar;
@@ -29,7 +28,6 @@ public:
     void loadHome(QWebEngineView *view);
     void handleHomeNavigation(const QUrl &url, QWebEngineView *view);
     void reloadCurrentView();
-    void configurePageShield(QWebEngineView *view, const QUrl &url, bool applyNow = false);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -42,8 +40,6 @@ private slots:
     void updateTabTitle(const QString &title);
     void addBookmark();
     void toggleTheme();
-    void toggleShield(bool enabled);
-    void updateShieldBadge(int count);
 
 private:
     QLineEdit *urlBar_;
@@ -54,13 +50,8 @@ private:
     QWidget *headerWidget_ = nullptr;
     QWidget *tabBarContainer_ = nullptr;
     QToolButton *maxBtn_ = nullptr;
-    QAction *shieldAction_;
-    QAction *siteShieldAction_ = nullptr;
-    QAction *filterInfoAction_ = nullptr;
     QToolButton *themeBtn_ = nullptr;
-    QToolButton *shieldBtn_ = nullptr;
     QLabel *sslLabel_ = nullptr;
-    AdBlocker *adBlocker_;
     bool darkMode_ = false;
     bool privateMode_ = false;
     QWebEngineProfile *profile_ = nullptr;
@@ -80,7 +71,6 @@ private:
     QCompleter *urlCompleter_ = nullptr;
 
     void setupShortcuts();
-    void refreshShield();
     QWebEngineView *currentView() const;
     void openUrl(const QString &text);
     void applyTheme();

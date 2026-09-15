@@ -14,8 +14,6 @@ qt_add_executable(LiteWave
     src/main.cpp
     src/MainWindow.cpp
     src/MainWindow.h
-    src/AdBlocker.cpp
-    src/AdBlocker.h
     resources.qrc
 )
 
@@ -44,28 +42,3 @@ if(MSVC)
     target_compile_options(LiteWave PRIVATE /utf-8)
 endif()
 
-include(CTest)
-if(BUILD_TESTING)
-    find_package(Qt6 REQUIRED COMPONENTS Test)
-    qt_add_executable(ShieldTests
-        tests/AdBlockerTests.cpp src/AdBlocker.cpp src/AdBlocker.h resources.qrc)
-    target_include_directories(ShieldTests PRIVATE src)
-    target_link_libraries(ShieldTests PRIVATE Qt6::Test Qt6::WebEngineCore Qt6::Network Qt6::Concurrent)
-    if(MSVC)
-        target_compile_options(ShieldTests PRIVATE /utf-8)
-    endif()
-    add_test(NAME shield-rules COMMAND ShieldTests)
-    set_tests_properties(shield-rules PROPERTIES TIMEOUT 30)
-
-    option(LITEWAVE_GUI_TESTS "Run WebEngine integration tests (display required)" OFF)
-    if(LITEWAVE_GUI_TESTS)
-        qt_add_executable(ShieldIntegration
-            tests/ShieldIntegration.cpp src/MainWindow.cpp src/MainWindow.h
-            src/AdBlocker.cpp src/AdBlocker.h resources.qrc)
-        target_include_directories(ShieldIntegration PRIVATE src)
-        target_link_libraries(ShieldIntegration PRIVATE Qt6::Test Qt6::Widgets Qt6::PrintSupport
-            Qt6::WebEngineWidgets Qt6::Network Qt6::Concurrent)
-        add_test(NAME shield-webengine COMMAND ShieldIntegration)
-        set_tests_properties(shield-webengine PROPERTIES TIMEOUT 60)
-    endif()
-endif()
