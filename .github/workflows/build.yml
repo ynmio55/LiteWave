@@ -141,9 +141,10 @@ jobs:
           fail_on_unmatched_files: true
           body: |
             LiteWave v1.0.0 built from commit ${{ github.sha }}.
-            No ad blocking, content filtering, cosmetic scripts, or popup
-            filtering is included. This build prioritizes broad website
-            compatibility, including embedded video players.
+            LiteWave Shield Standard is included: it blocks known third-party
+            advertising endpoints while preserving main-page navigation,
+            verification, and per-site compatibility controls. Use the Shield
+            menu to choose Standard, Aggressive, or disable filtering for one site.
             Windows: download the Setup EXE and run it. Linux archive is built on Ubuntu 24.04;
             Fedora users should follow the source-build instructions in README.
           files: |
