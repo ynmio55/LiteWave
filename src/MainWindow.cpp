@@ -59,6 +59,51 @@
 #include <QWebEngineView>
 #include <algorithm>
 
+static QIcon createToolbarIcon(const QString &name, const QColor &color) {
+  QPixmap pix(20, 20);
+  pix.fill(Qt::transparent);
+  QPainter p(&pix);
+  p.setRenderHint(QPainter::Antialiasing);
+  p.setPen(QPen(color, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+  p.setBrush(Qt::NoBrush);
+
+  if (name == "lock_https") {
+    p.drawRoundedRect(4, 9, 12, 9, 2, 2);
+    p.drawArc(7, 4, 6, 8, 0, 180 * 16);
+    p.setBrush(color);
+    p.drawEllipse(9, 12, 2, 2);
+  } else if (name == "lock_http") {
+    QPainterPath path;
+    path.moveTo(10, 3);
+    path.lineTo(18, 17);
+    path.lineTo(2, 17);
+    path.closeSubpath();
+    p.drawPath(path);
+    p.drawLine(10, 8, 10, 12);
+    p.drawPoint(10, 15);
+  } else if (name == "moon") {
+    QPainterPath path;
+    path.moveTo(14, 3);
+    path.cubicTo(8, 3, 4, 7, 4, 13);
+    path.cubicTo(4, 17, 7, 19, 11, 19);
+    path.cubicTo(8, 16, 8, 10, 14, 3);
+    path.closeSubpath();
+    p.drawPath(path);
+  } else if (name == "sun") {
+    p.drawEllipse(6, 6, 8, 8);
+    p.drawLine(10, 2, 10, 4);
+    p.drawLine(10, 16, 10, 18);
+    p.drawLine(2, 10, 4, 10);
+    p.drawLine(16, 10, 18, 10);
+  } else if (name == "globe") {
+    p.drawEllipse(3, 3, 14, 14);
+    p.drawLine(3, 10, 17, 10);
+    p.drawArc(6, 3, 8, 14, 0, 360 * 16);
+  }
+
+  return QIcon(pix);
+}
+
 class WebPage : public QWebEnginePage {
 public:
   WebPage(QWebEngineProfile *profile, MainWindow *mw, QWebEngineView *view,
@@ -238,9 +283,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   });
 
   // SSL Lock Icon
-  sslLabel_ = new QLabel("🔒", this);
+  sslLabel_ = new QLabel(this);
   sslLabel_->setObjectName("sslLabel");
-  sslLabel_->setStyleSheet("padding: 0 4px; font-size: 13px;");
+  sslLabel_->setStyleSheet("padding: 0 4px;");
   toolbar_->addWidget(sslLabel_);
 
   // Omnibox Address Bar
@@ -308,7 +353,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   badgeTimer->start();
 
   // Theme Toggle Button
-  themeAction_ = addNavAction(darkMode_ ? "☼" : "☾", "สลับโหมดมืด/สว่าง");
+  themeAction_ = toolbar_->addAction("");
+  themeAction_->setToolTip("สลับโหมดมืด/สว่าง");
   connect(themeAction_, &QAction::triggered, this, &MainWindow::toggleTheme);
 
   // Main Menu Button (Brave style main menu)
@@ -628,6 +674,10 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
 void MainWindow::newTab() {
   auto *view = createView(QUrl());
   loadHome(view);
+  if (urlBar_) {
+    urlBar_->setFocus();
+    urlBar_->selectAll();
+  }
 }
 
 void MainWindow::closeTab(int index) {
@@ -982,14 +1032,15 @@ void MainWindow::updateCurrentUrl(const QUrl &url) {
   }
 
   if (sslLabel_) {
+    const QColor col = darkMode_ ? QColor("#9ca3af") : QColor("#475569");
     if (currentUrl.scheme() == "https") {
-      sslLabel_->setText("🔒 ");
+      sslLabel_->setPixmap(createToolbarIcon("lock_https", QColor("#10b981")).pixmap(16, 16));
       sslLabel_->setToolTip("การเชื่อมต่อปลอดภัย (HTTPS)");
     } else if (currentUrl.scheme() == "http") {
-      sslLabel_->setText("⚠️ ");
+      sslLabel_->setPixmap(createToolbarIcon("lock_http", QColor("#ef4444")).pixmap(16, 16));
       sslLabel_->setToolTip("การเชื่อมต่อไม่ปลอดภัย (HTTP)");
     } else {
-      sslLabel_->setText("🌐 ");
+      sslLabel_->setPixmap(createToolbarIcon("globe", col).pixmap(16, 16));
       sslLabel_->setToolTip("LiteWave Dashboard");
     }
   }
@@ -1052,7 +1103,8 @@ void MainWindow::toggleTheme() {
 
 void MainWindow::applyTheme() {
   if (themeAction_) {
-    themeAction_->setText(darkMode_ ? "☀️" : "🌙");
+    const QColor iconCol = darkMode_ ? QColor("#f1f5f9") : QColor("#475569");
+    themeAction_->setIcon(createToolbarIcon(darkMode_ ? "sun" : "moon", iconCol));
     themeAction_->setToolTip(darkMode_ ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด");
   }
 
@@ -1440,7 +1492,8 @@ body {
   letter-spacing: -1.5px;
   margin-bottom: 8px;
   user-select: none;
-  background: linear-gradient(90deg, #1e3a8a 0%, #1d4ed8 35%, #2563eb 70%, #38bdf8 100%);
+  color: #3b82f6;
+  background: linear-gradient(135deg, #2563eb 0%, #60a5fa 60%, #93c5fd 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
@@ -1833,8 +1886,12 @@ function renderShortcuts() {
 
     card.innerHTML = `
       <div class="card-actions">
-        <button class="action-btn edit-btn" title="แก้ไขทางลัด" onclick="openEditModal(event, ${idx})">✏️</button>
-        <button class="action-btn del-btn" title="ลบทางลัด" onclick="deleteShortcut(event, ${idx})">✕</button>
+        <button class="action-btn edit-btn" title="แก้ไขทางลัด" onclick="openEditModal(event, ${idx})">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+        </button>
+        <button class="action-btn del-btn" title="ลบทางลัด" onclick="deleteShortcut(event, ${idx})">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
       <div class="site-icon-box">
         <img src="${favicon}" class="site-favicon" onerror="this.onerror=null; this.src='https://icon.horse/icon/${domain}'; this.onerror=function(){this.style.display='none'; this.nextElementSibling.style.display='flex';};" alt="${s.name}" />
