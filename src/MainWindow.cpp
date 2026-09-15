@@ -334,12 +334,6 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   connect(themeBtn_, &QToolButton::clicked, this, &MainWindow::toggleTheme);
   toolbar_->addWidget(themeBtn_);
 
-  // Settings stays one click away; it is also in the main menu and Ctrl+,.
-  auto *settingsAction = toolbar_->addAction("⚙");
-  settingsAction->setToolTip("การตั้งค่า LiteWave (Ctrl+,)");
-  connect(settingsAction, &QAction::triggered, this,
-          &MainWindow::showSettingsDialog);
-
   // Main Menu Button (Brave style main menu)
   menuBtn_ = new QToolButton(this);
   menuBtn_->setObjectName("mainMenuButton");
