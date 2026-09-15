@@ -98,6 +98,7 @@ cmake --build build -j2 &&
 
 ```bash
 sudo cmake --install build
+sudo gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
 sudo update-desktop-database /usr/share/applications 2>/dev/null || true
 ```
 
@@ -117,6 +118,7 @@ cd LiteWave
 sudo install -Dm755 LiteWave /usr/local/bin/LiteWave
 sudo install -Dm644 LiteWave.desktop /usr/share/applications/LiteWave.desktop
 sudo install -Dm644 litewave.svg /usr/share/icons/hicolor/scalable/apps/litewave.svg
+sudo gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
 sudo update-desktop-database /usr/share/applications 2>/dev/null || true
 LiteWave
 ```

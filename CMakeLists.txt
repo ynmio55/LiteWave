@@ -31,11 +31,12 @@ if(WIN32)
     set_target_properties(LiteWave PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
 
-install(TARGETS LiteWave RUNTIME DESTINATION bin)
+include(GNUInstallDirs)
+install(TARGETS LiteWave RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES packaging/LiteWave.desktop
-        DESTINATION /usr/share/applications)
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES assets/litewave.svg
-        DESTINATION /usr/share/icons/hicolor/scalable/apps
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
         RENAME litewave.svg)
 
 if(MSVC)

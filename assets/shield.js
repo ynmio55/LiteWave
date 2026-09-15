@@ -94,8 +94,8 @@
             '.ytp-ad-overlay-container, .ytp-ad-message-container,',
             '[data-litewave-sponsored="1"] {display:none!important;}'
         ].join('\n') : ''
-    ].join('\n');
-    (document.head || document.documentElement).appendChild(style);
+    const target = document.head || document.documentElement || document.body;
+    if (target) target.appendChild(style);
 
     function cleanYouTube() {
         timer = 0;
