@@ -353,9 +353,12 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   badgeTimer->start();
 
   // Theme Toggle Button
-  themeAction_ = toolbar_->addAction("");
-  themeAction_->setToolTip("สลับโหมดมืด/สว่าง");
-  connect(themeAction_, &QAction::triggered, this, &MainWindow::toggleTheme);
+  themeBtn_ = new QToolButton(this);
+  themeBtn_->setObjectName("themeButton");
+  themeBtn_->setToolTip("สลับโหมดมืด/สว่าง");
+  themeBtn_->setCursor(Qt::PointingHandCursor);
+  connect(themeBtn_, &QToolButton::clicked, this, &MainWindow::toggleTheme);
+  toolbar_->addWidget(themeBtn_);
 
   // Main Menu Button (Brave style main menu)
   menuBtn_ = new QToolButton(this);
@@ -1107,10 +1110,10 @@ void MainWindow::toggleTheme() {
 }
 
 void MainWindow::applyTheme() {
-  if (themeAction_) {
+  if (themeBtn_) {
     const QColor iconCol = darkMode_ ? QColor("#f1f5f9") : QColor("#475569");
-    themeAction_->setIcon(createToolbarIcon(darkMode_ ? "sun" : "moon", iconCol));
-    themeAction_->setToolTip(darkMode_ ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด");
+    themeBtn_->setIcon(createToolbarIcon(darkMode_ ? "sun" : "moon", iconCol));
+    themeBtn_->setToolTip(darkMode_ ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด");
   }
 
   if (darkMode_) {

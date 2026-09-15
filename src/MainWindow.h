@@ -56,7 +56,7 @@ private:
     QAction *shieldAction_;
     QAction *siteShieldAction_ = nullptr;
     QAction *filterInfoAction_ = nullptr;
-    QAction *themeAction_ = nullptr;
+    QToolButton *themeBtn_ = nullptr;
     QToolButton *shieldBtn_ = nullptr;
     QLabel *sslLabel_ = nullptr;
     AdBlocker *adBlocker_;
