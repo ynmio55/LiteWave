@@ -64,9 +64,10 @@ function fixture(host = 'www.youtube.com') {
 }
 const nonYT = fixture('example.org');
 nonYT.invoke();
-assert(nonYT.state.style);
+assert.equal(nonYT.state.style, null);
 assert.equal(nonYT.state.timers.size, 0);
 assert.equal(nonYT.state.observers.length, 0);
+assert.equal(nonYT.events.size, 0);
 nonYT.global.__litewaveShieldEnabled = false;
 nonYT.invoke();
 assert.equal(nonYT.state.style, null);
@@ -102,4 +103,4 @@ assert.equal(yt.state.style, null);
 assert.equal(yt.state.timers.size, 0);
 assert.equal(yt.events.size, 0);
 assert(yt.state.observers.every(o => !o.connected));
-console.log('PASS: cosmetic lifecycle, site scope, visible skip controls, hidden tabs, no media/request mutation');
+console.log('PASS: YouTube-only Shield, cosmetic lifecycle, visible skip controls, no media/request mutation');

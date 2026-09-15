@@ -12,7 +12,7 @@ class ShieldTests : public QObject {
     Q_OBJECT
     QTemporaryDir settingsDir;
     std::unique_ptr<AdBlocker> shield;
-    const QUrl site{"https://example.org/article"};
+    const QUrl site{"https://www.youtube.com/watch?v=litewave-test"};
 private slots:
     void initTestCase() {
         QVERIFY(settingsDir.isValid());
@@ -81,9 +81,16 @@ private slots:
         shield->setSiteAllowed(site, true);
         QVERIFY(!shield->isEnabledForUrl(site));
         QVERIFY(!shield->shouldBlock(ad, site, Info::ResourceTypeScript));
-        QVERIFY(shield->shouldBlock(ad, QUrl("https://example.org.evil.test/"), Info::ResourceTypeScript));
+        QVERIFY(shield->shouldBlock(ad, QUrl("https://m.youtube.com/watch?v=other"), Info::ResourceTypeScript));
         shield->setSiteAllowed(site, false);
         QVERIFY(shield->shouldBlock(ad, site, Info::ResourceTypeScript));
+    }
+    void nonYouTubeNeverFiltered() {
+        const QUrl streamingSite("https://hubseriesshds.com/play/73017/");
+        const QUrl ad("https://ad.doubleclick.net/video-ad.js");
+        QVERIFY(!shield->isEnabledForUrl(streamingSite));
+        QVERIFY(!shield->shouldBlock(ad, streamingSite, Info::ResourceTypeScript));
+        QVERIFY(!shield->shouldBlockPopup(QUrl("https://example.net/"), streamingSite, false));
     }
     void popupPolicy() {
         // Standard permits benign login/payment popups instead of blocking every
@@ -97,7 +104,7 @@ private slots:
         QVERIFY(!shield->shouldBlockPopup(QUrl("https://example.net/"), site, false));
     }
     void standardAndAggressiveModes() {
-        const QUrl app("https://shop.example/");
+        const QUrl app("https://www.youtube.com/watch?v=mode-test");
         const QUrl tagManager("https://www.googletagmanager.com/gtm.js");
         QVERIFY(!shield->isAggressive());
         QVERIFY(!shield->shouldBlock(tagManager, app, Info::ResourceTypeScript));

@@ -15,24 +15,24 @@
     let timer = 0;
     let observer = null;
     const isYouTube = location.hostname === 'youtube.com' ||
-        location.hostname.endsWith('.youtube.com');
+        location.hostname.endsWith('.youtube.com') ||
+        location.hostname === 'youtu.be';
+
+    // Do nothing on every non-YouTube page. This is intentionally before CSS,
+    // observers, timers, and DOM changes so LiteWave cannot affect other
+    // streaming sites.
+    if (!isYouTube) return;
 
     const style = document.createElement('style');
     style.id = 'litewave-ad-style';
     style.textContent = [
-        '.adsbygoogle, [data-ad-client][data-ad-slot], [id^="div-gpt-ad-"],',
-        '[id^="google_ads_iframe"], iframe[src*="//ad.doubleclick.net/"],',
-        'iframe[src*="//ads.exoclick.com/"], iframe[src*="//syndication.exoclick.com/"]',
-        '{display:none!important;}',
-        isYouTube ? [
-            'ytd-ad-slot-renderer, ytd-display-ad-renderer,',
-            'ytd-promoted-sparkles-web-renderer, ytd-promoted-video-renderer,',
-            'ytd-in-feed-ad-layout-renderer, ytd-companion-slot-renderer,',
-            'ytd-banner-promo-renderer, ytd-statement-banner-renderer,',
-            '.ytd-action-companion-ad-renderer, #player-ads, .video-ads,',
-            '.ytp-ad-overlay-container, .ytp-ad-message-container,',
-            '[data-litewave-sponsored="1"] {display:none!important;}'
-        ].join('\n') : ''
+        'ytd-ad-slot-renderer, ytd-display-ad-renderer,',
+        'ytd-promoted-sparkles-web-renderer, ytd-promoted-video-renderer,',
+        'ytd-in-feed-ad-layout-renderer, ytd-companion-slot-renderer,',
+        'ytd-banner-promo-renderer, ytd-statement-banner-renderer,',
+        '.ytd-action-companion-ad-renderer, #player-ads, .video-ads,',
+        '.ytp-ad-overlay-container, .ytp-ad-message-container,',
+        '[data-litewave-sponsored="1"] {display:none!important;}'
     ].join('\n');
     const target = document.head || document.documentElement || document.body;
     if (target) target.appendChild(style);

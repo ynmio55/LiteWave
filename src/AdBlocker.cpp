@@ -47,6 +47,13 @@ bool isVerification(const QUrl &url)
          (url.path().startsWith("/recaptcha/") || url.path().startsWith("/sorry/")));
 }
 
+bool isYouTubePage(const QUrl &url)
+{
+    const auto host = hostKey(url.host());
+    return family(host, "youtube.com") || family(host, "youtube-nocookie.com") ||
+           host == "youtu.be";
+}
+
 // A small registrable-domain approximation keeps CDNs such as
 // static.example.com first-party to www.example.com without introducing a
 // heavyweight public-suffix dependency into the request hot path.
@@ -224,7 +231,10 @@ bool AdBlocker::isSiteAllowed(const QUrl &url) const
 
 bool AdBlocker::isEnabledForUrl(const QUrl &url) const
 {
-    return isEnabled() && !isSiteAllowed(url);
+    // LiteWave Shield is deliberately scoped to YouTube. Other websites get
+    // no request interception, popup blocking, or cosmetic filtering so their
+    // video hosts, login flows, and embedded apps remain untouched.
+    return isEnabled() && isYouTubePage(url) && !isSiteAllowed(url);
 }
 
 void AdBlocker::setSiteAllowed(const QUrl &url, bool allowed)
@@ -256,6 +266,11 @@ bool AdBlocker::shouldBlock(const QUrl &request, const QUrl &firstParty,
         return false;
     if (request.scheme() != "http" && request.scheme() != "https" &&
         request.scheme() != "ws" && request.scheme() != "wss")
+        return false;
+
+    // This guard is redundant with isEnabledForUrl but makes the request
+    // boundary explicit for callers/tests.
+    if (!isYouTubePage(firstParty))
         return false;
 
     // Never blank an explicit navigation, download, OAuth return, age check,

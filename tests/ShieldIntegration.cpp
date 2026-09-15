@@ -42,7 +42,7 @@ private slots:
         auto *view = window.findChild<QWebEngineView *>();
         QVERIFY(view);
         QSignalSpy loaded(view, &QWebEngineView::loadFinished);
-        const QUrl base("https://fixture.example/");
+        const QUrl base("https://www.youtube.com/watch?v=integration-test");
         window.configurePageShield(view, base);
         view->setHtml(R"HTML(<!doctype html><title>Shield test</title>
             <div id="ad" class="adsbygoogle">advert</div>
@@ -65,6 +65,10 @@ private slots:
         shield->setSiteAllowed(base, true);
         QTRY_VERIFY(evaluate(view->page(), "getComputedStyle(document.getElementById('ad')).display").toString() == "block");
         QVERIFY(!shield->shouldBlock(QUrl("https://ad.doubleclick.net/x"), base, QWebEngineUrlRequestInfo::ResourceTypeScript));
+        const QUrl otherSite("https://example.org/video");
+        QVERIFY(!shield->isEnabledForUrl(otherSite));
+        QVERIFY(!shield->shouldBlock(QUrl("https://ad.doubleclick.net/x"), otherSite,
+                                     QWebEngineUrlRequestInfo::ResourceTypeScript));
     }
 };
 int main(int argc, char **argv) {
