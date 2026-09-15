@@ -3,44 +3,50 @@
 #include <QApplication>
 #include <QIcon>
 #include <QSettings>
+#include <QUrl>
+
+namespace {
+QString dohTemplateFor(const QSettings &settings)
+{
+    if (!settings.value("secureDnsEnabled", false).toBool())
+        return {};
+
+    const QString provider = settings.value("dnsProvider", "OS Default").toString();
+    if (provider == "Cloudflare")
+        return QStringLiteral("https://cloudflare-dns.com/dns-query");
+    if (provider == "Google")
+        return QStringLiteral("https://dns.google/dns-query{?dns}");
+    if (provider == "Quad9")
+        return QStringLiteral("https://dns.quad9.net/dns-query");
+    if (provider == "AdGuard")
+        return QStringLiteral("https://dns.adguard-dns.com/dns-query");
+    if (provider == "Custom") {
+        const QUrl custom(settings.value("customDnsUrl").toString().trimmed());
+        if (custom.isValid() && custom.scheme() == "https" && !custom.host().isEmpty())
+            return custom.toString(QUrl::FullyEncoded);
+    }
+    return {};
+}
+} // namespace
 
 int main(int argc, char *argv[])
 {
-    QCoreApplication::setOrganizationName("LiteWave");
-    QCoreApplication::setApplicationName("LiteWave");
-    QCoreApplication::setApplicationVersion("1.0.1");
-
     QSettings settings("LiteWave", "LiteWave");
-    bool secureDnsEnabled = settings.value("secureDnsEnabled", false).toBool();
-    QString provider = settings.value("dnsProvider", "OS Default").toString();
-    QString customUrl = settings.value("customDnsUrl", "").toString();
+    const QString dohTemplate = dohTemplateFor(settings);
 
-    if (secureDnsEnabled && provider != "OS Default") {
-        QString templateUri;
-        if (provider == "Cloudflare") {
-            templateUri = "https://chrome.cloudflare-dns.com/dns-query";
-        } else if (provider == "Google") {
-            templateUri = "https://dns.google/dns-query{?dns}";
-        } else if (provider == "Quad9") {
-            templateUri = "https://dns.quad9.net/dns-query";
-        } else if (provider == "AdGuard") {
-            templateUri = "https://dns.adguard-dns.com/dns-query";
-        } else if (provider == "Custom" && !customUrl.isEmpty()) {
-            templateUri = customUrl;
-        }
-
-        if (!templateUri.isEmpty()) {
-            QString existingFlags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
-            QString dnsFlags = QString("--enable-features=DnsOverHttps --dns-over-https-templates=\"%1\" --dns-over-https-mode=secure").arg(templateUri);
-            if (!existingFlags.isEmpty()) {
-                dnsFlags = existingFlags + " " + dnsFlags;
-            }
-            qputenv("QTWEBENGINE_CHROMIUM_FLAGS", dnsFlags.toUtf8());
-        }
+    // Keep Chromium defaults for all normal browsing. DoH is the single,
+    // explicit opt-in override and is applied only before WebEngine starts.
+    if (!dohTemplate.isEmpty()) {
+        qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
+                QByteArray("--enable-features=DnsOverHttps --doh-templates=") +
+                    dohTemplate.toUtf8());
     }
 
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
+    QApplication::setOrganizationName("LiteWave");
+    QApplication::setApplicationName("LiteWave");
+    QApplication::setApplicationVersion("1.0.2");
     QGuiApplication::setDesktopFileName("LiteWave");
     app.setWindowIcon(QIcon(":/icons/litewave.svg"));
 
