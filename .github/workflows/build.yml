@@ -61,18 +61,41 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev qt6-webengine-dev xvfb xauth
-      - name: Build package
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          arch: linux_gcc_64
+          modules: "qtwebengine qtwebchannel qtpositioning"
+          cache: true
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ xvfb xauth
+      - name: Build and bundle
+        shell: bash
         run: |
+          set -euo pipefail
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
           cmake --build build -j2
           QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu" xvfb-run -a ctest --test-dir build --output-on-failure
-          mkdir -p package/LiteWave
-          cp build/LiteWave package/LiteWave/
-          cp packaging/LiteWave.desktop package/LiteWave/
-          cp assets/litewave.svg package/LiteWave/
-          cp README.md THIRD_PARTY_NOTICES.md package/LiteWave/
+
+          qt_prefix="$(cd "${Qt6_DIR}/../../.." && pwd)"
+          test -x "${qt_prefix}/libexec/QtWebEngineProcess"
+
+          mkdir -p package/LiteWave/bin package/LiteWave/lib package/LiteWave/libexec
+          install -Dm755 build/LiteWave package/LiteWave/bin/LiteWave
+          install -Dm755 packaging/linux/LiteWave package/LiteWave/LiteWave
+          install -Dm644 packaging/LiteWave.desktop package/LiteWave/LiteWave.desktop
+          install -Dm644 assets/litewave.svg package/LiteWave/litewave.svg
+          install -Dm644 README.md package/LiteWave/README.md
+          install -Dm644 THIRD_PARTY_NOTICES.md package/LiteWave/THIRD_PARTY_NOTICES.md
+
+          cp -a "${qt_prefix}"/lib/libQt6*.so* package/LiteWave/lib/
+          cp -a "${qt_prefix}"/plugins package/LiteWave/
+          cp -a "${qt_prefix}"/resources package/LiteWave/
+          cp -a "${qt_prefix}"/translations package/LiteWave/
+          install -Dm755 "${qt_prefix}/libexec/QtWebEngineProcess" \
+            package/LiteWave/libexec/QtWebEngineProcess
+
           tar -czf LiteWave-Linux-x64.tar.gz -C package LiteWave
       - uses: actions/upload-artifact@v4
         with:
