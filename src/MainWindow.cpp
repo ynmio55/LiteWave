@@ -1615,37 +1615,67 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0,0,0,0.08);
 }
-.card-actions {
+.options-btn {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-.site-card:hover .card-actions {
-  opacity: 1;
-}
-.action-btn {
-  background: rgba(0,0,0,0.08);
+  top: 8px;
+  right: 8px;
+  background-color: %2;
   color: %3;
-  border: none;
-  width: 22px;
-  height: 22px;
+  border: 1px solid %5;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  font-size: 11px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0.9;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  transition: all 0.15s ease;
+  z-index: 10;
 }
-.action-btn:hover {
-  background: #2563eb;
+.site-card:hover .options-btn, .options-btn:hover {
+  opacity: 1;
+  background-color: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+.card-dropdown {
+  position: absolute;
+  top: 38px;
+  right: 8px;
+  background-color: %2;
+  color: %3;
+  border: 1px solid %5;
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+  display: none;
+  flex-direction: column;
+  min-width: 130px;
+  z-index: 100;
+}
+.card-dropdown.active {
+  display: flex;
+}
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  color: %3;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.dropdown-item:hover {
+  background-color: #2563eb;
   color: #ffffff;
 }
-.del-btn:hover {
-  background: #ef4444;
+.dropdown-item.danger-item:hover {
+  background-color: #ef4444;
   color: #ffffff;
 }
 .site-icon-box {
@@ -1885,13 +1915,18 @@ function renderShortcuts() {
     const initial = (s.name || 'W').charAt(0).toUpperCase();
 
     card.innerHTML = `
-      <div class="card-actions">
-        <button class="action-btn edit-btn" title="แก้ไขทางลัด" onclick="openEditModal(event, ${idx})">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-        </button>
-        <button class="action-btn del-btn" title="ลบทางลัด" onclick="deleteShortcut(event, ${idx})">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
+      <button class="options-btn" title="ตัวเลือก" onclick="toggleCardDropdown(event, ${idx})">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="12" cy="19" r="2.2"></circle></svg>
+      </button>
+      <div class="card-dropdown" id="dropdown-${idx}">
+        <div class="dropdown-item" onclick="openEditModal(event, ${idx})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+          <span>แก้ไขทางลัด</span>
+        </div>
+        <div class="dropdown-item danger-item" onclick="deleteShortcut(event, ${idx})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <span>ลบทางลัด</span>
+        </div>
       </div>
       <div class="site-icon-box">
         <img src="${favicon}" class="site-favicon" onerror="this.onerror=null; this.src='https://icon.horse/icon/${domain}'; this.onerror=function(){this.style.display='none'; this.nextElementSibling.style.display='flex';};" alt="${s.name}" />
@@ -1911,6 +1946,21 @@ function renderShortcuts() {
   `;
   grid.appendChild(addBtn);
 }
+
+function toggleCardDropdown(e, idx) {
+  e.stopPropagation();
+  const allDropdowns = document.querySelectorAll('.card-dropdown');
+  allDropdowns.forEach((d, i) => {
+    if (i !== idx) d.classList.remove('active');
+  });
+  const menu = document.getElementById('dropdown-' + idx);
+  if (menu) menu.classList.toggle('active');
+}
+
+document.addEventListener('click', () => {
+  const allDropdowns = document.querySelectorAll('.card-dropdown');
+  allDropdowns.forEach(d => d.classList.remove('active'));
+});
 
 function openAddModal() {
   editIndex = -1;
