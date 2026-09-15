@@ -29,13 +29,19 @@ LiteWave ไม่มีระบบบล็อกโฆษณา, cosmetic fil
 
 เว็บสตรีมจำนวนมากใช้ H.264/AAC (รวมถึงตัวเล่นฝัง iframe) แต่แพ็กเกจ Qt WebEngine จาก Fedora อาจไม่มี codec เหล่านี้จากข้อจำกัดลิขสิทธิ์ จึงทำให้หน้าเว็บเปิดได้แต่วิดีโอค้าง/หมุน
 
-หลังเปิด RPM Fusion ให้ติดตั้ง codec build ที่รองรับ แล้วเปิด LiteWave ใหม่:
+หลังเปิด RPM Fusion ให้เพิ่ม codec ที่ Fedora ตัดออก แล้วเปิด LiteWave ใหม่:
 
 ```bash
-sudo dnf install qt6-qtwebengine-freeworld ffmpeg-free
+sudo dnf install libavcodec-freeworld
 ```
 
-หากระบบแจ้งว่าไม่พบแพ็กเกจ ให้เปิด RPM Fusion สำหรับ Fedora รุ่นของคุณก่อนตามคู่มือ: https://rpmfusion.org/Configuration
+หากติดตั้งไม่ได้หรือวิดีโอยังไม่เล่น ให้สลับ FFmpeg รุ่น Fedora ที่จำกัด codec ไปเป็นรุ่น RPM Fusion:
+
+```bash
+sudo dnf swap ffmpeg-free ffmpeg --allowerasing
+```
+
+ไม่ต้องใช้ `qt6-qtwebengine-freeworld`: Fedora 44 ไม่มีแพ็กเกจชื่อนี้
 
 DRM เช่น Widevine, การล็อกอิน, การจำกัดพื้นที่ หรือเซิร์ฟเวอร์ของเว็บ ยังเป็นเงื่อนไขของเว็บนั้นและ LiteWave ไม่ข้ามให้
 
