@@ -24,6 +24,7 @@ public:
     };
 
     explicit AdBlocker(QObject *parent = nullptr, bool persistent = true);
+    ~AdBlocker() override;
 
     void setEnabled(bool enabled);
     bool isEnabled() const;
