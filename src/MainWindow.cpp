@@ -552,7 +552,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   auto *s = view->settings();
   s->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
   s->setAttribute(QWebEngineSettings::LocalStorageEnabled, true);
-  s->setAttribute(QWebEngineSettings::DnsPrefetchEnabled, false);
+  s->setAttribute(QWebEngineSettings::DnsPrefetchEnabled, true);
   s->setAttribute(QWebEngineSettings::WebGLEnabled, true);
   s->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
   s->setAttribute(QWebEngineSettings::AutoLoadImages, true);

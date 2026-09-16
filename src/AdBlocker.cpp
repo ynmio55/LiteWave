@@ -316,83 +316,13 @@ QString AdBlocker::youtubeAdSkipScript()
             .html5-video-player.ad-showing .ytp-ad-player-overlay,
             .html5-video-player.ad-showing .ytp-ad-text-overlay,
             .html5-video-player.ad-showing .ytp-ad-overlay-container,
-            #player-ads, .ytd-ad-slot-renderer, .video-ads {
+            #player-ads, .ytd-ad-slot-renderer, .video-ads,
+            .ytp-ad-overlay-slot {
                 display: none !important;
                 visibility: hidden !important;
             }
         `;
         (document.head || document.documentElement).appendChild(style);
-    } catch(e) {}
-
-    function sanitizePlayerObj(obj) {
-        if (!obj || typeof obj !== 'object') return obj;
-        
-        const keysToRemove = [
-            'adPlacements', 'playerAds', 'adSlots', 'adBreakHeartbeatParams', 
-            'adParams', 'masthead', 'promotedSparklesWebRenderer', 'playerLegacyDesktopYpcOfferRenderer'
-        ];
-
-        for (const key of keysToRemove) {
-            delete obj[key];
-        }
-
-        if (obj.playerResponse && typeof obj.playerResponse === 'object') {
-            for (const key of keysToRemove) {
-                delete obj.playerResponse[key];
-            }
-        }
-        if (obj.response && typeof obj.response === 'object') {
-            for (const key of keysToRemove) {
-                delete obj.response[key];
-            }
-        }
-        if (obj.args && typeof obj.args === 'object') {
-            delete obj.args.ad3_module;
-            delete obj.args.ad_flags;
-        }
-        return obj;
-    }
-
-    const AD_KEYS = new Set([
-        'adPlacements','playerAds','adSlots','adBreakHeartbeatParams',
-        'adParams','masthead','promotedSparklesWebRenderer','playerLegacyDesktopYpcOfferRenderer'
-    ]);
-    function hasAdKey(obj) {
-        for (const k of AD_KEYS) { if (k in obj) return true; }
-        return ('playerResponse' in obj) || ('args' in obj);
-    }
-
-    const origParse = JSON.parse;
-    if (origParse) {
-        JSON.parse = function(...args) {
-            const res = origParse.apply(this, args);
-            if (res && typeof res === 'object' && hasAdKey(res)) {
-                sanitizePlayerObj(res);
-            }
-            return res;
-        };
-    }
-
-    let rawResponse = window.ytInitialPlayerResponse;
-    if (rawResponse) { sanitizePlayerObj(rawResponse); }
-    try {
-        Object.defineProperty(window, 'ytInitialPlayerResponse', {
-            get() { return rawResponse; },
-            set(val) { rawResponse = sanitizePlayerObj(val); },
-            configurable: true,
-            enumerable: true
-        });
-    } catch(e) {}
-
-    let rawData = window.ytInitialData;
-    if (rawData) { sanitizePlayerObj(rawData); }
-    try {
-        Object.defineProperty(window, 'ytInitialData', {
-            get() { return rawData; },
-            set(val) { rawData = sanitizePlayerObj(val); },
-            configurable: true,
-            enumerable: true
-        });
     } catch(e) {}
 
     function handleYouTubeAds() {
@@ -428,7 +358,7 @@ QString AdBlocker::youtubeAdSkipScript()
             }
 
             if (!clicked && isFinite(video.duration) && video.duration > 0) {
-                if (video.currentTime < video.duration - 0.2) {
+                if (video.currentTime < video.duration - 0.1) {
                     video.currentTime = Math.max(0, video.duration - 0.1);
                 }
                 try { video.dispatchEvent(new Event('ended')); } catch(e) {}
@@ -448,7 +378,7 @@ QString AdBlocker::youtubeAdSkipScript()
         handleYouTubeAds();
     }
 
-    setInterval(handleYouTubeAds, 300);
+    setInterval(handleYouTubeAds, 150);
 
     var _lwObserverTimer = null;
     function _lwDebouncedHandler() {
@@ -456,7 +386,7 @@ QString AdBlocker::youtubeAdSkipScript()
         _lwObserverTimer = setTimeout(function() {
             _lwObserverTimer = null;
             handleYouTubeAds();
-        }, 200);
+        }, 100);
     }
 
     function _lwStartObserver() {
@@ -554,9 +484,7 @@ bool AdBlocker::isKnownSameSiteAdEndpoint(const QUrl &request,
                                            QSet<QByteArray>{"youtube.com",
                                                             "youtube-nocookie.com"});
     if (youtubePage && matchesDomain(requestHost, QSet<QByteArray>{"youtube.com"})) {
-        return path.startsWith("/api/stats/ads") ||
-               path.startsWith("/pagead/") ||
-               path == "/get_midroll_info";
+        return false;
     }
 
     if ((requestHost == "www.google.com" || requestHost == "google.com") &&
