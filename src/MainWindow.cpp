@@ -1193,20 +1193,31 @@ void MainWindow::refreshShieldUi() {
   if (!shieldBtn_ || !adBlocker_)
     return;
 
+  const QUrl pageUrl = currentView() ? currentView()->url() : QUrl();
+  const bool enabledForSite = adBlocker_->isEnabledForUrl(pageUrl);
   const int count = adBlocker_->blockedCount();
+
   if (!adBlocker_->isEnabled()) {
-    shieldBtn_->setText("Shield: ปิด");
-    shieldBtn_->setToolTip("Shield ปิดอยู่ — คลิกเพื่อเปิดหรือกำหนดเฉพาะเว็บ");
-    return;
+    shieldBtn_->setText("🛡️ Shield: ปิด");
+    shieldBtn_->setProperty("active", false);
+    shieldBtn_->setToolTip("Shield ปิดอยู่ — คลิกเพื่อเปิดใช้งาน");
+  } else if (!enabledForSite && (pageUrl.scheme() == "http" || pageUrl.scheme() == "https")) {
+    shieldBtn_->setText("🛡️ Shield: ปิดสำหรับเว็บนี้");
+    shieldBtn_->setProperty("active", false);
+    shieldBtn_->setToolTip("Shield ปิดสำหรับ " + pageUrl.host());
+  } else {
+    const QString mode =
+        adBlocker_->mode() == AdBlocker::Mode::Aggressive ? "เข้มงวด" : "มาตรฐาน";
+    shieldBtn_->setText("🛡️ Shield: " + QString::number(count));
+    shieldBtn_->setProperty("active", true);
+    shieldBtn_->setToolTip(
+        QString("Shield %1 — บล็อกแล้ว %2 รายการ\nคลิกเพื่อเปลี่ยนโหมดหรือปิดเฉพาะเว็บ")
+            .arg(mode)
+            .arg(count));
   }
 
-  const QString mode =
-      adBlocker_->mode() == AdBlocker::Mode::Aggressive ? "เข้มงวด" : "มาตรฐาน";
-  shieldBtn_->setText("Shield: เปิด · " + QString::number(count));
-  shieldBtn_->setToolTip(
-      QString("Shield %1 — บล็อกแล้ว %2 รายการ\nคลิกเพื่อเปลี่ยนโหมดหรือปิดเฉพาะเว็บ")
-          .arg(mode)
-          .arg(count));
+  shieldBtn_->style()->unpolish(shieldBtn_);
+  shieldBtn_->style()->polish(shieldBtn_);
 }
 
 void MainWindow::applyShieldCosmetics(QWebEngineView *view) {
@@ -1214,13 +1225,21 @@ void MainWindow::applyShieldCosmetics(QWebEngineView *view) {
     return;
 
   const QString styleId = QStringLiteral("litewave-shield-cosmetic-style");
-  if (!adBlocker_->isEnabledForUrl(view->url())) {
+  const bool enabled = adBlocker_->isEnabledForUrl(view->url());
+
+  if (!enabled) {
     view->page()->runJavaScript(
-        "(function(){const s=document.getElementById('" + styleId +
-            "');if(s)s.remove();})();",
+        "(function(){"
+        "window.__litewave_shield_disabled = true;"
+        "const s=document.getElementById('" + styleId + "');if(s)s.remove();"
+        "})();",
         QWebEngineScript::ApplicationWorld);
     return;
   }
+
+  view->page()->runJavaScript(
+      "(function(){ window.__litewave_shield_disabled = false; })();",
+      QWebEngineScript::ApplicationWorld);
 
   const QString cssJson = QString::fromUtf8(
       QJsonDocument(QJsonArray{AdBlocker::cosmeticCss()})
@@ -1430,7 +1449,8 @@ void MainWindow::applyTheme() {
                 background-color: rgba(148, 163, 184, 0.25);
                 border-radius: 9px;
             }
-            QToolBar#mainToolbar QToolButton#shieldButton {
+            QToolBar#mainToolbar QToolButton#shieldButton,
+            QToolBar#mainToolbar QToolButton#shieldButton[active="true"] {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff5500, stop:1 #ff2a00);
                 color: #ffffff;
                 border: none;
@@ -1439,12 +1459,30 @@ void MainWindow::applyTheme() {
                 font-weight: bold;
                 font-size: 12px;
                 min-width: 110px;
-                max-width: 200px;
+                max-width: 220px;
                 min-height: 28px;
                 max-height: 28px;
             }
-            QToolBar#mainToolbar QToolButton#shieldButton:hover {
+            QToolBar#mainToolbar QToolButton#shieldButton:hover,
+            QToolBar#mainToolbar QToolButton#shieldButton[active="true"]:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff6611, stop:1 #ff3311);
+            }
+            QToolBar#mainToolbar QToolButton#shieldButton[active="false"] {
+                background-color: #374151;
+                color: #9ca3af;
+                border: 1px solid #4b5563;
+                border-radius: 14px;
+                padding: 2px 10px;
+                font-weight: bold;
+                font-size: 12px;
+                min-width: 110px;
+                max-width: 220px;
+                min-height: 28px;
+                max-height: 28px;
+            }
+            QToolBar#mainToolbar QToolButton#shieldButton[active="false"]:hover {
+                background-color: #4b5563;
+                color: #ffffff;
             }
             QToolBar#mainToolbar QToolButton#mainMenuButton {
                 font-size: 18px;
@@ -1673,7 +1711,8 @@ void MainWindow::applyTheme() {
                 background-color: rgba(100, 116, 139, 0.25);
                 border-radius: 9px;
             }
-            QToolBar#mainToolbar QToolButton#shieldButton {
+            QToolBar#mainToolbar QToolButton#shieldButton,
+            QToolBar#mainToolbar QToolButton#shieldButton[active="true"] {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff5500, stop:1 #ff2a00);
                 color: #ffffff;
                 border: none;
@@ -1682,12 +1721,30 @@ void MainWindow::applyTheme() {
                 font-weight: bold;
                 font-size: 12px;
                 min-width: 110px;
-                max-width: 200px;
+                max-width: 220px;
                 min-height: 28px;
                 max-height: 28px;
             }
-            QToolBar#mainToolbar QToolButton#shieldButton:hover {
+            QToolBar#mainToolbar QToolButton#shieldButton:hover,
+            QToolBar#mainToolbar QToolButton#shieldButton[active="true"]:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff6611, stop:1 #ff3311);
+            }
+            QToolBar#mainToolbar QToolButton#shieldButton[active="false"] {
+                background-color: #e2e8f0;
+                color: #64748b;
+                border: 1px solid #cbd5e1;
+                border-radius: 14px;
+                padding: 2px 10px;
+                font-weight: bold;
+                font-size: 12px;
+                min-width: 110px;
+                max-width: 220px;
+                min-height: 28px;
+                max-height: 28px;
+            }
+            QToolBar#mainToolbar QToolButton#shieldButton[active="false"]:hover {
+                background-color: #cbd5e1;
+                color: #1e293b;
             }
             QToolBar#mainToolbar QToolButton#mainMenuButton {
                 font-size: 18px;

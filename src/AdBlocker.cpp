@@ -231,6 +231,9 @@ bool AdBlocker::shouldBlock(
 
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
+    if (!isEnabled() || !isEnabledForUrl(info.firstPartyUrl()))
+        return;
+
     if (!shouldBlock(info.requestUrl(), info.firstPartyUrl(), info.resourceType()))
         return;
 
@@ -326,6 +329,7 @@ QString AdBlocker::youtubeAdSkipScript()
     } catch(e) {}
 
     function handleYouTubeAds() {
+        if (window.__litewave_shield_disabled) return;
         const video = document.querySelector('video');
         const player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
         
