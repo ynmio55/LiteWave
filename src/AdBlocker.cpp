@@ -232,7 +232,13 @@ bool AdBlocker::shouldBlock(
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
     const QUrl reqUrl = info.requestUrl();
-    if (reqUrl.scheme() == "http" || reqUrl.scheme() == "https") {
+    const QByteArray host = normalizedHost(reqUrl.host());
+
+    // Only inject Client Hint headers on main frame navigation or Google/YouTube domains
+    // to avoid high CPU/IPC overhead on hundreds of static sub-resource requests per page.
+    if (info.resourceType() == QWebEngineUrlRequestInfo::ResourceTypeMainFrame ||
+        host == "accounts.google.com" || host == "google.com" || host == "www.google.com" ||
+        host.endsWith(".google.com") || host.endsWith(".youtube.com") || host == "youtube.com") {
 #if defined(Q_OS_WIN)
         const QByteArray chromeUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
         const QByteArray platform = "\"Windows\"";

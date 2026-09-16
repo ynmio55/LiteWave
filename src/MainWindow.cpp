@@ -207,7 +207,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   ytSkipperScript.setSourceCode(AdBlocker::youtubeAdSkipScript());
   ytSkipperScript.setInjectionPoint(QWebEngineScript::DocumentCreation);
   ytSkipperScript.setWorldId(QWebEngineScript::MainWorld);
-  ytSkipperScript.setRunsOnSubFrames(true);
+  ytSkipperScript.setRunsOnSubFrames(false);
   profile_->scripts()->insert(ytSkipperScript);
   // Register Google Auth & OAuth UserAgentData Bypass Script
   QWebEngineScript googleAuthScript;
@@ -301,7 +301,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 )JS"));
   googleAuthScript.setInjectionPoint(QWebEngineScript::DocumentCreation);
   googleAuthScript.setWorldId(QWebEngineScript::MainWorld);
-  googleAuthScript.setRunsOnSubFrames(true);
+  googleAuthScript.setRunsOnSubFrames(false);
   profile_->scripts()->insert(googleAuthScript);
 
   profile_->setHttpAcceptLanguage("th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
@@ -313,12 +313,20 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   const QString defaultUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 #endif
   profile_->setHttpUserAgent(defaultUA);
+
+  auto *webSettings = profile_->settings();
+  webSettings->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
+  webSettings->setAttribute(QWebEngineSettings::WebGLEnabled, true);
+  webSettings->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, true);
+  webSettings->setAttribute(QWebEngineSettings::PdfViewerEnabled, true);
+
   if (!privateMode_) {
     profile_->setPersistentStoragePath(storagePath);
     profile_->setCachePath(cachePath);
     profile_->setPersistentCookiesPolicy(
         QWebEngineProfile::AllowPersistentCookies);
     profile_->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
+    profile_->setHttpCacheMaximumSize(512 * 1024 * 1024);
   }
 
   // Main Central Widget

@@ -94,7 +94,12 @@ void configureSecureDns(QSettings &settings)
 
 int main(int argc, char *argv[])
 {
-    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-blink-features=AutomationControlled");
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
+            "--enable-gpu-rasterization "
+            "--enable-zero-copy "
+            "--ignore-gpu-blocklist "
+            "--enable-features=VaapiVideoDecoder,CanvasOopRasterization "
+            "--disable-blink-features=AutomationControlled");
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
     QApplication::setOrganizationName("LiteWave");
