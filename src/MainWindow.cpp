@@ -336,11 +336,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   urlBar_->setPlaceholderText("ค้นหาด้วย Google หรือระบุ URL...");
   urlBar_->setClearButtonEnabled(false);
   urlBar_->setMinimumHeight(32);
-  // Keep controls such as Shield visible; an expanding omnibox otherwise
-  // pushes them into QToolBar’s hidden overflow menu.
-  urlBar_->setMaximumWidth(820);
-  urlBar_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-  auto *urlBarAction = toolbar_->addWidget(urlBar_);
+  toolbar_->addWidget(urlBar_);
   connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
   setupUrlBarCompleter();
 
@@ -351,21 +347,13 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   // compatibility escape hatch. It reports only requests actually blocked.
   shieldBtn_ = new QToolButton(this);
   shieldBtn_->setObjectName("shieldButton");
-  shieldBtn_->setPopupMode(QToolButton::MenuButtonPopup);
+  shieldBtn_->setPopupMode(QToolButton::InstantPopup);
   shieldBtn_->setToolButtonStyle(Qt::ToolButtonTextOnly);
-  shieldBtn_->setMinimumWidth(150);
+  shieldBtn_->setMinimumWidth(126);
   shieldBtn_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
   shieldBtn_->setCursor(Qt::PointingHandCursor);
   auto *shieldMenu = new QMenu(shieldBtn_);
   shieldBtn_->setMenu(shieldMenu);
-  // Main button toggles Shield directly; the arrow opens the mode menu.
-  connect(shieldBtn_, &QToolButton::clicked, this, [this] {
-    if (!adBlocker_)
-      return;
-    adBlocker_->setEnabled(!adBlocker_->isEnabled());
-    refreshShieldUi();
-    reloadCurrentView();
-  });
   connect(shieldMenu, &QMenu::aboutToShow, this, [this, shieldMenu] {
     shieldMenu->clear();
     if (auto *oldModeGroup =
@@ -442,9 +430,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     connect(shieldSettingsAction, &QAction::triggered, this,
             &MainWindow::showSettingsDialog);
   });
-  // Insert before the expanding URL field, not at the trailing end where
-  // QToolBar can hide it inside its overflow (…) menu.
-  toolbar_->insertWidget(urlBarAction, shieldBtn_);
+  toolbar_->addWidget(shieldBtn_);
 
   // Theme Toggle Button
   themeBtn_ = new QToolButton(this);
@@ -1430,7 +1416,7 @@ void MainWindow::applyTheme() {
                 padding: 4px 10px;
                 font-weight: bold;
                 font-size: 12px;
-                min-width: 150px;
+                min-width: 126px;
                 max-width: 180px;
                 min-height: 28px;
                 max-height: 28px;
