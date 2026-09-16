@@ -78,6 +78,9 @@ if(BUILD_TESTING)
         Qt6::WebEngineCore
         LiteWaveFilterEngine
     )
+    if(WIN32)
+        target_link_libraries(ShieldTests PRIVATE ws2_32 userenv bcrypt ntdll advapi32 shell32 ole32 oleaut32)
+    endif()
     add_dependencies(ShieldTests LiteWaveFilterEngineBuild)
     add_test(NAME ShieldTests COMMAND ShieldTests)
 endif()
