@@ -1,4 +1,4 @@
-# LiteWave — เว็บเบราว์เซอร์ความเร็วสูง
+# LiteWave
 
 [![Download Windows Installer](https://img.shields.io/badge/Download_Windows-Installer_.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Setup-Windows-x64.exe)
 [![Download Windows Portable](https://img.shields.io/badge/Download_Windows-Portable_.zip-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Windows-x64-portable.zip)
@@ -7,67 +7,80 @@
 
 ---
 
-LiteWave คือเว็บเบราว์เซอร์ยุคใหม่ที่เน้นความเร็ว ความเบา และความเป็นส่วนตัว ขับเคลื่อนด้วยเอนจิน LiteWave Shield (Rust `adblock-rs` + High-Speed Scriptlets) บล็อกโฆษณา ข้ามโฆษณา YouTube อัตโนมัติ ป้องกันการติดตาม และปกป้องความเป็นส่วนตัวโดยไม่ลดทอนความเร็วในการท่องเว็บ
+LiteWave คือเว็บเบราว์เซอร์ที่เน้นความเร็วและความเป็นส่วนตัว ขับเคลื่อนด้วย LiteWave Shield ซึ่งรวมเอนจินบล็อกโฆษณาที่เขียนด้วย Rust ไว้ภายใน สามารถข้ามโฆษณา YouTube โดยอัตโนมัติ ป้องกันสคริปต์ติดตาม และรองรับการใช้งานบน Windows และ Linux
 
 ---
 
-## ⚡ คุณสมบัติเด่น
+## คุณสมบัติหลัก
 
-* 🛡️ **LiteWave Shield (Rust Core)**: ขับเคลื่อนด้วยเอนจิน `adblock-rs` ประสิทธิภาพสูง พร้อมกฎ EasyList บล็อกโฆษณา ป๊อบอัพ และสคริปต์ติดตามโดยอัตโนมัติ
-* 🎬 **YouTube Ad-Skipper**: สกัดกั้นโฆษณา YouTube ระดับโครงสร้าง JSON (`ytInitialPlayerResponse` & `ytInitialData`) และข้ามโฆษณาวิดีโออัตโนมัติ เล่นวิดีโอทันทีโดยไม่มีอาการจอดำค้างรอนาน
-* 🚀 **O(1) Media Fast-Path**: ออกแบบสตรีมมิ่งเอนจินพิเศษ ปล่อยผ่านวิดีโอสตรีมและไฟล์สื่อหลักด้วยความเร็วสูงโดยไร้ความล่าช้า (Zero-Latency Buffering)
-* 🔒 **Secure DNS (DNS-over-HTTPS)**: รองรับ Cloudflare (1.1.1.1) ในโหมด Secure-Only ปกป้องข้อมูลการท่องเว็บให้ปลอดภัย
-* 💻 **Cross-Platform**: รองรับทั้ง Windows (Installer & Portable) และ Linux (Fedora, Ubuntu ฯลฯ)
+**LiteWave Shield**
+เอนจินบล็อกโฆษณาที่สร้างด้วย Rust (`adblock-rs`) โดยใช้กฎ EasyList เป็นฐาน ทำงานในระดับ network-layer เพื่อสกัดกั้นคำขอที่ไม่ต้องการก่อนที่จะถึงเบราว์เซอร์
 
----
+**YouTube Ad-Skipper**
+ระบบสกัดกั้นโฆษณาในระดับโครงสร้างข้อมูล JSON (`ytInitialPlayerResponse` และ `ytInitialData`) ทำให้ตัวเล่นวิดีโอ YouTube รับรู้ตั้งแต่ต้นว่าไม่มีโฆษณา ส่งผลให้วิดีโอเริ่มเล่นได้ทันทีโดยไม่มีอาการหน้าจอดำรอโหลด
 
-## 📥 การดาวน์โหลดและติดตั้ง
+**Media Fast-Path**
+ทราฟฟิกที่เกี่ยวกับสตรีมวิดีโอ เช่น `googlevideo.com` และ `ytimg.com` จะถูกยกเว้นจากกระบวนการตรวจสอบทั้งหมด เพื่อลดความล่าช้าในการโหลดสื่อ
 
-### ตัวเลือกการติดตั้งสำหรับผู้ใช้ทั่วไป
-
-* Windows (แนะนำ): ดาวน์โหลด `Download Windows Installer (.exe)` แล้วเปิดไฟล์เพื่อติดตั้ง
-* Windows (Portable): ดาวน์โหลด `Download Windows Portable (.zip)` แตกไฟล์แล้วเปิด `LiteWave.exe`
-* Linux: ดาวน์โหลด `Download Linux (.tar.gz)` แตกไฟล์แล้วเปิด `LiteWave` (รวมไลบรารี Qt ที่จำเป็นไว้พร้อมใช้งาน)
-
-👉 ดูรายการดาวน์โหลดทั้งหมดได้ที่ [GitHub Releases Page](https://github.com/ynmio55/LiteWave/releases/latest)
+**Secure DNS (DNS-over-HTTPS)**
+รองรับ Cloudflare (1.1.1.1) และผู้ให้บริการ DoH อื่น ๆ ในโหมด Secure-only เพื่อป้องกันการดักรับข้อมูลในระดับ DNS
 
 ---
 
-## 🛡️ การใช้งาน LiteWave Shield
+## การดาวน์โหลดและติดตั้ง
 
-LiteWave Shield เปิดใช้งานเป็นค่าเริ่มต้น (Standard Mode) เพื่อปกป้องคุณจากโฆษณาและสคริปต์ติดตาม:
+ดูรายการไฟล์ทั้งหมดได้ที่ [GitHub Releases](https://github.com/ynmio55/LiteWave/releases/latest)
 
-* คลิกไอคอน Shield บริเวณแถบเครื่องมือด้านบนเพื่อปรับเปลี่ยนโหมด:
-  * Standard: บล็อกโฆษณา ป๊อบอัพ และโฆษณาวิดีโอ YouTube
-  * Aggressive: บล็อกเพิ่มเติมถึงระดับสคริปต์วิเคราะห์พฤติกรรม (Trackers & Analytics)
-  * ปิด Shield สำหรับเว็บนี้: ปิดการกรองชั่วคราวสำหรับเว็บไซต์ที่เลือก หากพบปัญหาการแสดงผล
-* ตัวเลขบนปุ่ม Shield แสดงจำนวนรายการโฆษณาและสคริปต์ที่ถูกบล็อกจริงในรอบการใช้งาน
+| ระบบปฏิบัติการ | รูปแบบ | วิธีใช้งาน |
+|---|---|---|
+| Windows | `LiteWave-Setup-Windows-x64.exe` | รันไฟล์ติดตั้ง |
+| Windows (Portable) | `LiteWave-Windows-x64-portable.zip` | แตกไฟล์และเปิด `LiteWave.exe` |
+| Linux | `LiteWave-Linux-x64.tar.gz` | แตกไฟล์และเปิด `LiteWave` |
 
----
-
-## 🔒 การเปิดใช้งาน Secure DNS (DNS-over-HTTPS)
-
-1. เปิด การตั้งค่า LiteWave → Secure DNS
-2. ติ๊ก เปิดใช้งาน Secure DNS และเลือก Cloudflare (1.1.1.1)
-3. กด ตกลง แล้วรีสตาร์ตโปรแกรมหนึ่งครั้ง
-4. สถานะจะแสดงเป็นสีเขียว Secure-only ปกป้องการค้นหาชื่อโดเมนจากการดักรับข้อมูล
+แพ็กเกจ Linux รวมไลบรารี Qt WebEngine ไว้แล้ว ไม่จำเป็นต้องติดตั้งเพิ่มเติม
 
 ---
 
-## 🐧 การใช้งานบน Linux (Fedora / Ubuntu)
+## การใช้งาน LiteWave Shield
 
-### กรณีวิดีโอ H.264/AAC เล่นไม่ได้บน Fedora
-หากพบบางเว็บเปิดวิดีโอแล้วหมุนค้าง ให้ติดตั้ง Codec เพิ่มเติมจาก RPM Fusion:
+LiteWave Shield เปิดใช้งานโดยอัตโนมัติในโหมด Standard เมื่อเปิดโปรแกรม
+
+การเปลี่ยนโหมดทำได้โดยคลิกที่ปุ่ม Shield บนแถบเครื่องมือ:
+
+- **Standard** — บล็อกโฆษณาและสคริปต์โฆษณา third-party โดยไม่กระทบการทำงานของเว็บโดยรวม
+- **Aggressive** — บล็อกเพิ่มเติมถึงระดับสคริปต์วิเคราะห์พฤติกรรมผู้ใช้ (Trackers และ Analytics)
+- **ปิด Shield สำหรับเว็บนี้** — ยกเว้นการกรองสำหรับเว็บไซต์ปัจจุบัน เหมาะสำหรับกรณีที่เว็บแสดงผลผิดปกติ
+
+ตัวเลขบนปุ่ม Shield แสดงจำนวนคำขอที่ถูกบล็อกจริงในการใช้งานรอบนั้น
+
+---
+
+## Secure DNS
+
+1. เปิด การตั้งค่า LiteWave แล้วไปที่ Secure DNS
+2. เลือก เปิดใช้งาน Secure DNS และเลือกผู้ให้บริการ เช่น Cloudflare (1.1.1.1)
+3. กด ตกลง แล้วรีสตาร์ตโปรแกรม
+4. สถานะจะแสดงเป็น Secure-only เมื่อระบบทำงานสมบูรณ์
+
+---
+
+## Linux — กรณีวิดีโอเล่นไม่ได้บน Fedora
+
+Qt WebEngine จาก Fedora อาจไม่รวม Codec H.264/AAC เนื่องจากข้อจำกัดด้านลิขสิทธิ์ หากพบว่าวิดีโอโหลดค้างหรือไม่เล่น ให้ติดตั้ง Codec เพิ่มเติมจาก RPM Fusion:
 
 ```bash
 sudo dnf install libavcodec-freeworld
 ```
+
 หรือสลับไปใช้ FFmpeg เวอร์ชันสมบูรณ์:
+
 ```bash
 sudo dnf swap ffmpeg-free ffmpeg --allowerasing
 ```
 
-### การประกอบและติดตั้งจากซอร์สโค้ด (Build from Source)
+---
+
+## การประกอบจากซอร์สโค้ด (Linux)
 
 ```bash
 sudo dnf install gcc-c++ cmake qt6-qtbase-devel qt6-qtwebengine-devel
@@ -80,5 +93,21 @@ sudo cmake --install build
 
 ---
 
-## 📜 ลิขสิทธิ์และการพัฒนา
-พัฒนาด้วยภาษา C++20, Qt 6.8, และ Rust (`adblock-rs`) ภายใต้สัญญาอนุญาตซอฟต์แวร์เสรี
+## การประกอบจากซอร์สโค้ด (Windows)
+
+ต้องการ Qt 6, Visual Studio 2022 และ CMake:
+
+```powershell
+cmake -S . -B build
+cmake --build build --config Release
+```
+
+ไฟล์ที่ได้จะอยู่ที่ `build/Release/LiteWave.exe`
+
+---
+
+## เทคโนโลยีที่ใช้
+
+- C++20 และ Qt 6.8 (Qt WebEngine บน Chromium)
+- Rust — เอนจินบล็อกโฆษณา (`adblock-rs`)
+- CMake — ระบบประกอบโปรแกรม
