@@ -31,8 +31,12 @@ qt_add_executable(LiteWave
     src/AdBlocker.cpp
     src/AdBlocker.h
     src/LiteWaveFilterEngine.h
+    src/search/SearchEngineManager.cpp
+    src/search/SearchEngineManager.h
     resources.qrc
 )
+
+target_include_directories(LiteWave PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/search)
 
 add_dependencies(LiteWave LiteWaveFilterEngineBuild)
 target_link_libraries(LiteWave PRIVATE
