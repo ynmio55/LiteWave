@@ -84,8 +84,8 @@ sudo dnf swap ffmpeg-free ffmpeg --allowerasing
 
 ```bash
 sudo dnf install gcc-c++ cmake qt6-qtbase-devel qt6-qtwebengine-devel
-cd ~/Documents/LiteWave
-git pull origin main
+git clone https://github.com/ynmio55/LiteWave.git
+cd LiteWave
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j"$(nproc)"
 sudo cmake --install build
