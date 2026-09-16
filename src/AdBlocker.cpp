@@ -405,36 +405,18 @@ QString AdBlocker::youtubeAdSkipScript()
             }
             return promise.then(function(response) {
                 try {
-                    const contentType = response.headers.get('content-type') || '';
-                    if (!contentType.includes('json')) return response;
-                    const decoder = new TextDecoder();
-                    const encoder = new TextEncoder();
-                    const transform = new TransformStream({
-                        flush(controller) { controller.terminate(); },
-                        transform(chunk, controller) { controller.enqueue(chunk); }
-                    });
-                    const cloned = response.clone();
-                    cloned.json().then(function(json) {
+                    return response.json().then(function(json) {
                         sanitizePlayerObj(json);
-                    }).catch(function(){});
-                    return response;
+                        return new Response(JSON.stringify(json), {
+                            status: response.status,
+                            statusText: response.statusText,
+                            headers: response.headers
+                        });
+                    }).catch(function() { return response; });
                 } catch(e) { return response; }
             });
         };
     }
-
-    (function injectPreconnect() {
-        const hosts = ['https://rr1---sn.googlevideo.com', 'https://www.youtube.com'];
-        hosts.forEach(function(h) {
-            try {
-                const link = document.createElement('link');
-                link.rel = 'preconnect';
-                link.href = h;
-                link.crossOrigin = 'anonymous';
-                (document.head || document.documentElement).appendChild(link);
-            } catch(e) {}
-        });
-    })();
 
     function handleYouTubeAds() {
         const video = document.querySelector('video');
