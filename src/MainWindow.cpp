@@ -348,6 +348,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   shieldBtn_ = new QToolButton(this);
   shieldBtn_->setObjectName("shieldButton");
   shieldBtn_->setPopupMode(QToolButton::InstantPopup);
+  shieldBtn_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+  shieldBtn_->setMinimumWidth(126);
+  shieldBtn_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
   shieldBtn_->setCursor(Qt::PointingHandCursor);
   auto *shieldMenu = new QMenu(shieldBtn_);
   shieldBtn_->setMenu(shieldMenu);
@@ -1177,14 +1180,14 @@ void MainWindow::refreshShieldUi() {
 
   const int count = adBlocker_->blockedCount();
   if (!adBlocker_->isEnabled()) {
-    shieldBtn_->setText("Shield · ปิด");
+    shieldBtn_->setText("Shield: ปิด");
     shieldBtn_->setToolTip("Shield ปิดอยู่ — คลิกเพื่อเปิดหรือกำหนดเฉพาะเว็บ");
     return;
   }
 
   const QString mode =
       adBlocker_->mode() == AdBlocker::Mode::Aggressive ? "เข้มงวด" : "มาตรฐาน";
-  shieldBtn_->setText("Shield · " + QString::number(count));
+  shieldBtn_->setText("Shield: เปิด · " + QString::number(count));
   shieldBtn_->setToolTip(
       QString("Shield %1 — บล็อกแล้ว %2 รายการ\nคลิกเพื่อเปลี่ยนโหมดหรือปิดเฉพาะเว็บ")
           .arg(mode)
@@ -1413,7 +1416,7 @@ void MainWindow::applyTheme() {
                 padding: 4px 10px;
                 font-weight: bold;
                 font-size: 12px;
-                min-width: 70px;
+                min-width: 126px;
                 max-width: 180px;
                 min-height: 28px;
                 max-height: 28px;
