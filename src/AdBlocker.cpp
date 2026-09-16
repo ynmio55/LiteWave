@@ -379,7 +379,7 @@ QString AdBlocker::youtubeAdSkipScript()
         Object.defineProperty(window, 'ytInitialPlayerResponse', {
             get() { return rawResponse; },
             set(val) { rawResponse = sanitizePlayerObj(val); },
-            configurable: false,
+            configurable: true,
             enumerable: true
         });
     } catch(e) {}
@@ -390,7 +390,7 @@ QString AdBlocker::youtubeAdSkipScript()
         Object.defineProperty(window, 'ytInitialData', {
             get() { return rawData; },
             set(val) { rawData = sanitizePlayerObj(val); },
-            configurable: false,
+            configurable: true,
             enumerable: true
         });
     } catch(e) {}
@@ -450,10 +450,27 @@ QString AdBlocker::youtubeAdSkipScript()
 
     setInterval(handleYouTubeAds, 300);
 
-    const targetNode = document.body || document.documentElement;
-    if (targetNode) {
-        const observer = new MutationObserver(handleYouTubeAds);
-        observer.observe(targetNode, { childList: true, subtree: true });
+    var _lwObserverTimer = null;
+    function _lwDebouncedHandler() {
+        if (_lwObserverTimer) return;
+        _lwObserverTimer = setTimeout(function() {
+            _lwObserverTimer = null;
+            handleYouTubeAds();
+        }, 200);
+    }
+
+    function _lwStartObserver() {
+        var targetNode = document.body || document.documentElement;
+        if (targetNode) {
+            var observer = new MutationObserver(_lwDebouncedHandler);
+            observer.observe(targetNode, { childList: true, subtree: true });
+        }
+    }
+
+    if (document.readyState === 'complete') {
+        _lwStartObserver();
+    } else {
+        window.addEventListener('load', _lwStartObserver, { once: true });
     }
 })();
 )JS");
