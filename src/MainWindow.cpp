@@ -340,7 +340,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   // pushes them into QToolBar’s hidden overflow menu.
   urlBar_->setMaximumWidth(820);
   urlBar_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-  toolbar_->addWidget(urlBar_);
+  auto *urlBarAction = toolbar_->addWidget(urlBar_);
   connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
   setupUrlBarCompleter();
 
@@ -434,7 +434,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     connect(shieldSettingsAction, &QAction::triggered, this,
             &MainWindow::showSettingsDialog);
   });
-  toolbar_->addWidget(shieldBtn_);
+  // Insert before the expanding URL field, not at the trailing end where
+  // QToolBar can hide it inside its overflow (…) menu.
+  toolbar_->insertWidget(urlBarAction, shieldBtn_);
 
   // Theme Toggle Button
   themeBtn_ = new QToolButton(this);
