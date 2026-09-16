@@ -351,13 +351,21 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   // compatibility escape hatch. It reports only requests actually blocked.
   shieldBtn_ = new QToolButton(this);
   shieldBtn_->setObjectName("shieldButton");
-  shieldBtn_->setPopupMode(QToolButton::InstantPopup);
+  shieldBtn_->setPopupMode(QToolButton::MenuButtonPopup);
   shieldBtn_->setToolButtonStyle(Qt::ToolButtonTextOnly);
-  shieldBtn_->setMinimumWidth(126);
+  shieldBtn_->setMinimumWidth(150);
   shieldBtn_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
   shieldBtn_->setCursor(Qt::PointingHandCursor);
   auto *shieldMenu = new QMenu(shieldBtn_);
   shieldBtn_->setMenu(shieldMenu);
+  // Main button toggles Shield directly; the arrow opens the mode menu.
+  connect(shieldBtn_, &QToolButton::clicked, this, [this] {
+    if (!adBlocker_)
+      return;
+    adBlocker_->setEnabled(!adBlocker_->isEnabled());
+    refreshShieldUi();
+    reloadCurrentView();
+  });
   connect(shieldMenu, &QMenu::aboutToShow, this, [this, shieldMenu] {
     shieldMenu->clear();
     if (auto *oldModeGroup =
@@ -1422,7 +1430,7 @@ void MainWindow::applyTheme() {
                 padding: 4px 10px;
                 font-weight: bold;
                 font-size: 12px;
-                min-width: 126px;
+                min-width: 150px;
                 max-width: 180px;
                 min-height: 28px;
                 max-height: 28px;
