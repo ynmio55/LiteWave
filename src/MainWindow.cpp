@@ -336,6 +336,10 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   urlBar_->setPlaceholderText("ค้นหาด้วย Google หรือระบุ URL...");
   urlBar_->setClearButtonEnabled(false);
   urlBar_->setMinimumHeight(32);
+  // Keep controls such as Shield visible; an expanding omnibox otherwise
+  // pushes them into QToolBar’s hidden overflow menu.
+  urlBar_->setMaximumWidth(820);
+  urlBar_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   toolbar_->addWidget(urlBar_);
   connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
   setupUrlBarCompleter();
