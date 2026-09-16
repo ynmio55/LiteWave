@@ -231,6 +231,18 @@ bool AdBlocker::shouldBlock(
 
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
+    const QUrl reqUrl = info.requestUrl();
+    const QByteArray host = normalizedHost(reqUrl.host());
+
+    if (host == "accounts.google.com" || host == "google.com" || host == "www.google.com" ||
+        host.endsWith(".google.com") || host.endsWith(".youtube.com") || host == "youtube.com") {
+        const QByteArray chromeUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+        info.setHttpHeader("User-Agent", chromeUa);
+        info.setHttpHeader("Sec-CH-UA", "\"Chromium\";v=\"130\", \"Google Chrome\";v=\"130\", \"Not?A_Brand\";v=\"99\"");
+        info.setHttpHeader("Sec-CH-UA-Mobile", "?0");
+        info.setHttpHeader("Sec-CH-UA-Platform", "\"Windows\"");
+    }
+
     if (!isEnabled() || !isEnabledForUrl(info.firstPartyUrl()))
         return;
 
