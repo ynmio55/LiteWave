@@ -464,13 +464,16 @@ bool AdBlocker::isThirdParty(const QUrl &request, const QUrl &firstParty)
 bool AdBlocker::isVerificationOrChallenge(const QUrl &url)
 {
     const QByteArray host = normalizedHost(url.host());
-    if (matchesDomain(host, QSet<QByteArray>{"recaptcha.net", "hcaptcha.com"}))
+    if (matchesDomain(host, QSet<QByteArray>{"recaptcha.net", "hcaptcha.com", "accounts.google.com"}))
         return true;
     if (host == "challenges.cloudflare.com")
         return true;
-    if ((host == "www.google.com" || host == "www.gstatic.com") &&
+    if ((host == "www.google.com" || host == "www.gstatic.com" || host == "accounts.google.com") &&
         (url.path().startsWith("/recaptcha/") ||
-         url.path().startsWith("/sorry/")))
+         url.path().startsWith("/sorry/") ||
+         url.path().startsWith("/v3/signin/") ||
+         url.path().startsWith("/ServiceLogin") ||
+         url.path().startsWith("/o/oauth2/")))
         return true;
     return false;
 }

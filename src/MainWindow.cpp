@@ -209,16 +209,55 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   ytSkipperScript.setWorldId(QWebEngineScript::MainWorld);
   ytSkipperScript.setRunsOnSubFrames(true);
   profile_->scripts()->insert(ytSkipperScript);
-  // Keep Qt WebEngine's real runtime user agent. A stale Linux-only Chrome
-  // spoof makes responsive, DRM, login, and payment pages select the wrong
-  // compatibility branch—especially on Windows.
+  // Register Google Auth & OAuth UserAgentData Bypass Script
+  QWebEngineScript googleAuthScript;
+  googleAuthScript.setName(QStringLiteral("LiteWaveGoogleAuthBypass"));
+  googleAuthScript.setSourceCode(QStringLiteral(R"JS(
+(function() {
+    try {
+        if (navigator.userAgentData) {
+            const mockData = {
+                brands: [
+                    { brand: 'Google Chrome', version: '130' },
+                    { brand: 'Chromium', version: '130' },
+                    { brand: 'Not?A_Brand', version: '99' }
+                ],
+                mobile: false,
+                platform: window.navigator.platform || 'Linux',
+                getHighEntropyValues: function() {
+                    return Promise.resolve({
+                        architecture: 'x86',
+                        bitness: '64',
+                        model: '',
+                        platform: window.navigator.platform || 'Linux',
+                        platformVersion: '6.5.0',
+                        uaFullVersion: '130.0.6723.69'
+                    });
+                }
+            };
+            Object.defineProperty(navigator, 'userAgentData', {
+                get: function() { return mockData; },
+                configurable: true,
+                enumerable: true
+            });
+        }
+    } catch(e) {}
+})();
+)JS"));
+  googleAuthScript.setInjectionPoint(QWebEngineScript::DocumentCreation);
+  googleAuthScript.setWorldId(QWebEngineScript::MainWorld);
+  googleAuthScript.setRunsOnSubFrames(true);
+  profile_->scripts()->insert(googleAuthScript);
+
   profile_->setHttpAcceptLanguage("th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
-  // Preserve the actual Chromium and platform version supplied by Qt, while
-  // removing the QtWebEngine product token rejected by some websites.
-  QString compatibleUserAgent = profile_->httpUserAgent();
-  compatibleUserAgent.remove(QRegularExpression(R"(\s+QtWebEngine/[^\s]+)"));
-  if (!compatibleUserAgent.isEmpty())
-    profile_->setHttpUserAgent(compatibleUserAgent);
+#if defined(Q_OS_WIN)
+  const QString defaultUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+#elif defined(Q_OS_MAC)
+  const QString defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+#else
+  const QString defaultUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+#endif
+  profile_->setHttpUserAgent(defaultUA);
   if (!privateMode_) {
     profile_->setPersistentStoragePath(storagePath);
     profile_->setCachePath(cachePath);
