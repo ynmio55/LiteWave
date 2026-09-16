@@ -88,7 +88,7 @@ git clone https://github.com/ynmio55/LiteWave.git
 cd LiteWave
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j"$(nproc)"
-sudo cmake --install build
+sudo cmake --install build && cp -f build/LiteWave ~/.local/bin/LiteWave 2>/dev/null || true
 ```
 
 ---
