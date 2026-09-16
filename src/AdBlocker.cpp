@@ -236,11 +236,20 @@ void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 
     if (host == "accounts.google.com" || host == "google.com" || host == "www.google.com" ||
         host.endsWith(".google.com") || host.endsWith(".youtube.com") || host == "youtube.com") {
+#if defined(Q_OS_WIN)
         const QByteArray chromeUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+        const QByteArray platform = "\"Windows\"";
+#elif defined(Q_OS_MAC)
+        const QByteArray chromeUa = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+        const QByteArray platform = "\"macOS\"";
+#else
+        const QByteArray chromeUa = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+        const QByteArray platform = "\"Linux\"";
+#endif
         info.setHttpHeader("User-Agent", chromeUa);
         info.setHttpHeader("Sec-CH-UA", "\"Chromium\";v=\"130\", \"Google Chrome\";v=\"130\", \"Not?A_Brand\";v=\"99\"");
         info.setHttpHeader("Sec-CH-UA-Mobile", "?0");
-        info.setHttpHeader("Sec-CH-UA-Platform", "\"Windows\"");
+        info.setHttpHeader("Sec-CH-UA-Platform", platform);
     }
 
     if (!isEnabled() || !isEnabledForUrl(info.firstPartyUrl()))
