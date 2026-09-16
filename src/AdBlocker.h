@@ -53,6 +53,7 @@ public:
     // Cosmetic rules only hide elements that identify a known ad endpoint or
     // an explicit ad slot. Network matching remains the source of truth.
     static QString cosmeticCss();
+    static QString youtubeAdSkipScript();
 
 signals:
     void configurationChanged();

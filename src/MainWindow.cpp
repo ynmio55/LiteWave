@@ -194,6 +194,15 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   profile_ = privateMode_ ? new QWebEngineProfile(this) : normalProfile;
   adBlocker_ = privateMode_ ? new AdBlocker(this, false) : normalShield;
   profile_->setUrlRequestInterceptor(adBlocker_);
+
+  // Register YouTube Ad-Skipper & Auto-Mute UserScript into profile
+  QWebEngineScript ytSkipperScript;
+  ytSkipperScript.setName(QStringLiteral("LiteWaveYouTubeAdSkipper"));
+  ytSkipperScript.setSourceCode(AdBlocker::youtubeAdSkipScript());
+  ytSkipperScript.setInjectionPoint(QWebEngineScript::DocumentCreation);
+  ytSkipperScript.setWorldId(QWebEngineScript::MainWorld);
+  ytSkipperScript.setRunsOnSubFrames(true);
+  profile_->scripts()->insert(ytSkipperScript);
   // Keep Qt WebEngine's real runtime user agent. A stale Linux-only Chrome
   // spoof makes responsive, DRM, login, and payment pages select the wrong
   // compatibility branch—especially on Windows.

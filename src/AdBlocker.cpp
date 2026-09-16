@@ -197,8 +197,21 @@ bool AdBlocker::shouldBlock(
     if (isVerificationOrChallenge(request))
         return false;
 
+    // Fast-path: Never block video streams, CDN assets, or Same-Site resources with Rust FFI overhead
+    const QByteArray requestHost = normalizedHost(request.host());
+    if (requestHost.endsWith("googlevideo.com") || requestHost.endsWith("ytimg.com") || requestHost.endsWith("ggpht.com"))
+        return false;
+
     if (isKnownSameSiteAdEndpoint(request, firstParty))
         return true;
+
+    // Standard mode blocks only third-party advertising infrastructure. This
+    // protects video players, CDNs, sign-in, checkout, and embedded apps that
+    // frequently use first-party or partner subdomains.
+    const bool thirdParty = isThirdParty(request, firstParty);
+    if (!thirdParty && mode() == Mode::Standard)
+        return false;
+
     if (engine_) {
         const QByteArray requestText = request.toEncoded(QUrl::FullyEncoded);
         const QByteArray sourceText = firstParty.toEncoded(QUrl::FullyEncoded);
@@ -207,17 +220,13 @@ bool AdBlocker::shouldBlock(
             return true;
     }
 
-    // Standard mode blocks only third-party advertising infrastructure. This
-    // protects video players, CDNs, sign-in, checkout, and embedded apps that
-    // frequently use first-party or partner subdomains.
-    if (!isThirdParty(request, firstParty))
+    if (!thirdParty)
         return false;
 
-    const QByteArray host = normalizedHost(request.host());
-    if (matchesDomain(host, advertisingDomains()))
+    if (matchesDomain(requestHost, advertisingDomains()))
         return true;
 
-    return mode() == Mode::Aggressive && matchesDomain(host, trackerDomains());
+    return mode() == Mode::Aggressive && matchesDomain(requestHost, trackerDomains());
 }
 
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
@@ -257,7 +266,7 @@ QByteArray AdBlocker::resourceTypeName(QWebEngineUrlRequestInfo::ResourceType ty
 QString AdBlocker::cosmeticCss()
 {
     return QStringLiteral(R"CSS(
-/* LiteWave Shield: only known ad networks and explicit ad slots. */
+/* LiteWave Shield: Cosmetic Ad Hiding Rules */
 iframe[src*="doubleclick.net"],
 iframe[src*="googlesyndication.com"],
 iframe[src*="googleadservices.com"],
@@ -271,11 +280,195 @@ iframe[src*="juicyads.com"],
 ins.adsbygoogle,
 [data-ad-client],
 [data-ad-slot],
-[data-google-query-id] {
+[data-google-query-id],
+#player-ads,
+.ytd-ad-slot-renderer,
+ytd-promoted-sparkles-web-renderer,
+ytd-display-ad-renderer,
+ytd-statement-banner-renderer,
+ytd-in-feed-ad-layout-renderer,
+ytd-banner-promo-renderer-background,
+.ytp-ad-overlay-container,
+.ytp-ad-message-container,
+#masthead-ad,
+.video-ads,
+.ytp-ad-module {
   display: none !important;
   visibility: hidden !important;
 }
 )CSS");
+}
+
+QString AdBlocker::youtubeAdSkipScript()
+{
+    return QStringLiteral(R"JS(
+(function() {
+    if (window.__litewave_yt_skipper_installed) return;
+    window.__litewave_yt_skipper_installed = true;
+
+    try {
+        const style = document.createElement('style');
+        style.textContent = `
+            .html5-video-player.ad-showing video,
+            .html5-video-player.ad-interrupting video {
+                opacity: 0 !important;
+            }
+            .html5-video-player.ad-showing .ytp-ad-player-overlay,
+            .html5-video-player.ad-showing .ytp-ad-text-overlay,
+            .html5-video-player.ad-showing .ytp-ad-overlay-container,
+            #player-ads, .ytd-ad-slot-renderer, .video-ads {
+                display: none !important;
+                visibility: hidden !important;
+            }
+        `;
+        (document.head || document.documentElement).appendChild(style);
+    } catch(e) {}
+
+    function sanitizePlayerObj(obj) {
+        if (!obj || typeof obj !== 'object') return obj;
+        
+        const keysToRemove = [
+            'adPlacements', 'playerAds', 'adSlots', 'adBreakHeartbeatParams', 
+            'adParams', 'masthead', 'promotedSparklesWebRenderer', 'playerLegacyDesktopYpcOfferRenderer'
+        ];
+
+        for (const key of keysToRemove) {
+            delete obj[key];
+        }
+
+        if (obj.playerResponse && typeof obj.playerResponse === 'object') {
+            for (const key of keysToRemove) {
+                delete obj.playerResponse[key];
+            }
+        }
+        if (obj.response && typeof obj.response === 'object') {
+            for (const key of keysToRemove) {
+                delete obj.response[key];
+            }
+        }
+        if (obj.args && typeof obj.args === 'object') {
+            delete obj.args.ad3_module;
+            delete obj.args.ad_flags;
+        }
+        return obj;
+    }
+
+    const origParse = JSON.parse;
+    if (origParse) {
+        JSON.parse = function(...args) {
+            const res = origParse.apply(this, args);
+            if (res && typeof res === 'object') {
+                sanitizePlayerObj(res);
+            }
+            return res;
+        };
+    }
+
+    let rawResponse = window.ytInitialPlayerResponse;
+    if (rawResponse) { sanitizePlayerObj(rawResponse); }
+    try {
+        Object.defineProperty(window, 'ytInitialPlayerResponse', {
+            get() { return rawResponse; },
+            set(val) { rawResponse = sanitizePlayerObj(val); },
+            configurable: false,
+            enumerable: true
+        });
+    } catch(e) {}
+
+    let rawData = window.ytInitialData;
+    if (rawData) { sanitizePlayerObj(rawData); }
+    try {
+        Object.defineProperty(window, 'ytInitialData', {
+            get() { return rawData; },
+            set(val) { rawData = sanitizePlayerObj(val); },
+            configurable: false,
+            enumerable: true
+        });
+    } catch(e) {}
+
+    const origFetch = window.fetch;
+    if (origFetch) {
+        window.fetch = async function(...args) {
+            const response = await origFetch.apply(this, args);
+            const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url);
+            if (url && typeof url === 'string' && url.includes('/youtubei/v1/player')) {
+                try {
+                    const clone = response.clone();
+                    const json = await clone.json();
+                    sanitizePlayerObj(json);
+                    return new Response(JSON.stringify(json), {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers
+                    });
+                } catch(e) {}
+            }
+            return response;
+        };
+    }
+
+    function handleYouTubeAds() {
+        const video = document.querySelector('video');
+        const player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+        
+        const isAdShowing = player && (
+            player.classList.contains('ad-showing') || 
+            player.classList.contains('ad-interrupting') ||
+            document.querySelector('.ytp-ad-player-overlay, .ytp-ad-text-overlay, .video-ads')
+        );
+
+        if (video && isAdShowing) {
+            video.muted = true;
+            video.playbackRate = 16.0;
+
+            const skipButtonSelectors = [
+                '.ytp-ad-skip-button',
+                '.ytp-skip-ad-button-modern',
+                '.ytp-ad-skip-button-slot',
+                '.ytp-ad-skip-button-text',
+                'button.ytp-ad-skip-button',
+                '.ytp-ad-overlay-close-button',
+                '.ytp-ad-skip-button-container'
+            ];
+
+            let clicked = false;
+            for (const selector of skipButtonSelectors) {
+                const btn = document.querySelector(selector);
+                if (btn) {
+                    try { btn.click(); clicked = true; } catch(e) {}
+                }
+            }
+
+            if (!clicked && isFinite(video.duration) && video.duration > 0) {
+                if (video.currentTime < video.duration - 0.2) {
+                    video.currentTime = Math.max(0, video.duration - 0.1);
+                }
+                try { video.dispatchEvent(new Event('ended')); } catch(e) {}
+            }
+
+            if (player && typeof player.skipAd === 'function') {
+                try { player.skipAd(); } catch(e) {}
+            }
+        } else if (video && video.playbackRate > 1.0) {
+            video.playbackRate = 1.0;
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', handleYouTubeAds);
+    } else {
+        handleYouTubeAds();
+    }
+
+    setInterval(handleYouTubeAds, 50);
+
+    const targetNode = document.body || document.documentElement;
+    if (targetNode) {
+        const observer = new MutationObserver(handleYouTubeAds);
+        observer.observe(targetNode, { childList: true, subtree: true });
+    }
+})();
+)JS");
 }
 
 QByteArray AdBlocker::normalizedHost(const QString &host)
