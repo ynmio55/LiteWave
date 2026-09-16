@@ -9,7 +9,7 @@ else()
 endif()
 add_custom_command(OUTPUT ${LITEWAVE_ENGINE_LIB}
   COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${LITEWAVE_RUST_TARGET} ${CARGO_EXECUTABLE} build --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/shield_engine/Cargo.toml --release
-  DEPENDS shield_engine/Cargo.toml shield_engine/src/lib.rs shield_engine/filters/easylist_general_block.txt)
+  DEPENDS shield_engine/Cargo.toml shield_engine/src/lib.rs shield_engine/filters/easylist_general_block.txt shield_engine/filters/easylist_adservers.txt)
 add_custom_target(LiteWaveFilterEngineBuild DEPENDS ${LITEWAVE_ENGINE_LIB})
 add_library(LiteWaveFilterEngine STATIC IMPORTED GLOBAL)
 set_target_properties(LiteWaveFilterEngine PROPERTIES IMPORTED_LOCATION ${LITEWAVE_ENGINE_LIB})
