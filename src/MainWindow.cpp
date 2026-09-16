@@ -214,22 +214,55 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   googleAuthScript.setName(QStringLiteral("LiteWaveGoogleAuthBypass"));
   googleAuthScript.setSourceCode(QStringLiteral(R"JS(
 (function() {
+    'use strict';
+    try {
+        Object.defineProperty(navigator, 'vendor', {
+            get: function() { return 'Google Inc.'; },
+            configurable: true
+        });
+    } catch(e) {}
+
+    try {
+        if (!window.chrome) {
+            window.chrome = {
+                runtime: {},
+                loadTimes: function() {},
+                csi: function() {},
+                app: {}
+            };
+        }
+    } catch(e) {}
+
+    try {
+        Object.defineProperty(navigator, 'webdriver', {
+            get: function() { return false; },
+            configurable: true
+        });
+    } catch(e) {}
+
+    try {
+        if (location.hostname.endsWith('google.com') || location.hostname.endsWith('youtube.com')) {
+            if ('qt' in window) try { delete window.qt; } catch(e) {}
+            if ('QtWebEngine' in window) try { delete window.QtWebEngine; } catch(e) {}
+        }
+    } catch(e) {}
+
     try {
         if (navigator.userAgentData) {
             const mockData = {
                 brands: [
-                    { brand: 'Google Chrome', version: '130' },
                     { brand: 'Chromium', version: '130' },
+                    { brand: 'Google Chrome', version: '130' },
                     { brand: 'Not?A_Brand', version: '99' }
                 ],
                 mobile: false,
-                platform: window.navigator.platform || 'Linux',
+                platform: 'Linux',
                 getHighEntropyValues: function() {
                     return Promise.resolve({
                         architecture: 'x86',
                         bitness: '64',
                         model: '',
-                        platform: window.navigator.platform || 'Linux',
+                        platform: 'Linux',
                         platformVersion: '6.5.0',
                         uaFullVersion: '130.0.6723.69'
                     });
