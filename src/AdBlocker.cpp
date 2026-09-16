@@ -395,29 +395,6 @@ QString AdBlocker::youtubeAdSkipScript()
         });
     } catch(e) {}
 
-    const origFetch = window.fetch;
-    if (origFetch) {
-        window.fetch = function(...args) {
-            const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url);
-            const promise = origFetch.apply(this, args);
-            if (!url || typeof url !== 'string' || !url.includes('/youtubei/v1/player')) {
-                return promise;
-            }
-            return promise.then(function(response) {
-                try {
-                    return response.json().then(function(json) {
-                        sanitizePlayerObj(json);
-                        return new Response(JSON.stringify(json), {
-                            status: response.status,
-                            statusText: response.statusText,
-                            headers: response.headers
-                        });
-                    }).catch(function() { return response; });
-                } catch(e) { return response; }
-            });
-        };
-    }
-
     function handleYouTubeAds() {
         const video = document.querySelector('video');
         const player = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
