@@ -353,11 +353,20 @@ QString AdBlocker::youtubeAdSkipScript()
         return obj;
     }
 
+    const AD_KEYS = new Set([
+        'adPlacements','playerAds','adSlots','adBreakHeartbeatParams',
+        'adParams','masthead','promotedSparklesWebRenderer','playerLegacyDesktopYpcOfferRenderer'
+    ]);
+    function hasAdKey(obj) {
+        for (const k of AD_KEYS) { if (k in obj) return true; }
+        return ('playerResponse' in obj) || ('args' in obj);
+    }
+
     const origParse = JSON.parse;
     if (origParse) {
         JSON.parse = function(...args) {
             const res = origParse.apply(this, args);
-            if (res && typeof res === 'object') {
+            if (res && typeof res === 'object' && hasAdKey(res)) {
                 sanitizePlayerObj(res);
             }
             return res;
@@ -388,24 +397,44 @@ QString AdBlocker::youtubeAdSkipScript()
 
     const origFetch = window.fetch;
     if (origFetch) {
-        window.fetch = async function(...args) {
-            const response = await origFetch.apply(this, args);
+        window.fetch = function(...args) {
             const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url);
-            if (url && typeof url === 'string' && url.includes('/youtubei/v1/player')) {
-                try {
-                    const clone = response.clone();
-                    const json = await clone.json();
-                    sanitizePlayerObj(json);
-                    return new Response(JSON.stringify(json), {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers
-                    });
-                } catch(e) {}
+            const promise = origFetch.apply(this, args);
+            if (!url || typeof url !== 'string' || !url.includes('/youtubei/v1/player')) {
+                return promise;
             }
-            return response;
+            return promise.then(function(response) {
+                try {
+                    const contentType = response.headers.get('content-type') || '';
+                    if (!contentType.includes('json')) return response;
+                    const decoder = new TextDecoder();
+                    const encoder = new TextEncoder();
+                    const transform = new TransformStream({
+                        flush(controller) { controller.terminate(); },
+                        transform(chunk, controller) { controller.enqueue(chunk); }
+                    });
+                    const cloned = response.clone();
+                    cloned.json().then(function(json) {
+                        sanitizePlayerObj(json);
+                    }).catch(function(){});
+                    return response;
+                } catch(e) { return response; }
+            });
         };
     }
+
+    (function injectPreconnect() {
+        const hosts = ['https://rr1---sn.googlevideo.com', 'https://www.youtube.com'];
+        hosts.forEach(function(h) {
+            try {
+                const link = document.createElement('link');
+                link.rel = 'preconnect';
+                link.href = h;
+                link.crossOrigin = 'anonymous';
+                (document.head || document.documentElement).appendChild(link);
+            } catch(e) {}
+        });
+    })();
 
     function handleYouTubeAds() {
         const video = document.querySelector('video');
@@ -460,7 +489,7 @@ QString AdBlocker::youtubeAdSkipScript()
         handleYouTubeAds();
     }
 
-    setInterval(handleYouTubeAds, 50);
+    setInterval(handleYouTubeAds, 300);
 
     const targetNode = document.body || document.documentElement;
     if (targetNode) {
