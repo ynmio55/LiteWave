@@ -223,17 +223,6 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     } catch(e) {}
 
     try {
-        if (!window.chrome) {
-            window.chrome = {
-                runtime: {},
-                loadTimes: function() {},
-                csi: function() {},
-                app: {}
-            };
-        }
-    } catch(e) {}
-
-    try {
         Object.defineProperty(navigator, 'webdriver', {
             get: function() { return false; },
             configurable: true
@@ -241,39 +230,72 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     } catch(e) {}
 
     try {
-        if (location.hostname.endsWith('google.com') || location.hostname.endsWith('youtube.com')) {
-            if ('qt' in window) try { delete window.qt; } catch(e) {}
-            if ('QtWebEngine' in window) try { delete window.QtWebEngine; } catch(e) {}
+        if (!window.chrome) {
+            window.chrome = {};
         }
+        if (!window.chrome.app) {
+            window.chrome.app = {
+                isInstalled: false,
+                getIsInstalled: function() { return false; },
+                getDetails: function() { return null; },
+                installState: function() { return 'not_installed'; }
+            };
+        }
+        if (!window.chrome.runtime) {
+            window.chrome.runtime = {
+                OnInstalledReason: { INSTALL: 'install', UPDATE: 'update', CHROME_UPDATE: 'chrome_update', SHARED_MODULE_UPDATE: 'shared_module_update' },
+                OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' },
+                PlatformOs: { MAC: 'mac', WIN: 'win', ANDROID: 'android', CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd' },
+                connect: function() {},
+                sendMessage: function() {}
+            };
+        }
+        if (!window.chrome.csi) window.chrome.csi = function() {};
+        if (!window.chrome.loadTimes) window.chrome.loadTimes = function() {};
     } catch(e) {}
 
     try {
-        if (navigator.userAgentData) {
-            const mockData = {
-                brands: [
-                    { brand: 'Chromium', version: '130' },
-                    { brand: 'Google Chrome', version: '130' },
-                    { brand: 'Not?A_Brand', version: '99' }
-                ],
-                mobile: false,
-                platform: 'Linux',
-                getHighEntropyValues: function() {
-                    return Promise.resolve({
-                        architecture: 'x86',
-                        bitness: '64',
-                        model: '',
-                        platform: 'Linux',
-                        platformVersion: '6.5.0',
-                        uaFullVersion: '130.0.6723.69'
-                    });
-                }
-            };
-            Object.defineProperty(navigator, 'userAgentData', {
-                get: function() { return mockData; },
-                configurable: true,
-                enumerable: true
-            });
-        }
+        delete window.qt;
+        delete window.QtWebEngine;
+        delete window.qWebChannel;
+    } catch(e) {}
+
+    try {
+        const mockData = {
+            brands: [
+                { brand: 'Chromium', version: '130' },
+                { brand: 'Google Chrome', version: '130' },
+                { brand: 'Not?A_Brand', version: '99' }
+            ],
+            mobile: false,
+            platform: 'Linux',
+            getHighEntropyValues: function() {
+                return Promise.resolve({
+                    architecture: 'x86',
+                    bitness: '64',
+                    brands: [
+                        { brand: 'Chromium', version: '130.0.6723.69' },
+                        { brand: 'Google Chrome', version: '130.0.6723.69' },
+                        { brand: 'Not?A_Brand', version: '99.0.0.0' }
+                    ],
+                    fullVersionList: [
+                        { brand: 'Chromium', version: '130.0.6723.69' },
+                        { brand: 'Google Chrome', version: '130.0.6723.69' },
+                        { brand: 'Not?A_Brand', version: '99.0.0.0' }
+                    ],
+                    mobile: false,
+                    model: '',
+                    platform: 'Linux',
+                    platformVersion: '6.5.0',
+                    uaFullVersion: '130.0.6723.69'
+                });
+            }
+        };
+        Object.defineProperty(navigator, 'userAgentData', {
+            get: function() { return mockData; },
+            configurable: true,
+            enumerable: true
+        });
     } catch(e) {}
 })();
 )JS"));

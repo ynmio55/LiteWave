@@ -232,10 +232,7 @@ bool AdBlocker::shouldBlock(
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
     const QUrl reqUrl = info.requestUrl();
-    const QByteArray host = normalizedHost(reqUrl.host());
-
-    if (host == "accounts.google.com" || host == "google.com" || host == "www.google.com" ||
-        host.endsWith(".google.com") || host.endsWith(".youtube.com") || host == "youtube.com") {
+    if (reqUrl.scheme() == "http" || reqUrl.scheme() == "https") {
 #if defined(Q_OS_WIN)
         const QByteArray chromeUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
         const QByteArray platform = "\"Windows\"";
