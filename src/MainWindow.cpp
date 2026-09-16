@@ -89,6 +89,7 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
     p.drawLine(10, 8, 10, 12);
     p.drawPoint(10, 15);
   } else if (name == "moon") {
+    p.setBrush(color);
     QPainterPath path;
     path.moveTo(14, 3);
     path.cubicTo(8, 3, 4, 7, 4, 13);
@@ -97,11 +98,16 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
     path.closeSubpath();
     p.drawPath(path);
   } else if (name == "sun") {
+    p.setPen(QPen(color, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     p.drawEllipse(6, 6, 8, 8);
     p.drawLine(10, 2, 10, 4);
     p.drawLine(10, 16, 10, 18);
     p.drawLine(2, 10, 4, 10);
     p.drawLine(16, 10, 18, 10);
+    p.drawLine(4, 4, 6, 6);
+    p.drawLine(14, 14, 16, 16);
+    p.drawLine(4, 16, 6, 14);
+    p.drawLine(14, 6, 16, 4);
   } else if (name == "globe") {
     p.drawEllipse(3, 3, 14, 14);
     p.drawLine(3, 10, 17, 10);
@@ -358,8 +364,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   shieldBtn_->setObjectName("shieldButton");
   shieldBtn_->setPopupMode(QToolButton::InstantPopup);
   shieldBtn_->setToolButtonStyle(Qt::ToolButtonTextOnly);
-  shieldBtn_->setMinimumWidth(126);
-  shieldBtn_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+  shieldBtn_->setMinimumWidth(110);
+  shieldBtn_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
   shieldBtn_->setCursor(Qt::PointingHandCursor);
   auto *shieldMenu = new QMenu(shieldBtn_);
   shieldBtn_->setMenu(shieldMenu);
@@ -1372,22 +1378,29 @@ void MainWindow::applyTheme() {
             }
             QToolBar#mainToolbar QToolButton {
                 background-color: transparent;
-                color: #d1d5db;
+                color: #e2e8f0;
                 border: none;
-                border-radius: 14px;
-                padding: 4px;
-                font-size: 14px;
-                min-width: 28px;
-                max-width: 28px;
-                min-height: 28px;
-                max-height: 28px;
+                border-radius: 8px;
+                padding: 2px;
+                font-size: 16px;
+                font-weight: bold;
+                min-width: 32px;
+                max-width: 32px;
+                min-height: 32px;
+                max-height: 32px;
             }
             QToolBar#mainToolbar QToolButton:hover {
-                background-color: #3b3e4a;
+                background-color: #334155;
                 color: #ffffff;
             }
             QToolBar#mainToolbar QToolButton:pressed {
-                background-color: #484b59;
+                background-color: #475569;
+            }
+            QToolBar#mainToolbar QToolButton::menu-indicator,
+            QToolBar#mainToolbar QToolButton::menu-arrow {
+                image: none;
+                width: 0px;
+                height: 0px;
             }
             QLineEdit {
                 background-color: #1e2026;
@@ -1417,21 +1430,25 @@ void MainWindow::applyTheme() {
                 background-color: rgba(148, 163, 184, 0.25);
                 border-radius: 9px;
             }
-            QToolButton#shieldButton {
+            QToolBar#mainToolbar QToolButton#shieldButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff5500, stop:1 #ff2a00);
                 color: #ffffff;
                 border: none;
                 border-radius: 14px;
-                padding: 4px 10px;
+                padding: 2px 10px;
                 font-weight: bold;
                 font-size: 12px;
-                min-width: 126px;
-                max-width: 180px;
+                min-width: 110px;
+                max-width: 200px;
                 min-height: 28px;
                 max-height: 28px;
             }
-            QToolButton#shieldButton:hover {
+            QToolBar#mainToolbar QToolButton#shieldButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff6611, stop:1 #ff3311);
+            }
+            QToolBar#mainToolbar QToolButton#mainMenuButton {
+                font-size: 18px;
+                font-weight: bold;
             }
             QStackedWidget {
                 border: none;
@@ -1604,22 +1621,29 @@ void MainWindow::applyTheme() {
             }
             QToolBar#mainToolbar QToolButton {
                 background-color: transparent;
-                color: #4a4d52;
+                color: #1e293b;
                 border: none;
-                border-radius: 14px;
-                padding: 4px;
-                font-size: 14px;
-                min-width: 28px;
-                max-width: 28px;
-                min-height: 28px;
-                max-height: 28px;
+                border-radius: 8px;
+                padding: 2px;
+                font-size: 16px;
+                font-weight: bold;
+                min-width: 32px;
+                max-width: 32px;
+                min-height: 32px;
+                max-height: 32px;
             }
             QToolBar#mainToolbar QToolButton:hover {
-                background-color: #f1f3f4;
-                color: #1e1e1e;
+                background-color: #e2e8f0;
+                color: #0f172a;
             }
             QToolBar#mainToolbar QToolButton:pressed {
-                background-color: #e8eaed;
+                background-color: #cbd5e1;
+            }
+            QToolBar#mainToolbar QToolButton::menu-indicator,
+            QToolBar#mainToolbar QToolButton::menu-arrow {
+                image: none;
+                width: 0px;
+                height: 0px;
             }
             QLineEdit {
                 background-color: #f1f3f4;
@@ -1649,21 +1673,25 @@ void MainWindow::applyTheme() {
                 background-color: rgba(100, 116, 139, 0.25);
                 border-radius: 9px;
             }
-            QToolButton#shieldButton {
+            QToolBar#mainToolbar QToolButton#shieldButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff5500, stop:1 #ff2a00);
                 color: #ffffff;
                 border: none;
                 border-radius: 14px;
-                padding: 4px 10px;
+                padding: 2px 10px;
                 font-weight: bold;
                 font-size: 12px;
-                min-width: 70px;
-                max-width: 180px;
+                min-width: 110px;
+                max-width: 200px;
                 min-height: 28px;
                 max-height: 28px;
             }
-            QToolButton#shieldButton:hover {
+            QToolBar#mainToolbar QToolButton#shieldButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff6611, stop:1 #ff3311);
+            }
+            QToolBar#mainToolbar QToolButton#mainMenuButton {
+                font-size: 18px;
+                font-weight: bold;
             }
             QStackedWidget {
                 border: none;
