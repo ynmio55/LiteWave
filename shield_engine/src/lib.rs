@@ -1,6 +1,6 @@
 use std::ffi::{CStr,c_char,c_int};use std::sync::OnceLock;
 use adblock::{Engine,request::Request};
-const LIST:&str=include_str!("../filters/easylist_general_block.txt");
+const LIST:&str=concat!(include_str!("../filters/easylist_general_block.txt"), "\n", include_str!("../filters/easylist_adservers.txt"));
 struct LiteWaveAdblockEngine{engine:Engine,rules:usize}
 static ENGINE:OnceLock<LiteWaveAdblockEngine>=OnceLock::new();
 fn shared()->&'static LiteWaveAdblockEngine{ENGINE.get_or_init(||{let rules=LIST.lines().filter(|line|!line.is_empty()&&!line.starts_with('!')).count();LiteWaveAdblockEngine{engine:Engine::new_with_list_text(LIST.to_string()),rules}})}
