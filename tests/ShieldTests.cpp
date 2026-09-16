@@ -12,6 +12,7 @@ private slots:
     void aggressiveAddsTrackerBlocking();
     void siteExceptionRestoresCompatibility();
     void popupBlocksAreCounted();
+    void bundledEasyListBlocksAdServer();
 };
 
 void ShieldTests::standardBlocksKnownThirdPartyAdvertising()
@@ -65,6 +66,16 @@ void ShieldTests::aggressiveAddsTrackerBlocking()
     QVERIFY(blocker.shouldBlock(
         QUrl("https://www.google-analytics.com/analytics.js"),
         QUrl("https://news.example.com/story"),
+        QWebEngineUrlRequestInfo::ResourceTypeScript));
+}
+
+void ShieldTests::bundledEasyListBlocksAdServer()
+{
+    AdBlocker blocker(nullptr, false);
+    blocker.setEnabled(true);
+    QVERIFY(blocker.shouldBlock(
+        QUrl("https://000491b06a.com/ad.js"),
+        QUrl("https://news.example.com/article"),
         QWebEngineUrlRequestInfo::ResourceTypeScript));
 }
 
