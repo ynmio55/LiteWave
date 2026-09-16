@@ -1,5 +1,19 @@
 cmake_minimum_required(VERSION 3.21)
-project(LiteWave VERSION 1.0.3 LANGUAGES CXX)
+project(LiteWave VERSION 1.1.0 LANGUAGES CXX)
+find_program(CARGO_EXECUTABLE cargo REQUIRED)
+set(LITEWAVE_RUST_TARGET ${CMAKE_CURRENT_BINARY_DIR}/rust-target)
+if(WIN32)
+  set(LITEWAVE_ENGINE_LIB ${LITEWAVE_RUST_TARGET}/release/litewave_adblock_engine.lib)
+else()
+  set(LITEWAVE_ENGINE_LIB ${LITEWAVE_RUST_TARGET}/release/liblitewave_adblock_engine.a)
+endif()
+add_custom_command(OUTPUT ${LITEWAVE_ENGINE_LIB}
+  COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${LITEWAVE_RUST_TARGET} ${CARGO_EXECUTABLE} build --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/shield_engine/Cargo.toml --release
+  DEPENDS shield_engine/Cargo.toml shield_engine/src/lib.rs shield_engine/filters/easylist_general_block.txt)
+add_custom_target(LiteWaveFilterEngineBuild DEPENDS ${LITEWAVE_ENGINE_LIB})
+add_library(LiteWaveFilterEngine STATIC IMPORTED GLOBAL)
+set_target_properties(LiteWaveFilterEngine PROPERTIES IMPORTED_LOCATION ${LITEWAVE_ENGINE_LIB})
+add_dependencies(LiteWaveFilterEngine LiteWaveFilterEngineBuild)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,9 +30,11 @@ qt_add_executable(LiteWave
     src/MainWindow.h
     src/AdBlocker.cpp
     src/AdBlocker.h
+    src/LiteWaveFilterEngine.h
     resources.qrc
 )
 
+add_dependencies(LiteWave LiteWaveFilterEngineBuild)
 target_link_libraries(LiteWave PRIVATE
     Qt6::Widgets
     Qt6::PrintSupport
@@ -26,9 +42,11 @@ target_link_libraries(LiteWave PRIVATE
     Qt6::WebEngineCore
     Qt6::Network
     Qt6::Concurrent
+    LiteWaveFilterEngine
 )
 
 if(WIN32)
+    target_link_libraries(LiteWave PRIVATE ws2_32 userenv bcrypt ntdll advapi32 shell32 ole32 oleaut32)
     set_target_properties(LiteWave PROPERTIES WIN32_EXECUTABLE TRUE)
     target_sources(LiteWave PRIVATE assets/litewave.rc)
 endif()
@@ -58,6 +76,8 @@ if(BUILD_TESTING)
     target_link_libraries(ShieldTests PRIVATE
         Qt6::Test
         Qt6::WebEngineCore
+        LiteWaveFilterEngine
     )
+    add_dependencies(ShieldTests LiteWaveFilterEngineBuild)
     add_test(NAME ShieldTests COMMAND ShieldTests)
 endif()

@@ -1,4 +1,5 @@
 #include "AdBlocker.h"
+#include "LiteWaveFilterEngine.h"
 
 #include <QSettings>
 
@@ -49,6 +50,8 @@ bool isWebUrl(const QUrl &url)
 AdBlocker::AdBlocker(QObject *parent, bool persistent)
     : QWebEngineUrlRequestInterceptor(parent), persistent_(persistent)
 {
+    engine_ = lw_adblock_engine_create();
+
     if (!persistent_)
         return;
 
@@ -170,6 +173,11 @@ bool AdBlocker::isEnabledForUrl(const QUrl &url) const
     return isEnabled() && isWebUrl(url) && !isSiteAllowed(url);
 }
 
+AdBlocker::~AdBlocker()
+{
+    lw_adblock_engine_destroy(engine_);
+}
+
 bool AdBlocker::shouldBlock(
     const QUrl &request, const QUrl &firstParty,
     QWebEngineUrlRequestInfo::ResourceType resourceType) const
@@ -191,6 +199,13 @@ bool AdBlocker::shouldBlock(
 
     if (isKnownSameSiteAdEndpoint(request, firstParty))
         return true;
+    if (engine_) {
+        const QByteArray requestText = request.toEncoded(QUrl::FullyEncoded);
+        const QByteArray sourceText = firstParty.toEncoded(QUrl::FullyEncoded);
+        const QByteArray kind = resourceTypeName(resourceType);
+        if (lw_adblock_engine_should_block(engine_, requestText.constData(), sourceText.constData(), kind.constData()))
+            return true;
+    }
 
     // Standard mode blocks only third-party advertising infrastructure. This
     // protects video players, CDNs, sign-in, checkout, and embedded apps that
@@ -231,8 +246,12 @@ void AdBlocker::recordBlockedPopup()
 
 int AdBlocker::ruleCount() const
 {
-    // Three same-site advertising endpoints are also checked explicitly.
-    return advertisingDomains().size() + trackerDomains().size() + 3;
+    return engine_ ? lw_adblock_engine_rule_count(engine_) : advertisingDomains().size() + trackerDomains().size() + 3;
+}
+QByteArray AdBlocker::resourceTypeName(QWebEngineUrlRequestInfo::ResourceType type)
+{
+    using Type=QWebEngineUrlRequestInfo;
+    switch(type){case Type::ResourceTypeScript:return "script";case Type::ResourceTypeStylesheet:return "stylesheet";case Type::ResourceTypeImage:return "image";case Type::ResourceTypeMedia:return "media";case Type::ResourceTypeSubFrame:return "subdocument";case Type::ResourceTypeXhr:return "xmlhttprequest";default:return "other";}
 }
 
 QString AdBlocker::cosmeticCss()

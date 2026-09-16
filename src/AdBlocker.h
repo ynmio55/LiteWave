@@ -8,6 +8,8 @@
 #include <QWebEngineUrlRequestInterceptor>
 #include <QWebEngineUrlRequestInfo>
 
+struct LiteWaveAdblockEngine;
+
 // LiteWave Shield deliberately uses a small, auditable network-rule set.
 // It only blocks known advertising endpoints, and it never blocks main-frame
 // navigation, verification pages, or a site explicitly allowed by the user.
@@ -60,6 +62,7 @@ private:
     static bool matchesDomain(const QByteArray &host, const QSet<QByteArray> &domains);
     static bool isThirdParty(const QUrl &request, const QUrl &firstParty);
     static bool isVerificationOrChallenge(const QUrl &url);
+    static QByteArray resourceTypeName(QWebEngineUrlRequestInfo::ResourceType resourceType);
     static bool isKnownSameSiteAdEndpoint(const QUrl &request,
                                           const QUrl &firstParty);
 
@@ -71,4 +74,5 @@ private:
     mutable QReadWriteLock lock_;
     QSet<QByteArray> allowedSites_;
     bool persistent_ = true;
+    LiteWaveAdblockEngine *engine_ = nullptr;
 };

@@ -1,0 +1,9 @@
+[package]
+name="litewave-adblock-engine"
+version="1.0.0"
+edition="2021"
+license="GPL-3.0-only"
+[lib]
+crate-type=["staticlib"]
+[dependencies]
+adblock={version="0.13.3",default-features=false,features=["embedded-domain-resolver","full-regex-handling"]}
