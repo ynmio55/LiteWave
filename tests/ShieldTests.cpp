@@ -27,9 +27,9 @@ void ShieldTests::standardBlocksKnownThirdPartyAdvertising()
         QWebEngineUrlRequestInfo::ResourceTypeScript));
 
     QVERIFY(blocker.shouldBlock(
-        QUrl("https://www.youtube.com/api/stats/ads?event=ad"),
-        QUrl("https://www.youtube.com/watch?v=example"),
-        QWebEngineUrlRequestInfo::ResourceTypeXhr));
+        QUrl("https://www.google.com/pagead/1p-user-list/12345/"),
+        QUrl("https://news.example.com/story"),
+        QWebEngineUrlRequestInfo::ResourceTypeScript));
 }
 
 void ShieldTests::standardKeepsNavigationAndUnknownResources()
