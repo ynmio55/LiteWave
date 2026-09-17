@@ -2466,7 +2466,32 @@ void MainWindow::loadHome(QWebEngineView *view) {
   const bool enableSuggestions = st.value("search/enableSuggestions", true).toBool();
   const auto curEngine = SearchEngineManager::instance().currentEngine();
 
-  QString engineOptionsHtml;
+  auto getEngineIconSvg = [](const QString &name) -> QString {
+    if (name.contains("Google", Qt::CaseInsensitive)) {
+      return R"(<svg width="15" height="15" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.93 6.72-4.93z"/></svg>)";
+    }
+    if (name.contains("DuckDuckGo", Qt::CaseInsensitive)) {
+      return R"(<svg width="15" height="15" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#DE5833"/><circle cx="12" cy="12" r="5" fill="#FFFFFF"/><circle cx="13" cy="11" r="1.5" fill="#333333"/><path d="M7 14c2 3 8 3 10 0" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/></svg>)";
+    }
+    if (name.contains("Brave", Qt::CaseInsensitive)) {
+      return R"(<svg width="15" height="15" viewBox="0 0 24 24" fill="#FB542B"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4.1a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zm0 14.4c-3.1-1.1-5.7-4.4-6.3-8 1.8.8 4.2 1.2 6.3 1.2s4.5-.4 6.3-1.2c-.6 3.6-3.2 6.9-6.3 8z"/></svg>)";
+    }
+    if (name.contains("Bing", Qt::CaseInsensitive)) {
+      return R"(<svg width="15" height="15" viewBox="0 0 24 24" fill="#0078D4"><path d="M5 3v18l5-2.8 5.7 3.8 3.3-2.2V9.2L13.8 6.5 10 8.8V3H5zm7.8 7.3l2.8 1.4-4.8 2.6V8.7l2 1.6z"/></svg>)";
+    }
+    return R"(<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>)";
+  };
+
+  QString curEngineShort = curEngine.name;
+  if (curEngineShort.contains("Brave")) curEngineShort = "Brave";
+  else if (curEngineShort.contains("Google")) curEngineShort = "Google";
+  else if (curEngineShort.contains("DuckDuckGo")) curEngineShort = "DuckDuckGo";
+  else if (curEngineShort.contains("Bing")) curEngineShort = "Bing";
+  else if (curEngineShort.contains("LiteWave")) curEngineShort = "Custom";
+  const QString curEngineName = curEngineShort.isEmpty() ? "Google" : curEngineShort;
+  const QString curIconSvg = getEngineIconSvg(curEngineName);
+
+  QString engineDropdownHtml;
   for (const auto &eng : SearchEngineManager::instance().availableEngines()) {
     const bool sel = (eng.id == curEngine.id);
     QString shortName = eng.name;
@@ -2475,16 +2500,18 @@ void MainWindow::loadHome(QWebEngineView *view) {
     else if (shortName.contains("DuckDuckGo")) shortName = "DuckDuckGo";
     else if (shortName.contains("Bing")) shortName = "Bing";
     else if (shortName.contains("LiteWave")) shortName = "Custom";
-    engineOptionsHtml += QString(R"(<option value="%1"%2>%3</option>)")
-                           .arg(eng.id, sel ? " selected" : "", shortName);
+
+    const QString iconSvg = getEngineIconSvg(shortName);
+    engineDropdownHtml += QString(R"ITEM(
+      <div class="engine-option%1" data-id="%2" data-name="%3" onclick="selectEngine('%2', '%3', event)">
+        <span class="engine-option-icon">%4</span>
+        <span class="engine-option-name">%3</span>
+        <svg class="engine-check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>)ITEM")
+      .arg(sel ? " selected" : "", eng.id, shortName, iconSvg);
   }
-  QString curEngineShort = curEngine.name;
-  if (curEngineShort.contains("Brave")) curEngineShort = "Brave";
-  else if (curEngineShort.contains("Google")) curEngineShort = "Google";
-  else if (curEngineShort.contains("DuckDuckGo")) curEngineShort = "DuckDuckGo";
-  else if (curEngineShort.contains("Bing")) curEngineShort = "Bing";
-  else if (curEngineShort.contains("LiteWave")) curEngineShort = "Custom";
-  const QString curEngineName = curEngineShort.isEmpty() ? "Google" : curEngineShort;
 
   const QString html = QString(R"HTML(
 <!doctype html>
@@ -2616,44 +2643,112 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  padding: 4px 6px 4px 8px;
-  border-radius: 16px;
+  gap: 7px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 18px;
   background: rgba(2, 132, 199, 0.08);
   color: %3;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
   flex-shrink: 0;
+  border: 1px solid transparent;
 }
 .search-engine-picker:hover {
-  background-color: rgba(2, 132, 199, 0.16);
+  background-color: rgba(2, 132, 199, 0.15);
+  border-color: rgba(2, 132, 199, 0.25);
 }
-.search-engine-picker select {
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  border: none;
-  color: inherit;
+.search-engine-picker.active {
+  background-color: rgba(2, 132, 199, 0.2);
+  border-color: rgba(2, 132, 199, 0.4);
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.18);
+}
+.engine-selected-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+.engine-selected-name {
   font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
-  outline: none;
-  max-width: 82px;
-  padding-right: 14px;
-  text-overflow: ellipsis;
+  color: inherit;
   white-space: nowrap;
-  overflow: hidden;
-}
-.search-engine-picker select option {
-  background-color: %2;
-  color: %3;
-  font-weight: normal;
 }
 .chevron-icon {
-  position: absolute;
-  right: 6px;
-  pointer-events: none;
   color: %4;
+  margin-left: 1px;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.search-engine-picker.active .chevron-icon {
+  transform: rotate(180deg);
+}
+.engine-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 170px;
+  background: %2;
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid %5;
+  border-radius: 16px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(2, 132, 199, 0.1);
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 600;
+  transform-origin: top left;
+  animation: engineMenuAnim 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes engineMenuAnim {
+  from { opacity: 0; transform: scale(0.93) translateY(-6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.search-engine-picker.active .engine-dropdown-menu {
+  display: flex;
+}
+.engine-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: %3;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+.engine-option:hover {
+  background: rgba(2, 132, 199, 0.12);
+  color: #0284c7;
+}
+.engine-option.selected {
+  background: rgba(2, 132, 199, 0.16);
+  color: #0284c7;
+  font-weight: 600;
+}
+.engine-option-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.engine-option-name {
+  flex: 1;
+}
+.engine-check-icon {
+  opacity: 0;
+  color: #0284c7;
+  transition: opacity 0.15s ease;
+}
+.engine-option.selected .engine-check-icon {
+  opacity: 1;
 }
 .search-divider {
   width: 1px;
@@ -3017,13 +3112,16 @@ body {
 
 <div class="search-container">
   <form class="search-form" onsubmit="return submitSearch(event)">
-    <div class="search-engine-picker" title="เลือกเครื่องมือค้นหา">
-      <select id="engine" name="engine" onchange="onEngineChange()">
-        %7
-      </select>
-      <svg class="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <div class="search-engine-picker" id="enginePicker" onclick="toggleEngineMenu(event)" title="เลือกเครื่องมือค้นหา">
+      <input type="hidden" id="engine" name="engine" value="%7">
+      <div class="engine-selected-icon" id="engineCurrentIcon">%11</div>
+      <span class="engine-selected-name" id="engineCurrentName">%8</span>
+      <svg class="chevron-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="6 9 12 15 18 9"></polyline>
       </svg>
+      <div class="engine-dropdown-menu" id="engineMenu" onclick="event.stopPropagation()">
+        %12
+      </div>
     </div>
     <div class="search-divider"></div>
     <input id="q" name="q" type="search" autofocus placeholder="ค้นหาด้วย %8 หรือป้อน URL..." autocomplete="off" oninput="onSearchInput(this.value)" onkeydown="onSearchKeyDown(event)">
@@ -3098,20 +3196,46 @@ function submitSearch(event) {
   return false;
 }
 
-function onEngineChange() {
-  const sel = document.getElementById('engine');
-  const engineName = sel.options[sel.selectedIndex].text;
-  document.getElementById('q').placeholder = 'ค้นหาด้วย ' + engineName + ' หรือป้อน URL...';
-  localStorage.setItem('litewave_preferred_engine', sel.value);
+function toggleEngineMenu(e) {
+  if (e) e.stopPropagation();
+  const picker = document.getElementById('enginePicker');
+  if (picker) picker.classList.toggle('active');
+}
+
+function selectEngine(id, name, e) {
+  if (e) e.stopPropagation();
+  const input = document.getElementById('engine');
+  if (input) input.value = id;
+  const nameEl = document.getElementById('engineCurrentName');
+  if (nameEl) nameEl.textContent = name;
+
+  document.querySelectorAll('.engine-option').forEach(opt => {
+    if (opt.dataset.id === id) {
+      opt.classList.add('selected');
+      const iconSpan = opt.querySelector('.engine-option-icon');
+      if (iconSpan) {
+        const curIcon = document.getElementById('engineCurrentIcon');
+        if (curIcon) curIcon.innerHTML = iconSpan.innerHTML;
+      }
+    } else {
+      opt.classList.remove('selected');
+    }
+  });
+
+  const picker = document.getElementById('enginePicker');
+  if (picker) picker.classList.remove('active');
+
+  const qInput = document.getElementById('q');
+  if (qInput) qInput.placeholder = 'ค้นหาด้วย ' + name + ' หรือป้อน URL...';
+  localStorage.setItem('litewave_preferred_engine', id);
 }
 
 window.addEventListener('DOMContentLoaded', () => {
   const pref = localStorage.getItem('litewave_preferred_engine');
   if (pref) {
-    const sel = document.getElementById('engine');
-    if (sel && sel.value !== pref) {
-      sel.value = pref;
-      onEngineChange();
+    const opt = document.querySelector('.engine-option[data-id="' + pref + '"]');
+    if (opt) {
+      selectEngine(pref, opt.dataset.name);
     }
   }
 });
@@ -3494,6 +3618,10 @@ function onSearchKeyDown(e) {
 }
 
 document.addEventListener('click', (e) => {
+  const picker = document.getElementById('enginePicker');
+  if (picker && !picker.contains(e.target)) {
+    picker.classList.remove('active');
+  }
   const box = document.getElementById('suggestionsBox');
   if (box && !e.target.closest('.search-container')) {
     box.classList.remove('active');
@@ -3506,9 +3634,9 @@ renderShortcuts();
 </html>
 )HTML")
     .arg(ambientGrad, cardBg, textCol, subCol, borderCol,
-         QString::number(blockedCount), engineOptionsHtml, curEngineName,
+         QString::number(blockedCount), curEngine.id, curEngineName,
          enableSuggestions ? "true" : "false")
-    .arg(logoBase64);
+    .arg(logoBase64, curIconSvg, engineDropdownHtml);
 
   view->setHtml(html, QUrl("https://litewave.home/"));
 }
