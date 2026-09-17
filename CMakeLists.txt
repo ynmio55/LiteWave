@@ -66,6 +66,9 @@ install(FILES packaging/LiteWave.desktop
 install(FILES assets/litewave.svg
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
         RENAME litewave.svg)
+install(FILES assets/litewave.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+        RENAME litewave.png)
 
 if(MSVC)
     target_compile_options(LiteWave PRIVATE /utf-8)

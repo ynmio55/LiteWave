@@ -236,7 +236,10 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
       progress_(new QProgressBar(this)), toolbar_(nullptr) {
   setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
   setWindowTitle("LiteWave");
-  setWindowIcon(QIcon(":/icons/litewave.svg"));
+  QIcon appIcon;
+  appIcon.addFile(":/icons/litewave.png");
+  appIcon.addFile(":/icons/litewave.svg");
+  setWindowIcon(appIcon);
   resize(1320, 840);
 
   privateMode_ = privateMode;
@@ -818,7 +821,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
   s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
 #endif
-  const int index = tabBar_->addTab("LiteWave");
+  const int index = tabBar_->addTab(QIcon(":/icons/litewave.png"), "LiteWave");
   tabStack_->addWidget(view);
   tabBar_->setCurrentIndex(index);
   tabStack_->setCurrentIndex(index);
@@ -1415,6 +1418,9 @@ void MainWindow::updateTabTitle(const QString &title) {
   if (index >= 0) {
     tabBar_->setTabText(index, displayTitle);
     tabBar_->setTabToolTip(index, title);
+    if (view && (view->url().host() == "litewave.home" || view->url().scheme() == "litewave" || displayTitle == "LiteWave")) {
+      tabBar_->setTabIcon(index, QIcon(":/icons/litewave.png"));
+    }
   }
   if (view == currentView()) {
     if (displayTitle == "LiteWave" || displayTitle.isEmpty()) {
@@ -2364,6 +2370,19 @@ void MainWindow::setupUrlBarCompleter() {
 }
 
 void MainWindow::loadHome(QWebEngineView *view) {
+  const int idx = tabStack_->indexOf(view);
+  if (idx >= 0) {
+    tabBar_->setTabIcon(idx, QIcon(":/icons/litewave.png"));
+  }
+
+  static QString logoBase64;
+  if (logoBase64.isEmpty()) {
+    QFile file(":/icons/litewave.png");
+    if (file.open(QIODevice::ReadOnly)) {
+      logoBase64 = QString::fromLatin1(file.readAll().toBase64());
+    }
+  }
+
   const int blockedCount = adBlocker_ ? adBlocker_->blockedCount() : 0;
   const QString ambientGrad = darkMode_
       ? "radial-gradient(circle at 50% -10%, rgba(14, 165, 233, 0.22), transparent 55%), radial-gradient(circle at 85% 15%, rgba(59, 130, 246, 0.12), transparent 45%), #090d16"
@@ -2426,12 +2445,21 @@ body {
   user-select: none;
 }
 .brand-badge {
-  margin-bottom: 12px;
-  filter: drop-shadow(0 8px 20px rgba(14, 165, 233, 0.3));
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 8px 24px rgba(14, 165, 233, 0.35));
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .brand-badge:hover {
-  transform: scale(1.08) rotate(-3deg);
+  transform: scale(1.08) rotate(-2deg);
+}
+.brand-badge-img {
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+  display: block;
 }
 .brand-title {
   font-size: 46px;
@@ -2911,20 +2939,7 @@ body {
 
 <div class="hero-section">
   <div class="brand-badge">
-    <svg width="68" height="68" viewBox="0 0 48 48" fill="none">
-      <defs>
-        <linearGradient id="waveBg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stop-color="#0284c7"/>
-          <stop offset="100%" stop-color="#0ea5e9"/>
-        </linearGradient>
-        <linearGradient id="waveFront" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
-          <stop offset="100%" stop-color="#e0f2fe" stop-opacity="0.8"/>
-        </linearGradient>
-      </defs>
-      <rect width="48" height="48" rx="14" fill="url(#waveBg)"/>
-      <path d="M8 28 C 14 20, 20 36, 26 26 C 32 16, 38 32, 42 22" stroke="url(#waveFront)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-    </svg>
+    <img src="data:image/png;base64,%10" class="brand-badge-img" width="84" height="84" alt="LiteWave">
   </div>
   <div class="brand-title">LiteWave</div>
   <div class="brand-subtitle">เว็บเบราว์เซอร์ที่เร็ว ปลอดภัย และเป็นส่วนตัว</div>
@@ -3356,7 +3371,8 @@ renderShortcuts();
 )HTML")
     .arg(ambientGrad, cardBg, textCol, subCol, borderCol,
          QString::number(blockedCount), engineOptionsHtml, curEngineName,
-         enableSuggestions ? "true" : "false");
+         enableSuggestions ? "true" : "false")
+    .arg(logoBase64);
 
   view->setHtml(html, QUrl("https://litewave.home/"));
 }
@@ -4029,17 +4045,21 @@ QMenu *MainWindow::createMainMenu() {
 
   auto *aboutAct = menu->addAction(createMenuIcon("about", iconColor), "เกี่ยวกับ LiteWave");
   connect(aboutAct, &QAction::triggered, this, [this] {
-    QMessageBox::about(this, "เกี่ยวกับ LiteWave Browser",
-                       "<h3>LiteWave Browser v1.0.3</h3>"
-                       "<p>เบราว์เซอร์ความเร็วสูง น้ำหนักเบา ปลอดภัย และใช้งานง่าย</p>"
-                       "<p><b>ฟีเจอร์หลัก:</b>"
-                       "<ul>"
-                       "<li>รองรับการแสดงผลทุกเว็บไซต์ ความบันเทิง วิดีโอ และสื่อได้อย่างเต็มรูปแบบ</li>"
-                       "<li>ระบบ Secure DNS (DNS-over-HTTPS) คุณภาพสูง</li>"
-                       "<li>รองรับแท็บหลายหน้าต่าง และโหมดส่วนตัว (Private Mode)</li>"
-                       "<li>โหมดสว่าง/มืด (Dark/Light Mode)</li>"
-                       "<li>ค้นหาด่วน Google/Brave/DuckDuckGo</li>"
-                       "</ul></p>");
+    QMessageBox msg(this);
+    msg.setWindowTitle("เกี่ยวกับ LiteWave Browser");
+    msg.setIconPixmap(QPixmap(":/icons/litewave.png").scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    msg.setText("<h3>LiteWave Browser v1.1.0</h3>");
+    msg.setInformativeText(
+        "<p>เบราว์เซอร์ความเร็วสูง น้ำหนักเบา ปลอดภัย และใช้งานง่าย</p>"
+        "<p><b>ฟีเจอร์หลัก:</b>"
+        "<ul>"
+        "<li>รองรับการแสดงผลทุกเว็บไซต์ ความบันเทิง วิดีโอ และสื่อได้อย่างเต็มรูปแบบ</li>"
+        "<li>ระบบ Secure DNS (DNS-over-HTTPS) คุณภาพสูง</li>"
+        "<li>รองรับแท็บหลายหน้าต่าง และโหมดส่วนตัว (Private Mode)</li>"
+        "<li>โหมดสว่าง/มืด (Dark/Light Mode)</li>"
+        "<li>ค้นหาด่วน Google/Brave/DuckDuckGo</li>"
+        "</ul></p>");
+    msg.exec();
   });
 
   auto *exitAct = menu->addAction(createMenuIcon("exit", iconColor), "ออกจากโปรแกรม\tAlt+F4");

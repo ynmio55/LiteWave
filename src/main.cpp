@@ -106,7 +106,10 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName("LiteWave");
     QApplication::setApplicationVersion("1.1.0");
     QGuiApplication::setDesktopFileName("LiteWave");
-    app.setWindowIcon(QIcon(":/icons/litewave.svg"));
+    QIcon appIcon;
+    appIcon.addFile(":/icons/litewave.png");
+    appIcon.addFile(":/icons/litewave.svg");
+    app.setWindowIcon(appIcon);
 
     QSettings settings("LiteWave", "LiteWave");
     // This runs before MainWindow creates the first QWebEngineProfile, which
