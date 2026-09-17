@@ -3920,8 +3920,9 @@ void MainWindow::showDownloadPopup() {
     QLabel *subLabel = nullptr;
   };
   auto activeUis = std::make_shared<QList<ActiveUiItem>>();
+  auto buildItems = std::make_shared<std::function<void()>>();
 
-  auto buildItems = [this, scrollContent, itemsLayout, cardBg, borderCol, subCol, activeUis] {
+  *buildItems = [this, scrollContent, itemsLayout, cardBg, borderCol, subCol, textCol, activeUis, buildItems] {
     QLayoutItem *child;
     while ((child = itemsLayout->takeAt(0)) != nullptr) {
       if (child->widget()) child->widget()->deleteLater();
@@ -3932,17 +3933,18 @@ void MainWindow::showDownloadPopup() {
     // 1. Active Downloads
     int activeAdded = 0;
     for (const auto &act : activeDownloads_) {
-      if (!act.completed && !act.failed && act.request && act.request->state() == QWebEngineDownloadRequest::DownloadInProgress) {
+      if (!act.completed && !act.failed && !act.cancelled && act.request && act.request->state() == QWebEngineDownloadRequest::DownloadInProgress) {
         activeAdded++;
         auto *card = new QWidget(scrollContent);
-        card->setStyleSheet(QString("background-color: %1; border: 1px solid %2; border-radius: 8px; padding: 6px;").arg(cardBg, borderCol));
+        card->setStyleSheet(QString("background-color: %1; border: 1px solid %2; border-radius: 10px;").arg(cardBg, borderCol));
         auto *cLayout = new QVBoxLayout(card);
-        cLayout->setContentsMargins(8, 8, 8, 8);
+        cLayout->setContentsMargins(10, 9, 10, 9);
         cLayout->setSpacing(6);
 
         auto *row1 = new QHBoxLayout();
-        auto *fNameLbl = new QLabel("📄 " + act.fileName, card);
-        fNameLbl->setStyleSheet("font-weight: 600; font-size: 13px;");
+        row1->setContentsMargins(0, 0, 0, 0);
+        auto *fNameLbl = new QLabel("⭳ " + act.fileName, card);
+        fNameLbl->setStyleSheet("font-weight: 600; font-size: 13px; color: #0284c7;");
         fNameLbl->setWordWrap(true);
         row1->addWidget(fNameLbl, 1);
 
@@ -3950,9 +3952,30 @@ void MainWindow::showDownloadPopup() {
         cancelBtn->setText("✕");
         cancelBtn->setToolTip("ยกเลิกการดาวน์โหลด");
         cancelBtn->setCursor(Qt::PointingHandCursor);
+        cancelBtn->setStyleSheet("border: none; background: rgba(239, 68, 68, 0.1); color: #ef4444; border-radius: 4px; padding: 2px 6px; font-weight: bold; font-size: 12px;");
         auto req = act.request;
-        connect(cancelBtn, &QToolButton::clicked, card, [req] {
+        const QString actFileName = act.fileName;
+        connect(cancelBtn, &QToolButton::clicked, card, [this, req, actFileName, buildItems] {
           if (req) req->cancel();
+          for (auto &a : activeDownloads_) {
+            if (a.request == req) {
+              a.completed = false;
+              a.cancelled = true;
+              a.failed = false;
+              break;
+            }
+          }
+          for (auto &r : downloadRecords_) {
+            if (r.fileName == actFileName) {
+              r.completed = false;
+              r.cancelled = true;
+              r.failed = false;
+              break;
+            }
+          }
+          saveDownloadRecords();
+          updateDownloadsButtonUi();
+          if (*buildItems) (*buildItems)();
         });
         row1->addWidget(cancelBtn);
         cLayout->addLayout(row1);
@@ -3983,13 +4006,13 @@ void MainWindow::showDownloadPopup() {
       }
     }
 
-    // 2. Recent Completed Downloads (max 4)
+    // 2. Recent Downloads (max 5)
     int completedAdded = 0;
     for (const auto &rec : downloadRecords_) {
-      if (completedAdded >= 4) break;
+      if (completedAdded >= 5) break;
       bool isActive = false;
       for (const auto &act : activeDownloads_) {
-        if (!act.completed && !act.failed && act.path == rec.path) {
+        if (!act.completed && !act.failed && !act.cancelled && act.path == rec.path) {
           isActive = true; break;
         }
       }
@@ -3997,33 +4020,81 @@ void MainWindow::showDownloadPopup() {
 
       completedAdded++;
       auto *card = new QWidget(scrollContent);
-      card->setStyleSheet(QString("background-color: %1; border: 1px solid %2; border-radius: 8px; padding: 6px;").arg(cardBg, borderCol));
+      card->setStyleSheet(QString("background-color: %1; border: 1px solid %2; border-radius: 10px;").arg(cardBg, borderCol));
       auto *cLayout = new QVBoxLayout(card);
-      cLayout->setContentsMargins(8, 8, 8, 8);
+      cLayout->setContentsMargins(10, 9, 10, 9);
       cLayout->setSpacing(6);
 
-      auto *nameLbl = new QLabel("📄 " + rec.fileName, card);
-      nameLbl->setStyleSheet("font-weight: 500; font-size: 13px;");
-      cLayout->addWidget(nameLbl);
+      auto *topRow = new QHBoxLayout();
+      topRow->setContentsMargins(0, 0, 0, 0);
+      topRow->setSpacing(8);
+
+      QString iconPrefix = "📄 ";
+      if (rec.completed) iconPrefix = "✅ ";
+      else if (rec.cancelled) iconPrefix = "⏹ ";
+      else if (rec.failed) iconPrefix = "⚠️ ";
+
+      auto *nameLbl = new QLabel(iconPrefix + rec.fileName, card);
+      nameLbl->setStyleSheet("font-weight: 600; font-size: 13px;");
+      nameLbl->setWordWrap(true);
+      topRow->addWidget(nameLbl, 1);
+
+      auto *delBtn = new QToolButton(card);
+      delBtn->setText("✕");
+      delBtn->setToolTip("ลบออกจากรายการนี้");
+      delBtn->setCursor(Qt::PointingHandCursor);
+      delBtn->setStyleSheet("border: none; background: transparent; color: #94a3b8; font-size: 12px; font-weight: bold; padding: 2px 4px;");
+      const QString targetPath = rec.path;
+      connect(delBtn, &QToolButton::clicked, card, [this, targetPath, buildItems] {
+        for (int i = 0; i < downloadRecords_.size(); ++i) {
+          if (downloadRecords_[i].path == targetPath) {
+            downloadRecords_.removeAt(i);
+            break;
+          }
+        }
+        saveDownloadRecords();
+        if (*buildItems) (*buildItems)();
+      });
+      topRow->addWidget(delBtn);
+      cLayout->addLayout(topRow);
 
       auto *infoRow = new QHBoxLayout();
-      auto *statusLbl = new QLabel(QString("✓ เสร็จสิ้น · %1").arg(formatBytes(rec.totalBytes)), card);
-      statusLbl->setStyleSheet("font-size: 11.5px; color: #16a34a; font-weight: 500;");
+      infoRow->setContentsMargins(0, 0, 0, 0);
+      infoRow->setSpacing(8);
+
+      QLabel *statusLbl = new QLabel(card);
+      if (rec.completed) {
+        statusLbl->setText(QString("✓ เสร็จสิ้น · %1").arg(formatBytes(rec.totalBytes)));
+        statusLbl->setStyleSheet("font-size: 12px; color: #16a34a; font-weight: 600;");
+      } else if (rec.cancelled) {
+        statusLbl->setText(QString("✕ ยกเลิกแล้ว%1").arg(rec.totalBytes > 0 ? (" · " + formatBytes(rec.totalBytes)) : ""));
+        statusLbl->setStyleSheet("font-size: 12px; color: #64748b; font-weight: 500;");
+      } else if (rec.failed) {
+        statusLbl->setText("✕ ดาวน์โหลดล้มเหลว");
+        statusLbl->setStyleSheet("font-size: 12px; color: #ef4444; font-weight: 500;");
+      } else {
+        statusLbl->setText("⟳ กำลังดำเนินการ");
+        statusLbl->setStyleSheet(QString("font-size: 12px; color: %1;").arg(subCol));
+      }
       infoRow->addWidget(statusLbl);
       infoRow->addStretch();
 
       const QString filePath = rec.path;
-      auto *openBtn = new QPushButton("เปิดไฟล์", card);
-      openBtn->setCursor(Qt::PointingHandCursor);
-      connect(openBtn, &QPushButton::clicked, card, [filePath] {
-        if (!filePath.isEmpty() && QFileInfo::exists(filePath)) {
-          QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
-        }
-      });
-      infoRow->addWidget(openBtn);
+      if (rec.completed) {
+        auto *openBtn = new QPushButton("เปิดไฟล์", card);
+        openBtn->setCursor(Qt::PointingHandCursor);
+        openBtn->setStyleSheet("background-color: #0284c7; color: #ffffff; border: none; border-radius: 6px; padding: 4px 10px; font-size: 11.5px; font-weight: 600;");
+        connect(openBtn, &QPushButton::clicked, card, [filePath] {
+          if (!filePath.isEmpty() && QFileInfo::exists(filePath)) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
+          }
+        });
+        infoRow->addWidget(openBtn);
+      }
 
       auto *folderBtn = new QPushButton("โฟลเดอร์", card);
       folderBtn->setCursor(Qt::PointingHandCursor);
+      folderBtn->setStyleSheet(QString("background-color: %1; color: %2; border: 1px solid %3; border-radius: 6px; padding: 4px 10px; font-size: 11.5px; font-weight: 500;").arg(cardBg, textCol, borderCol));
       connect(folderBtn, &QPushButton::clicked, card, [filePath] {
         if (!filePath.isEmpty()) {
           QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(filePath).absolutePath()));
@@ -4044,7 +4115,7 @@ void MainWindow::showDownloadPopup() {
     itemsLayout->addStretch();
   };
 
-  buildItems();
+  (*buildItems)();
   scroll->setWidget(scrollContent);
   mainLayout->addWidget(scroll, 1);
 
@@ -4054,6 +4125,21 @@ void MainWindow::showDownloadPopup() {
   const QString dlDir = st.value("downloadDirectory", defaultDl).toString();
   auto *openDlFolderBtn = new QPushButton("📁 เปิดโฟลเดอร์ดาวน์โหลด", popup);
   openDlFolderBtn->setCursor(Qt::PointingHandCursor);
+  openDlFolderBtn->setStyleSheet(QString(
+      "QPushButton {"
+      "  background-color: transparent;"
+      "  color: %1;"
+      "  border: 1px solid %2;"
+      "  border-radius: 8px;"
+      "  padding: 8px;"
+      "  font-size: 12.5px;"
+      "  font-weight: 500;"
+      "}"
+      "QPushButton:hover {"
+      "  background-color: rgba(2, 132, 199, 0.08);"
+      "  border-color: #0284c7;"
+      "  color: #0284c7;"
+      "}").arg(textCol, borderCol));
   connect(openDlFolderBtn, &QPushButton::clicked, popup, [dlDir] {
     QDesktopServices::openUrl(QUrl::fromLocalFile(dlDir));
   });
@@ -4085,7 +4171,7 @@ void MainWindow::showDownloadPopup() {
       }
     }
     if (!hasActive && !activeUis->isEmpty()) {
-      buildItems();
+      if (*buildItems) (*buildItems)();
     }
   });
   timer->start();
@@ -4156,6 +4242,8 @@ void MainWindow::handleDownloadRequested(QWebEngineDownloadRequest *download) {
   rec.path = dir + "/" + name;
   rec.totalBytes = download->totalBytes();
   rec.completed = false;
+  rec.cancelled = false;
+  rec.failed = false;
   downloadRecords_.prepend(rec);
   saveDownloadRecords();
 
@@ -4169,6 +4257,7 @@ void MainWindow::handleDownloadRequested(QWebEngineDownloadRequest *download) {
   act.lastTimeMs = QDateTime::currentMSecsSinceEpoch();
   act.speed = 0.0;
   act.completed = false;
+  act.cancelled = false;
   act.failed = false;
   activeDownloads_.prepend(act);
 
@@ -4180,6 +4269,15 @@ void MainWindow::handleDownloadRequested(QWebEngineDownloadRequest *download) {
         const qint64 total = download->totalBytes();
         const qint64 recvd = download->receivedBytes();
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
+
+        if (total > 0) {
+          for (auto &r : downloadRecords_) {
+            if (r.fileName == name && r.totalBytes <= 0) {
+              r.totalBytes = total;
+              break;
+            }
+          }
+        }
 
         for (auto &a : activeDownloads_) {
           if (a.request == download) {
@@ -4208,12 +4306,17 @@ void MainWindow::handleDownloadRequested(QWebEngineDownloadRequest *download) {
           for (auto &a : activeDownloads_) {
             if (a.request == download) {
               a.completed = true;
+              a.cancelled = false;
+              a.failed = false;
               break;
             }
           }
           for (auto &r : downloadRecords_) {
             if (r.fileName == name) {
               r.completed = true;
+              r.cancelled = false;
+              r.failed = false;
+              if (r.totalBytes <= 0) r.totalBytes = download->totalBytes();
               break;
             }
           }
@@ -4224,15 +4327,47 @@ void MainWindow::handleDownloadRequested(QWebEngineDownloadRequest *download) {
               updateDownloadsButtonUi();
             });
           }
-        } else if (state == QWebEngineDownloadRequest::DownloadCancelled ||
-                   state == QWebEngineDownloadRequest::DownloadInterrupted) {
+        } else if (state == QWebEngineDownloadRequest::DownloadCancelled) {
           for (auto &a : activeDownloads_) {
             if (a.request == download) {
+              a.completed = false;
+              a.cancelled = true;
+              a.failed = false;
+              break;
+            }
+          }
+          for (auto &r : downloadRecords_) {
+            if (r.fileName == name) {
+              r.completed = false;
+              r.cancelled = true;
+              r.failed = false;
+              if (r.totalBytes <= 0) r.totalBytes = download->totalBytes();
+              break;
+            }
+          }
+          saveDownloadRecords();
+          statusBar()->showMessage("✕ ยกเลิกการดาวน์โหลด: " + name, 5000);
+          updateDownloadsButtonUi();
+        } else if (state == QWebEngineDownloadRequest::DownloadInterrupted) {
+          for (auto &a : activeDownloads_) {
+            if (a.request == download) {
+              a.completed = false;
+              a.cancelled = false;
               a.failed = true;
               break;
             }
           }
-          statusBar()->showMessage("✕ ดาวน์โหลดไม่สำเร็จ: " + name, 5000);
+          for (auto &r : downloadRecords_) {
+            if (r.fileName == name) {
+              r.completed = false;
+              r.cancelled = false;
+              r.failed = true;
+              if (r.totalBytes <= 0) r.totalBytes = download->totalBytes();
+              break;
+            }
+          }
+          saveDownloadRecords();
+          statusBar()->showMessage("✕ การดาวน์โหลดล้มเหลว: " + name, 5000);
           updateDownloadsButtonUi();
         }
       });
@@ -4330,7 +4465,7 @@ void MainWindow::showDownloadsDialog() {
       emptyItem->setFlags(Qt::NoItemFlags);
     } else {
       for (const auto &rec : downloadRecords_) {
-        QString statusText = rec.completed ? "✓ เสร็จสิ้น" : "⟳ กำลังดาวน์โหลด/ยกเลิก";
+        QString statusText = rec.completed ? "✓ เสร็จสิ้น" : (rec.cancelled ? "✕ ยกเลิกแล้ว" : (rec.failed ? "✕ ล้มเหลว" : "⟳ กำลังดำเนินการ"));
         QString sizeText;
         if (rec.totalBytes > 0) {
           if (rec.totalBytes >= 1024 * 1024) {
@@ -5611,7 +5746,12 @@ void MainWindow::loadDownloadRecords() {
     rec.fileName = map.value("fileName").toString();
     rec.path = map.value("path").toString();
     rec.totalBytes = map.value("totalBytes").toLongLong();
-    rec.completed = map.value("completed").toBool();
+    rec.completed = map.value("completed", false).toBool();
+    rec.cancelled = map.value("cancelled", false).toBool();
+    rec.failed = map.value("failed", false).toBool();
+    if (!rec.completed && !rec.cancelled && !rec.failed) {
+      rec.cancelled = true;
+    }
     if (!rec.fileName.isEmpty()) {
       downloadRecords_.append(rec);
     }
@@ -5631,6 +5771,8 @@ void MainWindow::saveDownloadRecords() {
     map["path"] = rec.path;
     map["totalBytes"] = rec.totalBytes;
     map["completed"] = rec.completed;
+    map["cancelled"] = rec.cancelled;
+    map["failed"] = rec.failed;
     list.append(map);
   }
   st.setValue("downloads/history", list);

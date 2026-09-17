@@ -79,6 +79,8 @@ private:
         QString path;
         qint64 totalBytes = 0;
         bool completed = false;
+        bool cancelled = false;
+        bool failed = false;
     };
 
     struct ActiveDownload {
@@ -91,6 +93,7 @@ private:
         qint64 lastTimeMs = 0;
         double speed = 0.0;
         bool completed = false;
+        bool cancelled = false;
         bool failed = false;
     };
 
