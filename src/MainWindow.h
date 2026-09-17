@@ -37,6 +37,7 @@ public:
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void changeEvent(QEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
 
 private slots:
@@ -56,7 +57,9 @@ private:
     QToolBar *toolbar_;
     QWidget *headerWidget_ = nullptr;
     QWidget *tabBarContainer_ = nullptr;
-    QToolButton *maxBtn_ = nullptr;
+    QToolButton *minWinBtn_ = nullptr;
+    QToolButton *maxWinBtn_ = nullptr;
+    QToolButton *closeWinBtn_ = nullptr;
     QToolButton *themeBtn_ = nullptr;
     QToolButton *shieldBtn_ = nullptr;
     QAction *sslAction_ = nullptr;
@@ -86,6 +89,7 @@ private:
     QWebEngineView *currentView() const;
     void openUrl(const QString &text);
     void applyTheme();
+    void updateWindowControls();
     QMenu *createMainMenu();
     void populateHistoryMenu(QMenu *menu);
     void populateBookmarksMenu(QMenu *menu);

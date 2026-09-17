@@ -135,6 +135,41 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
   return QIcon(pix);
 }
 
+static QIcon createWindowControlIcon(const QString &name, const QColor &normalColor, const QColor &hoverColor) {
+  auto makePix = [&](const QColor &c) {
+    QPixmap pix(32, 32);
+    pix.fill(Qt::transparent);
+    QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setBrush(Qt::NoBrush);
+
+    if (name == "win_min") {
+      p.setPen(QPen(c, 2.8, Qt::SolidLine, Qt::RoundCap));
+      p.drawLine(7, 18, 25, 18);
+    } else if (name == "win_max") {
+      p.setPen(QPen(c, 2.4, Qt::SolidLine, Qt::SquareCap, Qt::RoundJoin));
+      p.drawRoundedRect(7, 7, 18, 18, 2.0, 2.0);
+    } else if (name == "win_restore") {
+      p.setPen(QPen(c, 2.2, Qt::SolidLine, Qt::SquareCap, Qt::RoundJoin));
+      p.drawLine(11, 6, 26, 6);
+      p.drawLine(26, 6, 26, 21);
+      p.drawLine(21, 21, 26, 21);
+      p.drawLine(11, 6, 11, 11);
+      p.drawRoundedRect(6, 11, 15, 15, 2.0, 2.0);
+    } else if (name == "win_close") {
+      p.setPen(QPen(c, 2.6, Qt::SolidLine, Qt::RoundCap));
+      p.drawLine(8, 8, 24, 24);
+      p.drawLine(24, 8, 8, 24);
+    }
+    pix.setDevicePixelRatio(2.0);
+    return pix;
+  };
+
+  QIcon icon;
+  icon.addPixmap(makePix(normalColor), QIcon::Normal);
+  icon.addPixmap(makePix(hoverColor), QIcon::Active);
+  return icon;
+}
 
 static bool isSameSiteOrSubdomain(const QUrl &first, const QUrl &second)
 {
@@ -391,21 +426,17 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   tabBarLayout->addStretch(); // Keeps + button right next to the tabs!
 
   // Window Controls on far right of Tab Bar Row (Minimize, Maximize/Restore, Close)
-  auto *minWinBtn = new QToolButton(this);
-  minWinBtn->setObjectName("windowMinButton");
-  minWinBtn->setText("—");
-  minWinBtn->setToolTip("ย่อหน้าต่าง (Ctrl+M)");
-  minWinBtn->setFixedSize(28, 28);
-  minWinBtn->setCursor(Qt::PointingHandCursor);
-  connect(minWinBtn, &QToolButton::clicked, this, &QMainWindow::showMinimized);
+  minWinBtn_ = new QToolButton(this);
+  minWinBtn_->setObjectName("windowMinButton");
+  minWinBtn_->setFixedSize(34, 28);
+  minWinBtn_->setCursor(Qt::PointingHandCursor);
+  connect(minWinBtn_, &QToolButton::clicked, this, &QMainWindow::showMinimized);
 
-  auto *maxWinBtn = new QToolButton(this);
-  maxWinBtn->setObjectName("windowMaxButton");
-  maxWinBtn->setText("▢");
-  maxWinBtn->setToolTip("ขยายหน้าต่าง / คืนขนาด");
-  maxWinBtn->setFixedSize(28, 28);
-  maxWinBtn->setCursor(Qt::PointingHandCursor);
-  connect(maxWinBtn, &QToolButton::clicked, this, [this]() {
+  maxWinBtn_ = new QToolButton(this);
+  maxWinBtn_->setObjectName("windowMaxButton");
+  maxWinBtn_->setFixedSize(34, 28);
+  maxWinBtn_->setCursor(Qt::PointingHandCursor);
+  connect(maxWinBtn_, &QToolButton::clicked, this, [this]() {
     if (isMaximized()) {
       showNormal();
     } else {
@@ -413,17 +444,15 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     }
   });
 
-  auto *closeWinBtn = new QToolButton(this);
-  closeWinBtn->setObjectName("windowCloseButton");
-  closeWinBtn->setText("✕");
-  closeWinBtn->setToolTip("ปิดโปรแกรม (Alt+F4)");
-  closeWinBtn->setFixedSize(28, 28);
-  closeWinBtn->setCursor(Qt::PointingHandCursor);
-  connect(closeWinBtn, &QToolButton::clicked, this, &QMainWindow::close);
+  closeWinBtn_ = new QToolButton(this);
+  closeWinBtn_->setObjectName("windowCloseButton");
+  closeWinBtn_->setFixedSize(34, 28);
+  closeWinBtn_->setCursor(Qt::PointingHandCursor);
+  connect(closeWinBtn_, &QToolButton::clicked, this, &QMainWindow::close);
 
-  tabBarLayout->addWidget(minWinBtn);
-  tabBarLayout->addWidget(maxWinBtn);
-  tabBarLayout->addWidget(closeWinBtn);
+  tabBarLayout->addWidget(minWinBtn_);
+  tabBarLayout->addWidget(maxWinBtn_);
+  tabBarLayout->addWidget(closeWinBtn_);
 
   headerLayout->addWidget(tabBarContainer_);
 
@@ -732,6 +761,13 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
   if (suggestionPopup_ && suggestionPopup_->isVisible()) {
     suggestionPopup_->reposition();
   }
+}
+
+void MainWindow::changeEvent(QEvent *event) {
+  if (event->type() == QEvent::WindowStateChange) {
+    updateWindowControls();
+  }
+  QMainWindow::changeEvent(event);
 }
 
 QWebEngineView *MainWindow::currentView() const {
@@ -1643,32 +1679,28 @@ void MainWindow::applyTheme() {
             }
             QToolButton#windowMinButton, QToolButton#windowMaxButton {
                 background-color: transparent;
-                color: #94a3b8;
                 border: none;
-                border-radius: 14px;
-                font-size: 13px;
-                font-weight: bold;
+                border-radius: 6px;
+                min-width: 34px;
+                max-width: 34px;
+                min-height: 28px;
+                max-height: 28px;
             }
             QToolButton#windowMinButton:hover, QToolButton#windowMaxButton:hover {
-                background-color: #3b3e4a;
-                color: #ffffff;
+                background-color: #333642;
             }
             QToolButton#windowCloseButton {
                 background-color: transparent;
-                color: #94a3b8;
                 border: none;
-                border-radius: 14px;
-                font-size: 13px;
-                font-weight: bold;
-                min-width: 28px;
-                max-width: 28px;
+                border-radius: 6px;
+                min-width: 34px;
+                max-width: 34px;
                 min-height: 28px;
                 max-height: 28px;
             }
             QToolButton#windowCloseButton:hover {
                 background-color: #ef4444;
-                color: #ffffff;
-                border-radius: 14px;
+                border-radius: 6px;
             }
             QToolBar#mainToolbar {
                 background-color: #2b2d35;
@@ -1717,7 +1749,7 @@ void MainWindow::applyTheme() {
                 border: 1px solid #3f434e;
             }
             QLineEdit:focus {
-                border: 1.5px solid #ff5500;
+                border: 1.5px solid #0ea5e9;
                 background-color: #16171d;
             }
             QLineEdit QToolButton {
@@ -1754,12 +1786,12 @@ void MainWindow::applyTheme() {
                 border-color: #474b58;
             }
             QToolBar#mainToolbar QToolButton#shieldButton[active="true"] {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ea580c, stop:1 #f97316);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #0ea5e9);
                 color: #ffffff;
                 border: none;
             }
             QToolBar#mainToolbar QToolButton#shieldButton[active="true"]:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #f97316, stop:1 #fb923c);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0ea5e9, stop:1 #38bdf8);
             }
             QToolBar#mainToolbar QToolButton#shieldButton[active="false"] {
                 background-color: #23252c;
@@ -1783,7 +1815,7 @@ void MainWindow::applyTheme() {
                 padding: 0px;
             }
             QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff5500, stop:1 #00f2fe);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #38bdf8);
             }
             QStatusBar {
                 background: #1e2026;
@@ -1807,7 +1839,7 @@ void MainWindow::applyTheme() {
                 padding-left: 8px;
             }
             QMenu::item:selected {
-                background-color: #ff5500;
+                background-color: #0284c7;
                 color: #ffffff;
             }
             QMenu::separator {
@@ -1821,7 +1853,7 @@ void MainWindow::applyTheme() {
                 border: 1px solid #383a42;
                 border-radius: 8px;
                 padding: 4px;
-                selection-background-color: #ff5500;
+                selection-background-color: #0284c7;
                 selection-color: #ffffff;
                 outline: none;
             }
@@ -1916,32 +1948,28 @@ void MainWindow::applyTheme() {
             }
             QToolButton#windowMinButton, QToolButton#windowMaxButton {
                 background-color: transparent;
-                color: #64748b;
                 border: none;
-                border-radius: 14px;
-                font-size: 13px;
-                font-weight: bold;
+                border-radius: 6px;
+                min-width: 34px;
+                max-width: 34px;
+                min-height: 28px;
+                max-height: 28px;
             }
             QToolButton#windowMinButton:hover, QToolButton#windowMaxButton:hover {
                 background-color: #e2e8f0;
-                color: #1e1e1e;
             }
             QToolButton#windowCloseButton {
                 background-color: transparent;
-                color: #64748b;
                 border: none;
-                border-radius: 14px;
-                font-size: 13px;
-                font-weight: bold;
-                min-width: 28px;
-                max-width: 28px;
+                border-radius: 6px;
+                min-width: 34px;
+                max-width: 34px;
                 min-height: 28px;
                 max-height: 28px;
             }
             QToolButton#windowCloseButton:hover {
                 background-color: #ef4444;
-                color: #ffffff;
-                border-radius: 14px;
+                border-radius: 6px;
             }
             QToolBar#mainToolbar {
                 background-color: #ffffff;
@@ -1990,7 +2018,7 @@ void MainWindow::applyTheme() {
                 border: 1px solid #cbd5e1;
             }
             QLineEdit:focus {
-                border: 1.5px solid #ff5500;
+                border: 1.5px solid #0284c7;
                 background-color: #ffffff;
             }
             QLineEdit QToolButton {
@@ -2027,12 +2055,12 @@ void MainWindow::applyTheme() {
                 border-color: #cbd5e1;
             }
             QToolBar#mainToolbar QToolButton#shieldButton[active="true"] {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ea580c, stop:1 #f97316);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #0ea5e9);
                 color: #ffffff;
                 border: none;
             }
             QToolBar#mainToolbar QToolButton#shieldButton[active="true"]:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #f97316, stop:1 #fb923c);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0ea5e9, stop:1 #38bdf8);
             }
             QToolBar#mainToolbar QToolButton#shieldButton[active="false"] {
                 background-color: #f1f5f9;
@@ -2056,7 +2084,7 @@ void MainWindow::applyTheme() {
                 padding: 0px;
             }
             QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff5500, stop:1 #0072ff);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #38bdf8);
             }
             QStatusBar {
                 background: #ffffff;
@@ -2080,7 +2108,7 @@ void MainWindow::applyTheme() {
                 padding-left: 8px;
             }
             QMenu::item:selected {
-                background-color: #ff5500;
+                background-color: #0284c7;
                 color: #ffffff;
             }
             QMenu::separator {
@@ -2094,7 +2122,7 @@ void MainWindow::applyTheme() {
                 border: 1px solid #d0d2d6;
                 border-radius: 8px;
                 padding: 4px;
-                selection-background-color: #ff5500;
+                selection-background-color: #0284c7;
                 selection-color: #ffffff;
                 outline: none;
             }
@@ -2113,6 +2141,26 @@ void MainWindow::applyTheme() {
       oldMenu->deleteLater();
     }
   }
+  updateWindowControls();
+}
+
+void MainWindow::updateWindowControls() {
+  if (!minWinBtn_ || !maxWinBtn_ || !closeWinBtn_)
+    return;
+
+  const QColor normCol = darkMode_ ? QColor("#94a3b8") : QColor("#64748b");
+  const QColor hoverCol = darkMode_ ? QColor("#ffffff") : QColor("#0f172a");
+  const QColor closeHoverCol = QColor("#ffffff");
+
+  minWinBtn_->setIcon(createWindowControlIcon("win_min", normCol, hoverCol));
+  minWinBtn_->setToolTip("ย่อหน้าต่าง (Ctrl+M)");
+
+  const bool maximized = isMaximized();
+  maxWinBtn_->setIcon(createWindowControlIcon(maximized ? "win_restore" : "win_max", normCol, hoverCol));
+  maxWinBtn_->setToolTip(maximized ? "คืนขนาดหน้าต่าง" : "ขยายหน้าต่าง");
+
+  closeWinBtn_->setIcon(createWindowControlIcon("win_close", normCol, closeHoverCol));
+  closeWinBtn_->setToolTip("ปิดโปรแกรม (Alt+F4)");
 }
 
 void MainWindow::setupUrlBarCompleter() {
@@ -3349,7 +3397,7 @@ void MainWindow::showSettingsDialog() {
   const QString textColor = isDark ? "#f9fafc" : "#0f172a";
   const QString subTextColor = isDark ? "#9ca3af" : "#64748b";
   const QString borderColor = isDark ? "#374151" : "#e2e8f0";
-  const QColor iconColor = isDark ? QColor("#ff6611") : QColor("#ff5500");
+  const QColor iconColor = isDark ? QColor("#38bdf8") : QColor("#0284c7");
 
   dialog.setStyleSheet(QString(R"(
     QDialog {
@@ -3390,7 +3438,7 @@ void MainWindow::showSettingsDialog() {
       font-size: 13px;
     }
     QLineEdit:focus, QComboBox:focus {
-      border: 1px solid #ff5500;
+      border: 1px solid #0ea5e9;
     }
     QPushButton {
       background-color: %3;
@@ -3402,8 +3450,8 @@ void MainWindow::showSettingsDialog() {
       font-weight: 500;
     }
     QPushButton:hover {
-      border-color: #ff5500;
-      color: #ff5500;
+      border-color: #0284c7;
+      color: #0284c7;
     }
   )")
                            .arg(dialogBg, textColor, cardBg, borderColor));
@@ -3442,7 +3490,7 @@ void MainWindow::showSettingsDialog() {
       background-color: %4;
     }
     QListWidget::item:selected {
-      background-color: #ff5500;
+      background-color: #0284c7;
       color: #ffffff;
       font-weight: bold;
     }
@@ -3867,7 +3915,7 @@ void MainWindow::showSettingsDialog() {
   auto *saveBtn = new QPushButton("ตกลง", &dialog);
   saveBtn->setDefault(true);
   saveBtn->setStyleSheet(
-      "background-color: #ff5500; color: white; font-weight: bold; border: "
+      "background-color: #0284c7; color: white; font-weight: bold; border: "
       "none; padding: 7px 20px; border-radius: 6px;");
   auto *cancelBtn = new QPushButton("ยกเลิก", &dialog);
 
