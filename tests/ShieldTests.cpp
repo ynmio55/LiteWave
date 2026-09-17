@@ -1,4 +1,5 @@
 #include "AdBlocker.h"
+#include "SearchEngineManager.h"
 
 #include <QtTest>
 
@@ -13,6 +14,8 @@ private slots:
     void siteExceptionRestoresCompatibility();
     void popupBlocksAreCounted();
     void bundledEasyListBlocksAdServer();
+    void searchEngineManagerBuildsCorrectUrls();
+    void searchEngineManagerSupportsEnginesAndFallback();
 };
 
 void ShieldTests::standardBlocksKnownThirdPartyAdvertising()
@@ -104,6 +107,38 @@ void ShieldTests::siteExceptionRestoresCompatibility()
     QVERIFY(blocker.shouldBlock(
         QUrl("https://securepubads.g.doubleclick.net/tag/js/gpt.js"),
         site, QWebEngineUrlRequestInfo::ResourceTypeScript));
+}
+
+void ShieldTests::searchEngineManagerBuildsCorrectUrls()
+{
+    SearchEngineManager &mgr = SearchEngineManager::instance();
+    mgr.setCurrentEngineId("google");
+    QUrl url = mgr.buildSearchUrl("litewave browser");
+    QCOMPARE(url.toString(QUrl::FullyEncoded), QString("https://www.google.com/search?q=litewave%20browser"));
+
+    mgr.setCurrentEngineId("duckduckgo");
+    QUrl ddg = mgr.buildSearchUrl("privacy test");
+    QCOMPARE(ddg.toString(QUrl::FullyEncoded), QString("https://duckduckgo.com/?q=privacy%20test"));
+
+    mgr.setCurrentEngineId("brave");
+    QUrl brave = mgr.buildSearchUrl("speed");
+    QCOMPARE(brave.toString(QUrl::FullyEncoded), QString("https://search.brave.com/search?q=speed"));
+
+    mgr.setCurrentEngineId("bing");
+    QUrl bing = mgr.buildSearchUrl("hello world");
+    QCOMPARE(bing.toString(QUrl::FullyEncoded), QString("https://www.bing.com/search?q=hello%20world"));
+}
+
+void ShieldTests::searchEngineManagerSupportsEnginesAndFallback()
+{
+    SearchEngineManager &mgr = SearchEngineManager::instance();
+    const auto engines = mgr.availableEngines();
+    QVERIFY(engines.size() >= 4);
+
+    mgr.setCurrentEngineId("non_existent_engine_id");
+    QUrl fallback = mgr.buildSearchUrl("query");
+    QVERIFY(fallback.isValid());
+    QVERIFY(!fallback.isEmpty());
 }
 
 QTEST_APPLESS_MAIN(ShieldTests)

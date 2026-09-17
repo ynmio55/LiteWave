@@ -10,6 +10,8 @@ SearchEngineManager::SearchEngineManager(QObject *parent) : QObject(parent) {
        "https://ac.duckduckgo.com/ac/?q=%1&type=list"},
       {"brave", "Brave Search", "https://search.brave.com/search?q=%1",
        "https://search.brave.com/api/suggest?q=%1"},
+      {"bing", "Bing", "https://www.bing.com/search?q=%1",
+       "https://api.bing.com/osjson.aspx?query=%1"},
       {"litewave", "LiteWave Aggregated Search (Custom)",
        "http://localhost:8080/search?q=%1",
        "http://localhost:8080/api/suggest?q=%1"}};
@@ -71,10 +73,21 @@ void SearchEngineManager::addCustomEngine(const SearchEngineInfo &engine) {
 
 void SearchEngineManager::loadSettings() {
   QSettings settings("LiteWave", "LiteWave");
-  currentEngineId_ = settings.value("search/engineId", "google").toString();
+  QString id = settings.value("search/engineId").toString();
+  if (id.isEmpty()) {
+    const QString legacy = settings.value("searchEngine", "Google").toString().toLower();
+    if (legacy == "google" || legacy == "brave" || legacy == "duckduckgo" || legacy == "bing") {
+      id = legacy;
+    } else {
+      id = "google";
+    }
+  }
+  currentEngineId_ = id;
 }
 
 void SearchEngineManager::saveSettings() {
   QSettings settings("LiteWave", "LiteWave");
   settings.setValue("search/engineId", currentEngineId_);
+  settings.setValue("searchEngine", currentEngine().name);
 }
+

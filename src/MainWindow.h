@@ -17,6 +17,8 @@ class QLabel;
 class QToolButton;
 class QCompleter;
 class AdBlocker;
+class FindBar;
+class QCloseEvent;
 
 class MainWindow final : public QMainWindow
 {
@@ -32,6 +34,7 @@ public:
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void navigate();
@@ -72,6 +75,7 @@ private:
     QList<DownloadRecord> downloadRecords_;
     QToolButton *menuBtn_ = nullptr;
     QCompleter *urlCompleter_ = nullptr;
+    FindBar *findBar_ = nullptr;
 
     void setupShortcuts();
     QWebEngineView *currentView() const;
@@ -87,4 +91,11 @@ private:
     void setupUrlBarCompleter();
     void refreshShieldUi();
     void applyShieldCosmetics(QWebEngineView *view);
+    void showTabContextMenu(const QPoint &pos);
+    void updateTabAudioIcon(int index, bool audible, bool muted);
+    void openDevTools(QWebEngineView *targetView);
+    void saveSession();
+    void restoreSession();
+    void loadDownloadRecords();
+    void saveDownloadRecords();
 };

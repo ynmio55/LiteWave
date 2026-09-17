@@ -1,5 +1,7 @@
 #include "MainWindow.h"
 #include "AdBlocker.h"
+#include "SearchEngineManager.h"
+#include "FindBar.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -586,7 +588,16 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 
   // Assemble Main Layout
   mainLayout->addWidget(headerWidget_);
+  findBar_ = new FindBar(this);
+  findBar_->setDarkMode(darkMode_);
+  mainLayout->addWidget(findBar_);
   mainLayout->addWidget(tabStack_);
+
+  loadDownloadRecords();
+
+  tabBar_->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(tabBar_, &QTabBar::customContextMenuRequested, this,
+          &MainWindow::showTabContextMenu);
 
   connect(tabBar_, &QTabBar::currentChanged, tabStack_,
           &QStackedWidget::setCurrentIndex);
@@ -595,6 +606,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
       updateCurrentUrl(currentView()->url());
       setWindowTitle(currentView()->title() +
                      (privateMode_ ? " — Private · LiteWave" : " — LiteWave"));
+      if (findBar_) {
+        findBar_->attachView(currentView());
+      }
     }
     progress_->hide();
   });
@@ -608,7 +622,22 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 
   setupShortcuts();
   applyTheme();
-  newTab();
+
+  QSettings startupSettings("LiteWave", "LiteWave");
+  if (!privateMode_ &&
+      startupSettings.value("startupOption", "home").toString() == "restore") {
+    const QStringList savedTabs =
+        startupSettings.value("session/openTabs").toStringList();
+    if (!savedTabs.isEmpty()) {
+      for (const QString &u : savedTabs) {
+        createView(QUrl(u));
+      }
+    } else {
+      newTab();
+    }
+  } else {
+    newTab();
+  }
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
@@ -643,6 +672,12 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
   return QMainWindow::eventFilter(watched, event);
 }
 
+void MainWindow::closeEvent(QCloseEvent *event) {
+  saveSession();
+  saveDownloadRecords();
+  QMainWindow::closeEvent(event);
+}
+
 QWebEngineView *MainWindow::currentView() const {
   return qobject_cast<QWebEngineView *>(tabStack_->currentWidget());
 }
@@ -660,17 +695,17 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   s->setAttribute(QWebEngineSettings::AutoLoadImages, true);
   s->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, true);
   s->setAttribute(QWebEngineSettings::PdfViewerEnabled, true);
-  s->setAttribute(QWebEngineSettings::AllowRunningInsecureContent, true);
+  s->setAttribute(QWebEngineSettings::AllowRunningInsecureContent, false);
   s->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
   s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
   s->setAttribute(QWebEngineSettings::WebRTCPublicInterfacesOnly, false);
   s->setAttribute(QWebEngineSettings::FocusOnNavigationEnabled, true);
   s->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, false);
   s->setAttribute(QWebEngineSettings::PluginsEnabled, true);
-  s->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
-  s->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, true);
-  s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, true);
-  s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, true);
+  s->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, false);
+  s->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, false);
+  s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, false);
+  s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, false);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
   s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
 #endif
@@ -876,6 +911,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
         rec.path = dir + "/" + name;
         rec.completed = false;
         downloadRecords_.prepend(rec);
+        saveDownloadRecords();
 
         connect(
             download, &QWebEngineDownloadRequest::stateChanged, this,
@@ -889,6 +925,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
                     break;
                   }
                 }
+                saveDownloadRecords();
               } else if (state ==
                              QWebEngineDownloadRequest::DownloadCancelled ||
                          state ==
@@ -899,6 +936,76 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
         download->accept();
         statusBar()->showMessage("กำลังดาวน์โหลด: " + name, 2500);
       });
+
+  connect(page, &QWebEnginePage::recentlyAudibleChanged, this,
+          [this, view](bool recentlyAudible) {
+            const int idx = tabStack_->indexOf(view);
+            if (idx >= 0) {
+              updateTabAudioIcon(idx, recentlyAudible, view->page()->isAudioMuted());
+            }
+          });
+  connect(page, &QWebEnginePage::audioMutedChanged, this,
+          [this, view](bool muted) {
+            const int idx = tabStack_->indexOf(view);
+            if (idx >= 0) {
+              updateTabAudioIcon(idx, view->page()->recentlyAudible(), muted);
+            }
+          });
+
+  connect(page, &QWebEnginePage::renderProcessTerminated, this,
+          [this, view](QWebEnginePage::RenderProcessTerminationStatus status, int exitCode) {
+            if (status == QWebEnginePage::NormalTerminationStatus)
+              return;
+            const QString crashHtml = QString(R"HTML(
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>แท็บขัดข้อง - LiteWave</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #0f172a; color: #f8fafc; display: flex; flex-direction: column;
+         align-items: center; justify-content: center; height: 90vh; margin: 0; text-align: center; }
+  .sad { font-size: 64px; margin-bottom: 16px; user-select: none; }
+  h1 { font-size: 28px; margin-bottom: 8px; font-weight: 700; }
+  p { color: #94a3b8; max-width: 460px; line-height: 1.6; margin-bottom: 24px; font-size: 15px; }
+  button { background: #2563eb; color: white; border: none; border-radius: 8px;
+           padding: 10px 24px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:hover { background: #1d4ed8; }
+</style>
+</head>
+<body>
+  <div class="sad">:(</div>
+  <h1>เกิดข้อผิดพลาดกับแท็บนี้</h1>
+  <p>กระบวนการประมวลผลของหน้าเว็บนี้หยุดทำงานโดยไม่คาดคิด (รหัสข้อผิดพลาด: %1)</p>
+  <button onclick="location.reload()">โหลดแท็บนี้ใหม่</button>
+</body>
+</html>
+)HTML").arg(exitCode);
+            view->setHtml(crashHtml);
+            statusBar()->showMessage(QStringLiteral("แท็บขัดข้อง (Exit code %1)").arg(exitCode), 4000);
+          });
+
+  connect(page, &QWebEnginePage::certificateError, this,
+          [this](QWebEngineCertificateError error) {
+            const QString msg = QStringLiteral(
+                "คำเตือนความปลอดภัยของใบรับรอง SSL\n\n"
+                "เว็บไซต์: %1\n"
+                "ข้อผิดพลาด: %2\n\n"
+                "การเชื่อมต่อนี้อาจไม่ปลอดภัย มีบุคคลอื่นพยายามดักรับข้อมูลหรือไม่?\n\n"
+                "ต้องการเพิกเฉยต่อข้อผิดพลาดนี้และเปิดหน้าเว็บต่อไปหรือไม่?")
+                .arg(error.url().host(), error.description());
+
+            const auto reply = QMessageBox::warning(
+                this, QStringLiteral("คำเตือนความปลอดภัย"), msg,
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+
+            if (reply == QMessageBox::Yes) {
+              error.acceptCertificate();
+            } else {
+              error.rejectCertificate();
+            }
+          });
 
   connect(view, &QWebEngineView::urlChanged, this, [this, view](const QUrl &u) {
     if (view == currentView())
@@ -1040,21 +1147,23 @@ void MainWindow::setupShortcuts() {
                              3000);
   });
   key("Ctrl+F", [this] {
-    bool ok = false;
-    const QString q = QInputDialog::getText(this, "Find in page", "Text",
-                                            QLineEdit::Normal, findQuery_, &ok);
-    if (ok && currentView()) {
-      findQuery_ = q;
-      currentView()->findText(q);
+    if (findBar_ && currentView()) {
+      findBar_->attachView(currentView());
+      findBar_->showAndFocus(findQuery_);
     }
   });
   key("Ctrl+G", [this] {
-    if (currentView())
-      currentView()->findText(findQuery_);
+    if (findBar_ && currentView()) {
+      findBar_->findNext();
+    }
   });
   key("Ctrl+Shift+G", [this] {
-    if (currentView())
-      currentView()->findText(findQuery_, QWebEnginePage::FindBackward);
+    if (findBar_ && currentView()) {
+      findBar_->findPrevious();
+    }
+  });
+  key("F12", [this] {
+    openDevTools(currentView());
   });
   auto zoomIn = [this] {
     if (currentView())
@@ -1141,14 +1250,16 @@ void MainWindow::handleHomeNavigation(const QUrl &url, QWebEngineView *view) {
     const QString engine = query.queryItemValue("engine").toLower();
     if (text.isEmpty()) {
       loadHome(view);
-    } else if (engine == "brave") {
-      view->setUrl(QUrl("https://search.brave.com/search?q=" +
-                        QUrl::toPercentEncoding(text)));
-    } else if (engine == "duckduckgo") {
-      view->setUrl(
-          QUrl("https://duckduckgo.com/?q=" + QUrl::toPercentEncoding(text)));
     } else {
-      openUrl("g " + text);
+      if (!engine.isEmpty()) {
+        for (const auto &eng : SearchEngineManager::instance().availableEngines()) {
+          if (eng.id == engine) {
+            view->setUrl(QUrl(eng.searchUrlTemplate.arg(QString::fromUtf8(QUrl::toPercentEncoding(text)))));
+            return;
+          }
+        }
+      }
+      view->setUrl(SearchEngineManager::instance().buildSearchUrl(text));
     }
     return;
   }
@@ -1210,17 +1321,8 @@ void MainWindow::openUrl(const QString &text) {
     }
   }
 
-  // Default search engine setting (Google / Brave / DuckDuckGo)
-  QSettings settings("LiteWave", "LiteWave");
-  const QString engine = settings.value("searchEngine", "Google").toString();
-  QString searchBase = "https://www.google.com/search?q=";
-  if (engine == "Brave") {
-    searchBase = "https://search.brave.com/search?q=";
-  } else if (engine == "DuckDuckGo") {
-    searchBase = "https://duckduckgo.com/?q=";
-  }
-
-  url = QUrl(searchBase + QUrl::toPercentEncoding(input));
+  // Use configured search engine from SearchEngineManager
+  url = SearchEngineManager::instance().buildSearchUrl(input);
   currentView()->setUrl(url);
 }
 
@@ -1899,6 +2001,9 @@ void MainWindow::applyTheme() {
                 outline: none;
             }
         )QSS"));
+  }
+  if (findBar_) {
+    findBar_->setDarkMode(darkMode_);
   }
 }
 
@@ -2749,12 +2854,21 @@ void MainWindow::showDownloadsDialog() {
   auto *btnLayout = new QHBoxLayout();
   auto *openFileBtn = new QPushButton("เปิดไฟล์", dialog);
   auto *openDirBtn = new QPushButton("เปิดโฟลเดอร์ดาวน์โหลด", dialog);
+  auto *clearBtn = new QPushButton("ล้างรายการ", dialog);
   auto *closeBtn = new QPushButton("ปิด", dialog);
 
   btnLayout->addWidget(openFileBtn);
   btnLayout->addWidget(openDirBtn);
+  btnLayout->addWidget(clearBtn);
   btnLayout->addWidget(closeBtn);
   layout->addLayout(btnLayout);
+
+  connect(clearBtn, &QPushButton::clicked, dialog, [this, listWidget] {
+    downloadRecords_.clear();
+    saveDownloadRecords();
+    listWidget->clear();
+    listWidget->addItem("ยังไม่มีประวัติการดาวน์โหลด");
+  });
 
   connect(openFileBtn, &QPushButton::clicked, dialog, [listWidget] {
     auto *item = listWidget->currentItem();
@@ -2891,13 +3005,9 @@ QMenu *MainWindow::createMainMenu() {
 
   auto *findAct = menu->addAction("🔎 ค้นหาในหน้าเว็บ…\tCtrl+F");
   connect(findAct, &QAction::triggered, this, [this] {
-    bool ok = false;
-    const QString q = QInputDialog::getText(
-        this, "ค้นหาในหน้าเว็บ", "ข้อความที่ต้องการค้นหา:", QLineEdit::Normal,
-        findQuery_, &ok);
-    if (ok && currentView()) {
-      findQuery_ = q;
-      currentView()->findText(q);
+    if (findBar_ && currentView()) {
+      findBar_->attachView(currentView());
+      findBar_->showAndFocus(findQuery_);
     }
   });
 
@@ -2910,6 +3020,11 @@ QMenu *MainWindow::createMainMenu() {
     if (!path.isEmpty())
       currentView()->page()->save(
           path, QWebEngineDownloadRequest::MimeHtmlSaveFormat);
+  });
+
+  auto *devToolsAct = menu->addAction("🛠️ เครื่องมือนักพัฒนา (DevTools)\tF12");
+  connect(devToolsAct, &QAction::triggered, this, [this] {
+    openDevTools(currentView());
   });
 
   menu->addSeparator();
@@ -3155,16 +3270,15 @@ void MainWindow::showSettingsDialog() {
   auto *lblSearch = new QLabel(
       "เครื่องมือค้นหาที่จะใช้เมื่อระบุคำค้นหาในช่องที่อยู่ (Address Bar):", grpSearch);
   auto *searchCombo = new QComboBox(grpSearch);
-  searchCombo->addItem("Google (www.google.com)", "Google");
-  searchCombo->addItem("Brave Search (search.brave.com)", "Brave");
-  searchCombo->addItem("DuckDuckGo (duckduckgo.com)", "DuckDuckGo");
-  searchCombo->addItem("Bing (www.bing.com)", "Bing");
-
-  const QString curEngine = st.value("searchEngine", "Google").toString();
-  int idx = searchCombo->findData(curEngine);
-  if (idx < 0)
-    idx = 0;
-  searchCombo->setCurrentIndex(idx);
+  const auto availableEngines = SearchEngineManager::instance().availableEngines();
+  const auto curEngine = SearchEngineManager::instance().currentEngine();
+  int activeIdx = 0;
+  for (int i = 0; i < availableEngines.size(); ++i) {
+    searchCombo->addItem(availableEngines[i].name, availableEngines[i].id);
+    if (availableEngines[i].id == curEngine.id)
+      activeIdx = i;
+  }
+  searchCombo->setCurrentIndex(activeIdx);
 
   grpSearchLayout->addWidget(lblSearch);
   grpSearchLayout->addWidget(searchCombo);
@@ -3184,6 +3298,8 @@ void MainWindow::showSettingsDialog() {
 
   auto *rbHome =
       new QRadioButton("เปิดหน้าเริ่มต้นแท็บใหม่ (LiteWave Home Page)", grpStartup);
+  auto *rbRestore =
+      new QRadioButton("เปิดแท็บเดิมที่ค้างไว้จากการใช้งานครั้งล่าสุด (Continue where you left off)", grpStartup);
   auto *rbCustom =
       new QRadioButton("เปิดหน้าเว็บที่กำหนดเฉพาะ (Custom URL):", grpStartup);
 
@@ -3192,7 +3308,10 @@ void MainWindow::showSettingsDialog() {
   customUrlEdit->setText(st.value("customStartupUrl", "").toString());
 
   const QString startupOpt = st.value("startupOption", "home").toString();
-  if (startupOpt == "custom") {
+  if (startupOpt == "restore") {
+    rbRestore->setChecked(true);
+    customUrlEdit->setEnabled(false);
+  } else if (startupOpt == "custom") {
     rbCustom->setChecked(true);
     customUrlEdit->setEnabled(true);
   } else {
@@ -3203,6 +3322,7 @@ void MainWindow::showSettingsDialog() {
           &QLineEdit::setEnabled);
 
   grpStartupLayout->addWidget(rbHome);
+  grpStartupLayout->addWidget(rbRestore);
   grpStartupLayout->addWidget(rbCustom);
   grpStartupLayout->addWidget(customUrlEdit);
   p2Layout->addWidget(grpStartup);
@@ -3528,9 +3648,11 @@ void MainWindow::showSettingsDialog() {
     statusBar()->setVisible(showStatusBarBox->isChecked());
     st.setValue("showStatusBar", showStatusBarBox->isChecked());
 
-    st.setValue("searchEngine", searchCombo->currentData().toString());
+    SearchEngineManager::instance().setCurrentEngineId(searchCombo->currentData().toString());
 
-    if (rbCustom->isChecked()) {
+    if (rbRestore->isChecked()) {
+      st.setValue("startupOption", "restore");
+    } else if (rbCustom->isChecked()) {
       st.setValue("startupOption", "custom");
       st.setValue("customStartupUrl", customUrlEdit->text().trimmed());
     } else {
@@ -3591,3 +3713,181 @@ void MainWindow::showSettingsDialog() {
     statusBar()->showMessage("บันทึกการตั้งค่าเรียบร้อยแล้ว", 3000);
   }
 }
+
+void MainWindow::showTabContextMenu(const QPoint &pos) {
+  const int index = tabBar_->tabAt(pos);
+  if (index < 0)
+    return;
+
+  auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(index));
+  if (!view)
+    return;
+
+  QMenu menu(this);
+  auto *reloadAct = menu.addAction("↻ รีโหลดแท็บ");
+  connect(reloadAct, &QAction::triggered, this, [view] { view->reload(); });
+
+  auto *duplicateAct = menu.addAction("⎘ ทำซ้ำแท็บ");
+  connect(duplicateAct, &QAction::triggered, this, [this, view] {
+    createView(view->url());
+  });
+
+  const bool isMuted = view->page()->isAudioMuted();
+  auto *muteAct = menu.addAction(isMuted ? "🔊 เปิดเสียงแท็บ" : "🔇 ปิดเสียงแท็บ");
+  connect(muteAct, &QAction::triggered, this, [view, isMuted] {
+    view->page()->setAudioMuted(!isMuted);
+  });
+
+  auto *inspectAct = menu.addAction("🛠️ ตรวจสอบองค์ประกอบ (DevTools)");
+  connect(inspectAct, &QAction::triggered, this, [this, view] {
+    openDevTools(view);
+  });
+
+  menu.addSeparator();
+
+  auto *closeAct = menu.addAction("✕ ปิดแท็บ");
+  connect(closeAct, &QAction::triggered, this, [this, index] {
+    closeTab(index);
+  });
+
+  auto *closeOthersAct = menu.addAction("ปิดแท็บอื่นๆ ทั้งหมด");
+  connect(closeOthersAct, &QAction::triggered, this, [this, view] {
+    for (int i = tabStack_->count() - 1; i >= 0; --i) {
+      if (tabStack_->widget(i) != view) {
+        closeTab(i);
+      }
+    }
+  });
+
+  auto *closeRightAct = menu.addAction("ปิดแท็บทางด้านขวา");
+  connect(closeRightAct, &QAction::triggered, this, [this, index] {
+    for (int i = tabStack_->count() - 1; i > index; --i) {
+      closeTab(i);
+    }
+  });
+
+  if (!closedTabs_.isEmpty()) {
+    menu.addSeparator();
+    auto *reopenAct = menu.addAction("เปิดแท็บที่เพิ่งปิด (Ctrl+Shift+T)");
+    connect(reopenAct, &QAction::triggered, this, [this] {
+      const auto u = closedTabs_.takeLast();
+      if (u.host() == "litewave.home" || u.isEmpty())
+        newTab();
+      else
+        createView(u);
+    });
+  }
+
+  menu.exec(tabBar_->mapToGlobal(pos));
+}
+
+void MainWindow::updateTabAudioIcon(int index, bool audible, bool muted) {
+  if (index < 0 || index >= tabBar_->count())
+    return;
+  auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(index));
+  if (!view)
+    return;
+
+  if (muted) {
+    tabBar_->setTabToolTip(index, view->title() + " [ปิดเสียงอยู่]");
+  } else if (audible) {
+    tabBar_->setTabToolTip(index, view->title() + " [กำลังเล่นเสียง]");
+  } else {
+    tabBar_->setTabToolTip(index, view->title());
+  }
+}
+
+void MainWindow::openDevTools(QWebEngineView *targetView) {
+  if (!targetView)
+    targetView = currentView();
+  if (!targetView || !targetView->page())
+    return;
+
+  auto *devWindow = new QMainWindow(this);
+  devWindow->setWindowTitle(QStringLiteral("LiteWave DevTools — %1").arg(targetView->title()));
+  devWindow->resize(960, 640);
+  devWindow->setAttribute(Qt::WA_DeleteOnClose);
+
+  auto *devView = new QWebEngineView(devWindow);
+  devWindow->setCentralWidget(devView);
+  targetView->page()->setDevToolsPage(devView->page());
+
+  connect(devWindow, &QObject::destroyed, targetView, [targetView] {
+    if (targetView && targetView->page()) {
+      targetView->page()->setDevToolsPage(nullptr);
+    }
+  });
+
+  devWindow->show();
+}
+
+void MainWindow::saveSession() {
+  if (privateMode_)
+    return;
+
+  QSettings st("LiteWave", "LiteWave");
+  QStringList urls;
+  for (int i = 0; i < tabStack_->count(); ++i) {
+    auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(i));
+    if (view && !view->url().isEmpty() && view->url().host() != "litewave.home") {
+      urls.append(view->url().toString());
+    }
+  }
+  st.setValue("session/openTabs", urls);
+  st.sync();
+}
+
+void MainWindow::restoreSession() {
+  if (privateMode_)
+    return;
+
+  QSettings st("LiteWave", "LiteWave");
+  const QString startup = st.value("startupOption", "home").toString();
+  if (startup != "restore")
+    return;
+
+  const QStringList urls = st.value("session/openTabs").toStringList();
+  if (urls.isEmpty())
+    return;
+
+  for (const QString &u : urls) {
+    createView(QUrl(u));
+  }
+}
+
+void MainWindow::loadDownloadRecords() {
+  QSettings st("LiteWave", "LiteWave");
+  const QVariantList list = st.value("downloads/history").toList();
+  downloadRecords_.clear();
+  for (const auto &item : list) {
+    const QVariantMap map = item.toMap();
+    DownloadRecord rec;
+    rec.fileName = map.value("fileName").toString();
+    rec.path = map.value("path").toString();
+    rec.totalBytes = map.value("totalBytes").toLongLong();
+    rec.completed = map.value("completed").toBool();
+    if (!rec.fileName.isEmpty()) {
+      downloadRecords_.append(rec);
+    }
+  }
+}
+
+void MainWindow::saveDownloadRecords() {
+  if (privateMode_)
+    return;
+  QSettings st("LiteWave", "LiteWave");
+  QVariantList list;
+  const qsizetype maxItems = std::min<qsizetype>(downloadRecords_.size(), 50);
+  for (qsizetype i = 0; i < maxItems; ++i) {
+    const auto &rec = downloadRecords_.at(i);
+    QVariantMap map;
+    map["fileName"] = rec.fileName;
+    map["path"] = rec.path;
+    map["totalBytes"] = rec.totalBytes;
+    map["completed"] = rec.completed;
+    list.append(map);
+  }
+  st.setValue("downloads/history", list);
+  st.sync();
+}
+

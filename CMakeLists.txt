@@ -33,10 +33,12 @@ qt_add_executable(LiteWave
     src/LiteWaveFilterEngine.h
     src/search/SearchEngineManager.cpp
     src/search/SearchEngineManager.h
+    src/ui/FindBar.cpp
+    src/ui/FindBar.h
     resources.qrc
 )
 
-target_include_directories(LiteWave PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/search)
+target_include_directories(LiteWave PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/search ${CMAKE_CURRENT_SOURCE_DIR}/src/ui)
 
 add_dependencies(LiteWave LiteWaveFilterEngineBuild)
 target_link_libraries(LiteWave PRIVATE
@@ -75,8 +77,10 @@ if(BUILD_TESTING)
         tests/ShieldTests.cpp
         src/AdBlocker.cpp
         src/AdBlocker.h
+        src/search/SearchEngineManager.cpp
+        src/search/SearchEngineManager.h
     )
-    target_include_directories(ShieldTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_include_directories(ShieldTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/search)
     target_link_libraries(ShieldTests PRIVATE
         Qt6::Test
         Qt6::WebEngineCore
