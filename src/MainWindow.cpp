@@ -1772,14 +1772,23 @@ void MainWindow::applyTheme() {
                 border: 1px solid #383a42;
                 border-radius: 8px;
                 padding: 6px;
+                font-size: 13px;
             }
             QMenu::item {
-                padding: 6px 20px;
+                padding: 6px 24px 6px 32px;
                 border-radius: 4px;
+            }
+            QMenu::icon {
+                padding-left: 8px;
             }
             QMenu::item:selected {
                 background-color: #ff5500;
                 color: #ffffff;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #383a42;
+                margin: 4px 8px;
             }
             QAbstractItemView {
                 background-color: #2b2d35;
@@ -2034,14 +2043,23 @@ void MainWindow::applyTheme() {
                 border: 1px solid #d0d2d6;
                 border-radius: 8px;
                 padding: 6px;
+                font-size: 13px;
             }
             QMenu::item {
-                padding: 6px 20px;
+                padding: 6px 24px 6px 32px;
                 border-radius: 4px;
+            }
+            QMenu::icon {
+                padding-left: 8px;
             }
             QMenu::item:selected {
                 background-color: #ff5500;
                 color: #ffffff;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #e5e7eb;
+                margin: 4px 8px;
             }
             QAbstractItemView {
                 background-color: #ffffff;
@@ -2060,6 +2078,13 @@ void MainWindow::applyTheme() {
   }
   if (suggestionPopup_) {
     suggestionPopup_->setDarkMode(darkMode_);
+  }
+  if (menuBtn_) {
+    auto *oldMenu = menuBtn_->menu();
+    menuBtn_->setMenu(createMainMenu());
+    if (oldMenu) {
+      oldMenu->deleteLater();
+    }
   }
 }
 
@@ -2795,9 +2820,157 @@ void MainWindow::addHistoryItem(const QString &title, const QUrl &url) {
   setupUrlBarCompleter();
 }
 
+static QIcon createMenuIcon(const QString &name, const QColor &color) {
+  QPixmap pix(20, 20);
+  pix.fill(Qt::transparent);
+  QPainter p(&pix);
+  p.setRenderHint(QPainter::Antialiasing);
+  p.setPen(QPen(color, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+  p.setBrush(Qt::NoBrush);
+
+  if (name == "new_tab") {
+    // Clean plus icon
+    p.drawLine(10, 4, 10, 16);
+    p.drawLine(4, 10, 16, 10);
+  } else if (name == "new_window") {
+    // Clean browser window outline
+    p.drawRoundedRect(3, 4, 14, 12, 2, 2);
+    p.drawLine(3, 8, 17, 8);
+    p.drawPoint(6, 6);
+    p.drawPoint(9, 6);
+  } else if (name == "incognito") {
+    // Sleek glasses and fedora / private mask
+    p.drawLine(3, 7, 17, 7);
+    p.drawArc(6, 3, 8, 8, 0, 180 * 16);
+    p.drawEllipse(4, 10, 5, 5);
+    p.drawEllipse(11, 10, 5, 5);
+    p.drawLine(9, 12, 11, 12);
+  } else if (name == "history") {
+    // Clock with counter-clockwise history arrow
+    p.drawArc(3, 3, 14, 14, 30 * 16, 290 * 16);
+    p.drawLine(10, 6, 10, 10);
+    p.drawLine(10, 10, 13, 10);
+    p.drawLine(11, 2, 14, 4);
+    p.drawLine(14, 4, 11, 6);
+  } else if (name == "bookmark") {
+    // Sharp star icon
+    QPolygonF star;
+    star << QPointF(10, 3) << QPointF(12, 7.5) << QPointF(17, 8)
+         << QPointF(13.2, 11.5) << QPointF(14.5, 16.5) << QPointF(10, 13.8)
+         << QPointF(5.5, 16.5) << QPointF(6.8, 11.5) << QPointF(3, 8)
+         << QPointF(8, 7.5);
+    p.drawPolygon(star);
+  } else if (name == "download") {
+    // Arrow pointing down into open tray
+    p.drawLine(10, 3, 10, 12);
+    p.drawLine(6, 8.5, 10, 12.5);
+    p.drawLine(14, 8.5, 10, 12.5);
+    p.drawLine(3, 13, 3, 16.5);
+    p.drawLine(3, 16.5, 17, 16.5);
+    p.drawLine(17, 16.5, 17, 13);
+  } else if (name == "trash") {
+    // Clean trash can
+    p.drawLine(4, 6, 16, 6);
+    p.drawLine(8, 4, 12, 4);
+    p.drawRoundedRect(5, 6, 10, 11, 1.5, 1.5);
+    p.drawLine(8, 9, 8, 14);
+    p.drawLine(12, 9, 12, 14);
+  } else if (name == "page") {
+    // Clean document icon
+    p.drawRoundedRect(4, 3, 12, 14, 1.5, 1.5);
+    p.drawLine(7, 7, 13, 7);
+    p.drawLine(7, 10, 13, 10);
+    p.drawLine(7, 13, 11, 13);
+  } else if (name == "zoom") {
+    // Magnifying glass
+    p.drawEllipse(3, 3, 9, 9);
+    p.drawLine(10, 10, 16, 16);
+  } else if (name == "zoom_in") {
+    p.drawEllipse(3, 3, 9, 9);
+    p.drawLine(10, 10, 16, 16);
+    p.drawLine(7.5, 5.5, 7.5, 9.5);
+    p.drawLine(5.5, 7.5, 9.5, 7.5);
+  } else if (name == "zoom_out") {
+    p.drawEllipse(3, 3, 9, 9);
+    p.drawLine(10, 10, 16, 16);
+    p.drawLine(5.5, 7.5, 9.5, 7.5);
+  } else if (name == "zoom_reset") {
+    p.drawRoundedRect(3, 4, 14, 12, 2, 2);
+    p.drawLine(10, 7, 10, 13);
+  } else if (name == "fullscreen") {
+    // Expand arrows
+    p.drawLine(3, 7, 3, 3);
+    p.drawLine(3, 3, 7, 3);
+    p.drawLine(17, 7, 17, 3);
+    p.drawLine(17, 3, 13, 3);
+    p.drawLine(3, 13, 3, 17);
+    p.drawLine(3, 17, 7, 17);
+    p.drawLine(17, 13, 17, 17);
+    p.drawLine(17, 17, 13, 17);
+  } else if (name == "print") {
+    // Modern printer
+    p.drawRoundedRect(4, 7, 12, 7, 2, 2);
+    p.drawLine(6, 4, 14, 4);
+    p.drawLine(6, 4, 6, 7);
+    p.drawLine(14, 4, 14, 7);
+    p.drawRect(6, 11, 8, 5);
+  } else if (name == "find") {
+    // Document with search
+    p.drawRoundedRect(3, 3, 10, 14, 1.5, 1.5);
+    p.drawLine(6, 7, 10, 7);
+    p.drawLine(6, 10, 9, 10);
+    p.drawEllipse(11, 11, 5, 5);
+    p.drawLine(15, 15, 18, 18);
+  } else if (name == "save") {
+    // Clean floppy disk / save badge
+    p.drawRoundedRect(3, 3, 14, 14, 2, 2);
+    p.drawRect(6, 3, 8, 5);
+    p.drawRect(6, 11, 8, 6);
+  } else if (name == "devtools") {
+    // Code brackets < / >
+    p.drawLine(7, 6, 4, 10);
+    p.drawLine(4, 10, 7, 14);
+    p.drawLine(13, 6, 16, 10);
+    p.drawLine(16, 10, 13, 14);
+    p.drawLine(11, 5, 9, 15);
+  } else if (name == "theme") {
+    // Half sun / half moon
+    p.drawEllipse(4, 4, 12, 12);
+    p.drawLine(10, 4, 10, 16);
+    QPainterPath half;
+    half.moveTo(10, 4);
+    half.arcTo(4, 4, 12, 12, 90, 180);
+    half.closeSubpath();
+    p.fillPath(half, color);
+  } else if (name == "settings") {
+    // Precise gear / cog
+    p.drawEllipse(6, 6, 8, 8);
+    p.drawLine(10, 2, 10, 4);
+    p.drawLine(10, 16, 10, 18);
+    p.drawLine(2, 10, 4, 10);
+    p.drawLine(16, 10, 18, 10);
+    p.drawLine(4.5, 4.5, 6, 6);
+    p.drawLine(14, 14, 15.5, 15.5);
+    p.drawLine(4.5, 15.5, 6, 14);
+    p.drawLine(14, 6, 15.5, 4.5);
+  } else if (name == "about") {
+    // Information circle (i)
+    p.drawEllipse(3, 3, 14, 14);
+    p.drawPoint(10, 7);
+    p.drawLine(10, 9.5, 10, 13.5);
+  } else if (name == "exit") {
+    // Power / Logout icon
+    p.drawArc(3, 5, 14, 12, 30 * 16, 300 * 16);
+    p.drawLine(10, 2, 10, 9);
+  }
+
+  return QIcon(pix);
+}
+
 void MainWindow::populateHistoryMenu(QMenu *historyMenu) {
   historyMenu->clear();
-  auto *clearHist = historyMenu->addAction("🗑️ ล้างประวัติการใช้เว็บ");
+  const QColor iconCol = darkMode_ ? QColor("#94a3b8") : QColor("#475569");
+  auto *clearHist = historyMenu->addAction(createMenuIcon("trash", iconCol), "ล้างประวัติการใช้เว็บ");
   connect(clearHist, &QAction::triggered, this, [this] {
     QSettings st("LiteWave", "LiteWave");
     st.remove("history");
@@ -2818,7 +2991,7 @@ void MainWindow::populateHistoryMenu(QMenu *historyMenu) {
       const QVariantMap map = var.toMap();
       const QString title = map.value("title").toString();
       const QString urlStr = map.value("url").toString();
-      auto *act = historyMenu->addAction(title + " — " + urlStr);
+      auto *act = historyMenu->addAction(createMenuIcon("page", iconCol), title + " — " + urlStr);
       connect(act, &QAction::triggered, this,
               [this, urlStr] { openUrl(urlStr); });
     }
@@ -2827,10 +3000,11 @@ void MainWindow::populateHistoryMenu(QMenu *historyMenu) {
 
 void MainWindow::populateBookmarksMenu(QMenu *bookmarksMenu) {
   bookmarksMenu->clear();
-  auto *addBm = bookmarksMenu->addAction("★ บันทึกแท็บนี้ (Ctrl+D)");
+  const QColor iconCol = darkMode_ ? QColor("#94a3b8") : QColor("#475569");
+  auto *addBm = bookmarksMenu->addAction(createMenuIcon("bookmark", iconCol), "บันทึกแท็บนี้ (Ctrl+D)");
   connect(addBm, &QAction::triggered, this, &MainWindow::addBookmark);
 
-  auto *clearBm = bookmarksMenu->addAction("🗑️ ลบบุ๊กมาร์กทั้งหมด");
+  auto *clearBm = bookmarksMenu->addAction(createMenuIcon("trash", iconCol), "ลบบุ๊กมาร์กทั้งหมด");
   connect(clearBm, &QAction::triggered, this, [this] {
     QSettings st("LiteWave", "LiteWave");
     st.remove("bookmarks");
@@ -2847,7 +3021,7 @@ void MainWindow::populateBookmarksMenu(QMenu *bookmarksMenu) {
   } else {
     for (const QString &key : keys) {
       const QString title = st.value(key).toString();
-      auto *act = bookmarksMenu->addAction(title + " — " + key);
+      auto *act = bookmarksMenu->addAction(createMenuIcon("bookmark", iconCol), title + " — " + key);
       connect(act, &QAction::triggered, this, [this, key] { openUrl(key); });
     }
   }
@@ -2933,21 +3107,24 @@ void MainWindow::clearBrowsingDataDialog() {
   }
 }
 
+
 QMenu *MainWindow::createMainMenu() {
   auto *menu = new QMenu(this);
   menu->setObjectName("mainAppMenu");
 
-  auto *newTabAct = menu->addAction("➕ แท็บใหม่\tCtrl+T");
+  const QColor iconColor = darkMode_ ? QColor("#94a3b8") : QColor("#475569");
+
+  auto *newTabAct = menu->addAction(createMenuIcon("new_tab", iconColor), "แท็บใหม่\tCtrl+T");
   connect(newTabAct, &QAction::triggered, this, &MainWindow::newTab);
 
-  auto *newWinAct = menu->addAction("🗔 หน้าต่างใหม่\tCtrl+N");
+  auto *newWinAct = menu->addAction(createMenuIcon("new_window", iconColor), "หน้าต่างใหม่\tCtrl+N");
   connect(newWinAct, &QAction::triggered, this, [this] {
     auto *w = new MainWindow(nullptr, privateMode_);
     w->setAttribute(Qt::WA_DeleteOnClose);
     w->show();
   });
 
-  auto *newPrivWinAct = menu->addAction("🕵️ หน้าต่างส่วนตัวใหม่\tCtrl+Shift+N");
+  auto *newPrivWinAct = menu->addAction(createMenuIcon("incognito", iconColor), "หน้าต่างส่วนตัวใหม่\tCtrl+Shift+N");
   connect(newPrivWinAct, &QAction::triggered, this, [] {
     auto *w = new MainWindow(nullptr, true);
     w->setAttribute(Qt::WA_DeleteOnClose);
@@ -2956,45 +3133,48 @@ QMenu *MainWindow::createMainMenu() {
 
   menu->addSeparator();
 
-  auto *historyMenu = menu->addMenu("📜 ประวัติการใช้งาน");
+  auto *historyMenu = menu->addMenu("ประวัติการใช้งาน");
+  historyMenu->setIcon(createMenuIcon("history", iconColor));
   connect(historyMenu, &QMenu::aboutToShow, this,
           [this, historyMenu] { populateHistoryMenu(historyMenu); });
   populateHistoryMenu(historyMenu);
 
-  auto *bookmarksMenu = menu->addMenu("★ บุ๊กมาร์ก");
+  auto *bookmarksMenu = menu->addMenu("บุ๊กมาร์ก");
+  bookmarksMenu->setIcon(createMenuIcon("bookmark", iconColor));
   connect(bookmarksMenu, &QMenu::aboutToShow, this,
           [this, bookmarksMenu] { populateBookmarksMenu(bookmarksMenu); });
   populateBookmarksMenu(bookmarksMenu);
 
-  auto *downloadsAct = menu->addAction("⬇️ การดาวน์โหลด\tCtrl+J");
+  auto *downloadsAct = menu->addAction(createMenuIcon("download", iconColor), "การดาวน์โหลด\tCtrl+J");
   connect(downloadsAct, &QAction::triggered, this,
           &MainWindow::showDownloadsDialog);
 
-  auto *clearDataAct = menu->addAction("🗑️ ล้างข้อมูลการท่องเว็บ…\tCtrl+Shift+Del");
+  auto *clearDataAct = menu->addAction(createMenuIcon("trash", iconColor), "ล้างข้อมูลการท่องเว็บ…\tCtrl+Shift+Del");
   connect(clearDataAct, &QAction::triggered, this,
           &MainWindow::clearBrowsingDataDialog);
 
   menu->addSeparator();
 
-  auto *zoomMenu = menu->addMenu("🔍 ซูมหน้าเว็บ");
-  auto *zoomInAct = zoomMenu->addAction("➕ ขยาย (+10%)");
+  auto *zoomMenu = menu->addMenu("ซูมหน้าเว็บ");
+  zoomMenu->setIcon(createMenuIcon("zoom", iconColor));
+  auto *zoomInAct = zoomMenu->addAction(createMenuIcon("zoom_in", iconColor), "ขยาย (+10%)");
   connect(zoomInAct, &QAction::triggered, this, [this] {
     if (currentView())
       currentView()->setZoomFactor(
           std::min(5.0, currentView()->zoomFactor() + 0.1));
   });
-  auto *zoomOutAct = zoomMenu->addAction("➖ ย่อ (-10%)");
+  auto *zoomOutAct = zoomMenu->addAction(createMenuIcon("zoom_out", iconColor), "ย่อ (-10%)");
   connect(zoomOutAct, &QAction::triggered, this, [this] {
     if (currentView())
       currentView()->setZoomFactor(
           std::max(0.25, currentView()->zoomFactor() - 0.1));
   });
-  auto *zoomResetAct = zoomMenu->addAction("🎯 ขนาดปกติ (100%)\tCtrl+0");
+  auto *zoomResetAct = zoomMenu->addAction(createMenuIcon("zoom_reset", iconColor), "ขนาดปกติ (100%)\tCtrl+0");
   connect(zoomResetAct, &QAction::triggered, this, [this] {
     if (currentView())
       currentView()->setZoomFactor(1.0);
   });
-  auto *fullScreenAct = zoomMenu->addAction("⛶ เต็มจอ (Full Screen)\tF11");
+  auto *fullScreenAct = zoomMenu->addAction(createMenuIcon("fullscreen", iconColor), "เต็มจอ (Full Screen)\tF11");
   connect(fullScreenAct, &QAction::triggered, this, [this] {
     if (isFullScreen()) {
       showNormal();
@@ -3011,7 +3191,7 @@ QMenu *MainWindow::createMainMenu() {
 
   menu->addSeparator();
 
-  auto *printAct = menu->addAction("🖨️ พิมพ์…\tCtrl+P");
+  auto *printAct = menu->addAction(createMenuIcon("print", iconColor), "พิมพ์…\tCtrl+P");
   connect(printAct, &QAction::triggered, this, [this] {
     if (!currentView())
       return;
@@ -3027,7 +3207,7 @@ QMenu *MainWindow::createMainMenu() {
     }
   });
 
-  auto *findAct = menu->addAction("🔎 ค้นหาในหน้าเว็บ…\tCtrl+F");
+  auto *findAct = menu->addAction(createMenuIcon("find", iconColor), "ค้นหาในหน้าเว็บ…\tCtrl+F");
   connect(findAct, &QAction::triggered, this, [this] {
     if (findBar_ && currentView()) {
       findBar_->attachView(currentView());
@@ -3035,7 +3215,7 @@ QMenu *MainWindow::createMainMenu() {
     }
   });
 
-  auto *saveAct = menu->addAction("💾 บันทึกหน้าเว็บ…\tCtrl+S");
+  auto *saveAct = menu->addAction(createMenuIcon("save", iconColor), "บันทึกหน้าเว็บ…\tCtrl+S");
   connect(saveAct, &QAction::triggered, this, [this] {
     if (!currentView())
       return;
@@ -3046,7 +3226,7 @@ QMenu *MainWindow::createMainMenu() {
           path, QWebEngineDownloadRequest::MimeHtmlSaveFormat);
   });
 
-  auto *devToolsAct = menu->addAction("🛠️ เครื่องมือนักพัฒนา (DevTools)\tF12");
+  auto *devToolsAct = menu->addAction(createMenuIcon("devtools", iconColor), "เครื่องมือนักพัฒนา (DevTools)\tF12");
   connect(devToolsAct, &QAction::triggered, this, [this] {
     openDevTools(currentView());
   });
@@ -3054,14 +3234,15 @@ QMenu *MainWindow::createMainMenu() {
   menu->addSeparator();
 
   auto *themeAct =
-      menu->addAction(darkMode_ ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด");
+      menu->addAction(createMenuIcon("theme", iconColor),
+                      darkMode_ ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด");
   connect(themeAct, &QAction::triggered, this, &MainWindow::toggleTheme);
 
-  auto *settingsAct = menu->addAction("การตั้งค่า (Settings)");
+  auto *settingsAct = menu->addAction(createMenuIcon("settings", iconColor), "การตั้งค่า (Settings)");
   connect(settingsAct, &QAction::triggered, this,
           &MainWindow::showSettingsDialog);
 
-  auto *aboutAct = menu->addAction("เกี่ยวกับ LiteWave");
+  auto *aboutAct = menu->addAction(createMenuIcon("about", iconColor), "เกี่ยวกับ LiteWave");
   connect(aboutAct, &QAction::triggered, this, [this] {
     QMessageBox::about(this, "เกี่ยวกับ LiteWave Browser",
                        "<h3>LiteWave Browser v1.0.3</h3>"
@@ -3076,7 +3257,7 @@ QMenu *MainWindow::createMainMenu() {
                        "</ul></p>");
   });
 
-  auto *exitAct = menu->addAction("ออกจากโปรแกรม\tAlt+F4");
+  auto *exitAct = menu->addAction(createMenuIcon("exit", iconColor), "ออกจากโปรแกรม\tAlt+F4");
   connect(exitAct, &QAction::triggered, this, &QWidget::close);
 
   return menu;
