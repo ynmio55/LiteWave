@@ -2008,12 +2008,23 @@ void MainWindow::applyTheme() {
 }
 
 void MainWindow::setupUrlBarCompleter() {
+  QSettings st("LiteWave", "LiteWave");
+  const bool enableSuggestions = st.value("search/enableSuggestions", false).toBool();
+  if (!enableSuggestions) {
+    if (urlBar_) {
+      urlBar_->setCompleter(nullptr);
+    }
+    return;
+  }
+
   if (!urlCompleter_) {
     urlCompleter_ = new QCompleter(this);
     urlCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
     urlCompleter_->setFilterMode(Qt::MatchContains);
     urlCompleter_->setCompletionMode(QCompleter::PopupCompletion);
     urlCompleter_->setMaxVisibleItems(10);
+  }
+  if (urlBar_) {
     urlBar_->setCompleter(urlCompleter_);
   }
 
@@ -2025,7 +2036,6 @@ void MainWindow::setupUrlBarCompleter() {
       "bing.com",     "duckduckgo.com", "brave.com",        "canva.com",
       "shopee.co.th", "lazada.co.th",   "stackoverflow.com"};
 
-  QSettings st("LiteWave", "LiteWave");
   const QVariantList history = st.value("history").toList();
   for (const auto &var : history) {
     const QVariantMap map = var.toMap();
@@ -2058,6 +2068,9 @@ void MainWindow::loadHome(QWebEngineView *view) {
   const QString textCol = darkMode_ ? "#f9fafc" : "#111827";
   const QString subCol = darkMode_ ? "#9ca3af" : "#6b7280";
   const QString borderCol = darkMode_ ? "#374151" : "#e5e7eb";
+
+  QSettings st("LiteWave", "LiteWave");
+  const bool enableSuggestions = st.value("search/enableSuggestions", false).toBool();
 
   const QString html = QString(R"HTML(
 <!doctype html>
@@ -2662,10 +2675,12 @@ const searchSuggestionsList = [
   'stackoverflow', 'python', 'cpp', 'qt framework', 'web development'
 ];
 
+const enableSearchSuggestions = %7;
 let currentSuggestions = [];
 let activeSuggestionIndex = -1;
 
 function onSearchInput(val) {
+  if (!enableSearchSuggestions) return;
   const box = document.getElementById('suggestionsBox');
   if (!box) return;
   const q = val.trim().toLowerCase();
@@ -2741,8 +2756,9 @@ document.addEventListener('click', (e) => {
 </body>
 </html>
 )HTML")
-                           .arg(bg, cardBg, textCol, subCol, borderCol)
-                           .arg(blockedCount);
+                            .arg(bg, cardBg, textCol, subCol, borderCol)
+                            .arg(blockedCount)
+                            .arg(enableSuggestions ? "true" : "false");
 
   view->setHtml(html, QUrl("https://litewave.home/"));
 }
@@ -3282,6 +3298,11 @@ void MainWindow::showSettingsDialog() {
 
   grpSearchLayout->addWidget(lblSearch);
   grpSearchLayout->addWidget(searchCombo);
+
+  auto *enableSuggestionsBox = new QCheckBox(
+      "แสดงรายการคำแนะนำและประวัติค้นหาอัตโนมัติขณะพิมพ์ (Autocomplete Suggestions)", grpSearch);
+  enableSuggestionsBox->setChecked(st.value("search/enableSuggestions", false).toBool());
+  grpSearchLayout->addWidget(enableSuggestionsBox);
   p1Layout->addWidget(grpSearch);
   p1Layout->addStretch();
   stacked->addWidget(page1);
@@ -3649,6 +3670,8 @@ void MainWindow::showSettingsDialog() {
     st.setValue("showStatusBar", showStatusBarBox->isChecked());
 
     SearchEngineManager::instance().setCurrentEngineId(searchCombo->currentData().toString());
+    st.setValue("search/enableSuggestions", enableSuggestionsBox->isChecked());
+    setupUrlBarCompleter();
 
     if (rbRestore->isChecked()) {
       st.setValue("startupOption", "restore");
