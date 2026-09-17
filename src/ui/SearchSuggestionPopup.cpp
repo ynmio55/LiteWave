@@ -23,8 +23,15 @@ static QPixmap createVectorIcon(SuggestionItem::Type type, bool dark) {
   QPainter p(&pixmap);
   p.setRenderHint(QPainter::Antialiasing);
 
-  const QColor color = dark ? QColor("#94a3b8") : QColor("#64748b");
-  p.setPen(QPen(color, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+  QColor color;
+  if (type == SuggestionItem::History) {
+    color = dark ? QColor("#c084fc") : QColor("#9333ea");
+  } else if (type == SuggestionItem::Website) {
+    color = dark ? QColor("#34d399") : QColor("#059669");
+  } else {
+    color = dark ? QColor("#38bdf8") : QColor("#0284c7");
+  }
+  p.setPen(QPen(color, 1.9, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
 
   if (type == SuggestionItem::History) {
     p.drawEllipse(2, 2, 15, 15);
@@ -55,13 +62,13 @@ SearchSuggestionPopup::SearchSuggestionPopup(QWidget *parent)
   connect(debounceTimer_, &QTimer::timeout, this, &SearchSuggestionPopup::onDebounceTimeout);
 
   auto *layout = new QVBoxLayout(this);
-  layout->setContentsMargins(4, 6, 4, 6);
+  layout->setContentsMargins(6, 4, 6, 6);
   layout->setSpacing(0);
 
   listWidget_->setFrameShape(QFrame::NoFrame);
   listWidget_->setFocusPolicy(Qt::NoFocus);
   listWidget_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-  listWidget_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+  listWidget_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   listWidget_->setSelectionMode(QAbstractItemView::SingleSelection);
   listWidget_->setMouseTracking(true);
 
@@ -106,39 +113,42 @@ void SearchSuggestionPopup::setDarkMode(bool dark) {
 
 void SearchSuggestionPopup::updateStyle() {
   const QString bg = darkMode_ ? "#1e293b" : "#ffffff";
-  const QString border = darkMode_ ? "#334155" : "#cbd5e1";
-  const QString textCol = darkMode_ ? "#f8fafc" : "#0f172a";
-  const QString hoverBg = darkMode_ ? "#334155" : "#f1f5f9";
-  const QString selectedBg = darkMode_ ? "#2563eb" : "#e0e7ff";
-  const QString selectedText = darkMode_ ? "#ffffff" : "#1e40af";
+  const QString border = darkMode_ ? "rgba(255, 255, 255, 0.12)" : "rgba(2, 132, 199, 0.28)";
+  const QString hoverBg = darkMode_ ? "rgba(51, 65, 85, 0.65)" : "rgba(2, 132, 199, 0.08)";
+  const QString selectedBg = darkMode_ ? "rgba(2, 132, 199, 0.25)" : "rgba(2, 132, 199, 0.14)";
 
   setStyleSheet(QString(R"CSS(
     #SearchSuggestionPopup {
       background-color: %1;
       border: 1px solid %2;
       border-top: none;
-      border-bottom-left-radius: 14px;
-      border-bottom-right-radius: 14px;
+      border-bottom-left-radius: 18px;
+      border-bottom-right-radius: 18px;
     }
     QListWidget {
       background: transparent;
       outline: none;
+      border: none;
     }
     QListWidget::item {
-      height: 38px;
-      border-radius: 8px;
+      height: 40px;
+      border-radius: 10px;
       margin: 1px 4px;
-      padding: 0 8px;
-      color: %3;
+      padding: 0 4px;
+      background: transparent;
     }
     QListWidget::item:hover {
-      background-color: %4;
+      background-color: %3;
     }
     QListWidget::item:selected {
-      background-color: %5;
-      color: %6;
+      background-color: %4;
     }
-  )CSS").arg(bg, border, textCol, hoverBg, selectedBg, selectedText));
+    QScrollBar:vertical {
+      width: 0px;
+      height: 0px;
+      background: transparent;
+    }
+  )CSS").arg(bg, border, hoverBg, selectedBg));
 }
 
 void SearchSuggestionPopup::queryChanged(const QString &rawQuery) {
@@ -322,7 +332,9 @@ void SearchSuggestionPopup::renderItems(const QVector<SuggestionItem> &items) {
     return;
   }
 
-  for (const auto &item : items) {
+  const int maxDisplay = qMin(items.size(), 7);
+  for (int i = 0; i < maxDisplay; ++i) {
+    const auto &item = items.at(i);
     auto *listItem = new QListWidgetItem(listWidget_);
     listItem->setData(Qt::UserRole, item.text);
     listItem->setData(Qt::UserRole + 1, item.urlOrQuery);
@@ -330,8 +342,8 @@ void SearchSuggestionPopup::renderItems(const QVector<SuggestionItem> &items) {
 
     auto *rowWidget = new QWidget();
     auto *rowLayout = new QHBoxLayout(rowWidget);
-    rowLayout->setContentsMargins(6, 2, 8, 2);
-    rowLayout->setSpacing(10);
+    rowLayout->setContentsMargins(10, 2, 12, 2);
+    rowLayout->setSpacing(12);
 
     auto *iconLabel = new QLabel(rowWidget);
     iconLabel->setPixmap(createVectorIcon(item.type, darkMode_));
@@ -341,7 +353,7 @@ void SearchSuggestionPopup::renderItems(const QVector<SuggestionItem> &items) {
     QFont font = textLabel->font();
     font.setPointSize(10);
     textLabel->setFont(font);
-    textLabel->setStyleSheet(QString("color: %1;").arg(darkMode_ ? "#f8fafc" : "#0f172a"));
+    textLabel->setStyleSheet(QString("color: %1; background: transparent;").arg(darkMode_ ? "#f8fafc" : "#0f172a"));
 
     rowLayout->addWidget(iconLabel);
     rowLayout->addWidget(textLabel, 1);
@@ -351,18 +363,35 @@ void SearchSuggestionPopup::renderItems(const QVector<SuggestionItem> &items) {
       QFont subFont = subLabel->font();
       subFont.setPointSize(9);
       subLabel->setFont(subFont);
-      subLabel->setStyleSheet(QString("color: %1;").arg(darkMode_ ? "#94a3b8" : "#64748b"));
+      subLabel->setStyleSheet(QString("color: %1; background: transparent;").arg(darkMode_ ? "#94a3b8" : "#64748b"));
       rowLayout->addWidget(subLabel);
+    } else {
+      auto *hintLabel = new QLabel(rowWidget);
+      QFont hintFont = hintLabel->font();
+      hintFont.setPointSize(8);
+      hintLabel->setFont(hintFont);
+      hintLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+      QString hintText;
+      if (item.type == SuggestionItem::History) {
+        hintText = "ประวัติ ↵";
+      } else if (item.type == SuggestionItem::Website) {
+        hintText = "เปิดเว็บ ↵";
+      } else {
+        hintText = "ค้นหา ↵";
+      }
+      hintLabel->setText(hintText);
+      hintLabel->setStyleSheet(QString("color: %1; background: transparent;").arg(darkMode_ ? "#64748b" : "#94a3b8"));
+      rowLayout->addWidget(hintLabel);
     }
 
-    listItem->setSizeHint(QSize(0, 38));
+    listItem->setSizeHint(QSize(0, 40));
     listWidget_->addItem(listItem);
     listWidget_->setItemWidget(listItem, rowWidget);
   }
 
-  const int totalRows = qMin(items.size(), 9);
-  const int rowHeight = 38;
-  const int calculatedHeight = (totalRows * rowHeight) + 14;
+  const int totalRows = maxDisplay;
+  const int rowHeight = 40;
+  const int calculatedHeight = (totalRows * rowHeight) + 12;
 
   reposition();
   resize(width(), calculatedHeight);
