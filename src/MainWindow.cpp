@@ -3681,12 +3681,20 @@ void MainWindow::populateHistoryMenu(QMenu *historyMenu) {
   } else {
     int count = 0;
     for (const auto &var : history) {
-      if (++count > 15)
+      if (++count > 12)
         break;
       const QVariantMap map = var.toMap();
-      const QString title = map.value("title").toString();
+      QString title = map.value("title").toString().trimmed();
       const QString urlStr = map.value("url").toString();
-      auto *act = historyMenu->addAction(createMenuIcon("page", iconCol), title + " — " + urlStr);
+      if (title.isEmpty()) {
+        title = QUrl(urlStr).host();
+      }
+      QString display = title;
+      if (display.length() > 38) {
+        display = display.left(35) + "…";
+      }
+      auto *act = historyMenu->addAction(createMenuIcon("page", iconCol), display);
+      act->setToolTip(title + "\n" + urlStr);
       connect(act, &QAction::triggered, this,
               [this, urlStr] { openUrl(urlStr); });
     }
@@ -3710,9 +3718,18 @@ void MainWindow::populateBookmarksMenu(QMenu *bookmarksMenu) {
   } else {
     int count = 0;
     for (const auto &item : bookmarks_) {
-      if (++count > 15)
+      if (++count > 12)
         break;
-      auto *act = bookmarksMenu->addAction(createMenuIcon("bookmark", iconCol), item.title + " — " + item.url);
+      QString title = item.title.trimmed();
+      if (title.isEmpty()) {
+        title = QUrl(item.url).host();
+      }
+      QString display = title;
+      if (display.length() > 38) {
+        display = display.left(35) + "…";
+      }
+      auto *act = bookmarksMenu->addAction(createMenuIcon("bookmark", iconCol), display);
+      act->setToolTip(item.title + "\n" + item.url);
       const QString url = item.url;
       connect(act, &QAction::triggered, this, [this, url] { openUrl(url); });
     }
