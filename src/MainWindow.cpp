@@ -2171,14 +2171,25 @@ void MainWindow::setupUrlBarCompleter() {
 
 void MainWindow::loadHome(QWebEngineView *view) {
   const int blockedCount = adBlocker_ ? adBlocker_->blockedCount() : 0;
-  const QString bg = darkMode_ ? "#111827" : "#ffffff";
-  const QString cardBg = darkMode_ ? "#1f2937" : "#f9fafb";
-  const QString textCol = darkMode_ ? "#f9fafc" : "#111827";
-  const QString subCol = darkMode_ ? "#9ca3af" : "#6b7280";
-  const QString borderCol = darkMode_ ? "#374151" : "#e5e7eb";
+  const QString ambientGrad = darkMode_
+      ? "radial-gradient(circle at 50% -10%, rgba(14, 165, 233, 0.22), transparent 55%), radial-gradient(circle at 85% 15%, rgba(59, 130, 246, 0.12), transparent 45%), #090d16"
+      : "radial-gradient(circle at 50% -10%, rgba(56, 189, 248, 0.22), transparent 55%), radial-gradient(circle at 85% 15%, rgba(99, 102, 241, 0.1), transparent 45%), #f8fafc";
+  const QString cardBg = darkMode_ ? "rgba(30, 41, 59, 0.65)" : "rgba(255, 255, 255, 0.85)";
+  const QString textCol = darkMode_ ? "#f8fafc" : "#0f172a";
+  const QString subCol = darkMode_ ? "#94a3b8" : "#64748b";
+  const QString borderCol = darkMode_ ? "rgba(255, 255, 255, 0.08)" : "rgba(226, 232, 240, 0.85)";
 
   QSettings st("LiteWave", "LiteWave");
   const bool enableSuggestions = st.value("search/enableSuggestions", false).toBool();
+  const auto curEngine = SearchEngineManager::instance().currentEngine();
+
+  QString engineOptionsHtml;
+  for (const auto &eng : SearchEngineManager::instance().availableEngines()) {
+    const bool sel = (eng.id == curEngine.id);
+    engineOptionsHtml += QString(R"(<option value="%1"%2>%3</option>)")
+                           .arg(eng.id, sel ? " selected" : "", eng.name);
+  }
+  const QString curEngineName = curEngine.name.isEmpty() ? "Brave Search" : curEngine.name;
 
   const QString html = QString(R"HTML(
 <!doctype html>
@@ -2191,38 +2202,52 @@ void MainWindow::loadHome(QWebEngineView *view) {
 html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
 body {
-  background-color: %1;
+  background: %1;
+  background-attachment: fixed;
   color: %3;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding: 80px 20px 40px;
+  justify-content: space-between;
+  padding: 50px 20px 24px;
 }
-.brand {
-  font-size: 58px;
-  font-weight: 800;
-  letter-spacing: -1.5px;
-  margin-bottom: 8px;
+.hero-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 28px;
   user-select: none;
-  color: #3b82f6;
-  background: linear-gradient(135deg, #2563eb 0%, #60a5fa 60%, #93c5fd 100%);
+}
+.brand-badge {
+  margin-bottom: 12px;
+  filter: drop-shadow(0 8px 20px rgba(14, 165, 233, 0.3));
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.brand-badge:hover {
+  transform: scale(1.08) rotate(-3deg);
+}
+.brand-title {
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: -1.2px;
+  margin-bottom: 6px;
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 50%, #38bdf8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
 }
-.subtitle {
+.brand-subtitle {
   font-size: 14px;
   color: %4;
-  margin-bottom: 32px;
   font-weight: 400;
+  letter-spacing: -0.2px;
 }
 .search-container {
   position: relative;
   width: 100%;
-  max-width: 740px;
-  margin-bottom: 44px;
+  max-width: 680px;
+  margin-bottom: 34px;
 }
 .suggestions-box {
   position: absolute;
@@ -2230,9 +2255,11 @@ body {
   left: 0;
   right: 0;
   background-color: %2;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid %5;
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+  border-radius: 18px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.22);
   display: none;
   flex-direction: column;
   overflow: hidden;
@@ -2247,13 +2274,13 @@ body {
   align-items: center;
   gap: 12px;
   padding: 10px 20px;
-  font-size: 15px;
+  font-size: 14.5px;
   color: %3;
   cursor: pointer;
   transition: background 0.12s ease;
 }
 .suggestion-item:hover, .suggestion-item.selected {
-  background-color: #2563eb;
+  background-color: #0284c7;
   color: #ffffff;
 }
 .suggestion-icon {
@@ -2264,230 +2291,276 @@ body {
 .suggestion-item:hover .suggestion-icon, .suggestion-item.selected .suggestion-icon {
   color: #ffffff;
 }
-.search-box {
+.search-form {
   display: flex;
   align-items: center;
   background-color: %2;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid %5;
   border-radius: 28px;
-  padding: 4px 8px 4px 18px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  padding: 5px 8px 5px 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.search-box:focus-within, .search-box:hover {
-  box-shadow: 0 4px 18px rgba(32, 33, 36, 0.16);
-  border-color: #2563eb;
+.search-form:focus-within {
+  border-color: #0284c7;
+  box-shadow: 0 12px 36px rgba(2, 132, 199, 0.22), 0 0 0 3px rgba(14, 165, 233, 0.25);
+  transform: translateY(-1px);
 }
-.search-icon {
+.search-engine-picker {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: %4;
-  margin-right: 8px;
-}
-.search-box select {
-  background-color: transparent;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 20px;
+  background: transparent;
   color: %3;
-  border: none;
-  font-size: 14px;
-  font-weight: 500;
-  outline: none;
   cursor: pointer;
-  padding: 0 8px 0 0;
-  border-right: 1px solid %5;
+  transition: background-color 0.15s ease;
+  user-select: none;
 }
-.search-box select option {
+.search-engine-picker:hover {
+  background-color: rgba(2, 132, 199, 0.12);
+}
+.search-engine-picker select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 13.5px;
+  font-weight: 550;
+  cursor: pointer;
+  outline: none;
+  padding-right: 18px;
+}
+.search-engine-picker select option {
   background-color: %2;
   color: %3;
 }
-.search-box input {
+.picker-icon {
+  color: #0284c7;
+  flex-shrink: 0;
+}
+.chevron-icon {
+  position: absolute;
+  right: 8px;
+  pointer-events: none;
+  color: %4;
+}
+.search-divider {
+  width: 1px;
+  height: 24px;
+  background-color: %5;
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+.search-form input {
   flex: 1;
   border: none;
   background: transparent;
-  padding: 12px 14px;
-  font-size: 16px;
+  padding: 10px 12px;
+  font-size: 15.5px;
   color: %3;
   outline: none;
 }
-.search-box button {
-  background-color: #2563eb;
-  color: #ffffff;
+.search-form input::placeholder {
+  color: %4;
+  font-weight: 400;
+}
+.search-btn {
+  background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
   border: none;
   border-radius: 20px;
-  padding: 10px 24px;
-  font-size: 14px;
-  font-weight: 600;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
   cursor: pointer;
-  transition: background-color 0.15s ease, transform 0.1s ease;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
-.search-box button:hover {
-  background-color: #1d4ed8;
+.search-btn:hover {
+  background: linear-gradient(135deg, #0369a1 0%, #0284c7 100%);
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(2, 132, 199, 0.45);
 }
-.search-box button:active {
-  transform: scale(0.98);
+.search-btn:active {
+  transform: scale(0.96);
 }
-.sites-section {
+.section-container {
   width: 100%;
-  max-width: 740px;
+  max-width: 820px;
 }
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  padding: 0 8px;
 }
 .section-title {
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
   font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
   color: %4;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 .sites-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 16px;
+  width: 100%;
 }
 .site-card {
   position: relative;
   background-color: %2;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid %5;
-  border-radius: 14px;
-  padding: 18px 12px;
-  text-align: center;
-  cursor: pointer;
-  text-decoration: none;
-  color: %3;
+  border-radius: 18px;
+  padding: 16px 10px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.04);
 }
 .site-card:hover {
-  border-color: #2563eb;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0,0,0,0.08);
-}
-.options-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background-color: %2;
-  color: %3;
-  border: 1px solid %5;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.9;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-  transition: all 0.15s ease;
-  z-index: 10;
-}
-.site-card:hover .options-btn, .options-btn:hover {
-  opacity: 1;
-  background-color: #2563eb;
-  color: #ffffff;
-  border-color: #2563eb;
-}
-.card-dropdown {
-  position: absolute;
-  top: 38px;
-  right: 8px;
-  background-color: %2;
-  color: %3;
-  border: 1px solid %5;
-  border-radius: 10px;
-  padding: 4px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-  display: none;
-  flex-direction: column;
-  min-width: 130px;
-  z-index: 100;
-}
-.card-dropdown.active {
-  display: flex;
-}
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 500;
-  border-radius: 6px;
-  color: %3;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.dropdown-item:hover {
-  background-color: #2563eb;
-  color: #ffffff;
-}
-.dropdown-item.danger-item:hover {
-  background-color: #ef4444;
-  color: #ffffff;
+  transform: translateY(-4px);
+  border-color: rgba(2, 132, 199, 0.4);
+  box-shadow: 0 10px 24px rgba(2, 132, 199, 0.15);
 }
 .site-icon-box {
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.9);
-  border: 1px solid %5;
+  margin-bottom: 10px;
   overflow: hidden;
+  background: rgba(2, 132, 199, 0.08);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.06);
 }
 .site-favicon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   object-fit: contain;
 }
 .site-icon-fallback {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #2563eb;
-  color: #ffffff;
-  font-weight: bold;
-  font-size: 16px;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 .site-name {
   font-size: 13px;
   font-weight: 500;
-  white-space: nowrap;
+  color: %3;
+  width: 100%;
+  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 110px;
+  white-space: nowrap;
 }
-.add-card {
-  border: 2px dashed %5;
-  background-color: transparent;
-}
-.add-card:hover {
-  border-color: #2563eb;
-  background-color: %2;
-}
-.add-icon-box {
-  font-size: 22px;
-  font-weight: bold;
-  color: #2563eb;
+.options-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
   background: transparent;
   border: none;
+  color: %4;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.site-card:hover .options-btn {
+  opacity: 1;
+}
+.options-btn:hover {
+  background: rgba(2, 132, 199, 0.15);
+  color: #0284c7;
+}
+.card-dropdown {
+  position: absolute;
+  top: 32px;
+  right: 6px;
+  background-color: %2;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid %5;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  display: none;
+  flex-direction: column;
+  z-index: 100;
+  min-width: 90px;
+  padding: 4px;
+}
+.card-dropdown.active {
+  display: flex;
+}
+.card-dropdown-item {
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: %3;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+.card-dropdown-item:hover {
+  background: rgba(2, 132, 199, 0.15);
+  color: #0284c7;
+}
+.card-dropdown-item.delete:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+.add-card {
+  border: 1.5px dashed %5;
+  background: transparent;
+}
+.add-card:hover {
+  border-color: #0284c7;
+  background: rgba(2, 132, 199, 0.05);
+}
+.add-icon-box {
+  background: rgba(2, 132, 199, 0.1);
+  color: #0284c7;
+  transition: transform 0.2s ease;
+}
+.add-card:hover .add-icon-box {
+  transform: scale(1.1);
 }
 .modal-overlay {
   position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.45);
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: none;
   align-items: center;
   justify-content: center;
@@ -2496,114 +2569,231 @@ body {
 .modal-overlay.active {
   display: flex;
 }
-.modal {
+.modal-card {
   background-color: %2;
-  color: %3;
   border: 1px solid %5;
-  border-radius: 16px;
-  padding: 24px;
+  border-radius: 20px;
   width: 90%;
   max-width: 420px;
-  box-shadow: 0 12px 36px rgba(0,0,0,0.25);
+  padding: 24px;
+  box-shadow: 0 24px 48px rgba(0,0,0,0.3);
 }
-.modal h3 {
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.modal-header h3 {
   font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 16px;
+  font-weight: 700;
+  color: %3;
 }
-.modal input {
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  color: %4;
+  cursor: pointer;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-close-btn:hover {
+  background: rgba(2, 132, 199, 0.1);
+  color: %3;
+}
+.modal-body label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: %4;
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+.modal-body label:first-child {
+  margin-top: 0;
+}
+.modal-body input {
   width: 100%;
-  padding: 12px 16px;
-  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
   border: 1px solid %5;
-  border-radius: 8px;
-  background: %1;
+  background: rgba(0,0,0,0.05);
   color: %3;
   font-size: 14px;
   outline: none;
+  box-sizing: border-box;
 }
-.modal input:focus {
-  border-color: #2563eb;
+.modal-body input:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
 }
-.modal-buttons {
+.modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 24px;
 }
-.modal-buttons button {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
+.btn {
+  padding: 8px 18px;
+  border-radius: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   border: none;
+  transition: all 0.15s ease;
 }
-.btn-cancel {
-  background: transparent;
+.btn-secondary {
+  background: rgba(0,0,0,0.08);
+  color: %3;
+}
+.btn-secondary:hover {
+  background: rgba(0,0,0,0.15);
+}
+.btn-primary {
+  background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
+  color: #ffffff;
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #0369a1 0%, #0284c7 100%);
+}
+.shield-badge-container {
+  margin-top: 36px;
+  display: flex;
+  justify-content: center;
+  user-select: none;
+}
+.shield-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 24px;
+  background-color: %2;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid %5;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+  font-size: 12.5px;
   color: %4;
+  transition: all 0.2s ease;
 }
-.btn-save {
-  background: #2563eb;
-  color: #fff;
+.shield-badge:hover {
+  border-color: rgba(2, 132, 199, 0.4);
+  color: %3;
+  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.12);
+  transform: translateY(-1px);
 }
-.btn-save:hover {
-  background: #1d4ed8;
+.shield-badge-icon {
+  color: #0284c7;
+  display: flex;
+  align-items: center;
 }
-.footer-note {
-  margin-top: auto;
-  padding-top: 48px;
-  font-size: 13px;
-  color: %4;
+.shield-badge strong {
+  color: #0284c7;
+  font-weight: 700;
 }
 </style>
 </head>
 <body>
 
-<div class="brand">LiteWave</div>
-<div class="subtitle">ค้นหาและท่องเว็บ · ควบคุมโฆษณาและตัวติดตามด้วย Shield</div>
-
-<div class="search-container">
-  <form class="search-box" onsubmit="return submitSearch(event)">
-    <div class="search-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-    </div>
-    <select id="engine" name="engine" aria-label="เครื่องมือค้นหา">
-      <option value="brave" selected>Brave Search</option>
-      <option value="google">Google Search</option>
-      <option value="duckduckgo">DuckDuckGo</option>
-    </select>
-    <input id="q" name="q" type="search" autofocus placeholder="ค้นหาบน Google หรือป้อนที่อยู่เว็บไซต์..." autocomplete="off" oninput="onSearchInput(this.value)" onkeydown="onSearchKeyDown(event)">
-    <button type="submit">ค้นหา</button>
-  </form>
-  <div id="suggestionsBox" class="suggestions-box"></div>
+<div class="hero-section">
+  <div class="brand-badge">
+    <svg width="68" height="68" viewBox="0 0 48 48" fill="none">
+      <defs>
+        <linearGradient id="waveBg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#0284c7"/>
+          <stop offset="100%" stop-color="#0ea5e9"/>
+        </linearGradient>
+        <linearGradient id="waveFront" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+          <stop offset="100%" stop-color="#e0f2fe" stop-opacity="0.8"/>
+        </linearGradient>
+      </defs>
+      <rect width="48" height="48" rx="14" fill="url(#waveBg)"/>
+      <path d="M8 28 C 14 20, 20 36, 26 26 C 32 16, 38 32, 42 22" stroke="url(#waveFront)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+    </svg>
+  </div>
+  <div class="brand-title">LiteWave</div>
+  <div class="brand-subtitle">เว็บเบราว์เซอร์ที่เร็ว ปลอดภัย และเป็นส่วนตัว</div>
 </div>
 
-<div class="sites-section">
+<div class="search-container">
+  <form class="search-form" onsubmit="return submitSearch(event)">
+    <div class="search-engine-picker" title="เลือกเครื่องมือค้นหา">
+      <svg class="picker-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="2" y1="12" x2="22" y2="12"></line>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+      </svg>
+      <select id="engine" name="engine" onchange="onEngineChange()">
+        %7
+      </select>
+      <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </div>
+    <div class="search-divider"></div>
+    <input id="q" name="q" type="search" autofocus placeholder="ค้นหาด้วย %8 หรือป้อนที่อยู่เว็บไซต์..." autocomplete="off" oninput="onSearchInput(this.value)" onkeydown="onSearchKeyDown(event)">
+    <button type="submit" class="search-btn" title="ค้นหา">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+    </button>
+  </form>
+  <div class="suggestions-box" id="suggestionsBox"></div>
+</div>
+
+<div class="section-container">
   <div class="section-header">
-    <div class="section-title">ทางลัดเว็บไซต์</div>
+    <div class="section-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+      </svg>
+      <span>ทางลัดยอดนิยม</span>
+    </div>
   </div>
   <div class="sites-grid" id="sitesGrid"></div>
 </div>
 
-<div class="modal-overlay" id="addModal">
-  <div class="modal">
-    <h3 id="modalTitle">เพิ่มทางลัดเว็บไซต์</h3>
-    <input id="shortcutName" placeholder="ชื่อเว็บไซต์ (เช่น Instagram)" autocomplete="off">
-    <input id="shortcutUrl" placeholder="ที่อยู่เว็บ (เช่น https://instagram.com)" autocomplete="off">
-    <div class="modal-buttons">
-      <button type="button" class="btn-cancel" onclick="closeModal()">ยกเลิก</button>
-      <button type="button" class="btn-save" onclick="saveShortcut()">บันทึก</button>
+<div class="modal-overlay" id="shortcutModal" onclick="closeModalOnOverlay(event)">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="modalTitle">เพิ่มทางลัดใหม่</h3>
+      <button class="modal-close-btn" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <label for="shortcutName">ชื่อเว็บไซต์</label>
+      <input type="text" id="shortcutName" placeholder="เช่น YouTube, GitHub" />
+      <label for="shortcutUrl">URL เว็บไซต์</label>
+      <input type="text" id="shortcutUrl" placeholder="https://..." />
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="saveShortcut()">บันทึก</button>
     </div>
   </div>
 </div>
 
-<div class="footer-note">Shield · บล็อกคำขอแล้ว %6 รายการ</div>
+<div class="shield-badge-container">
+  <div class="shield-badge">
+    <span class="shield-badge-icon">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    </span>
+    <span class="shield-badge-text">Shield คุ้มครองความเป็นส่วนตัว · บล็อกตัวติดตามแล้ว <strong>%6</strong> รายการ</span>
+  </div>
+</div>
 
-)HTML"
-R"HTML(<script>
+<script>
 function submitSearch(event) {
-  event.preventDefault();
+  if (event && event.preventDefault) event.preventDefault();
   const query = document.getElementById('q').value.trim();
   if (!query) return false;
   const engine = document.getElementById('engine').value;
@@ -2611,6 +2801,24 @@ function submitSearch(event) {
     encodeURIComponent(engine) + '&q=' + encodeURIComponent(query);
   return false;
 }
+
+function onEngineChange() {
+  const sel = document.getElementById('engine');
+  const engineName = sel.options[sel.selectedIndex].text;
+  document.getElementById('q').placeholder = 'ค้นหาด้วย ' + engineName + ' หรือป้อนที่อยู่เว็บไซต์...';
+  localStorage.setItem('litewave_preferred_engine', sel.value);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const pref = localStorage.getItem('litewave_preferred_engine');
+  if (pref) {
+    const sel = document.getElementById('engine');
+    if (sel && sel.value !== pref) {
+      sel.value = pref;
+      onEngineChange();
+    }
+  }
+});
 
 const defaultList = [
   { name: 'Google', url: 'https://www.google.com' },
@@ -2654,42 +2862,60 @@ function getFaviconUrl(urlStr) {
   return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
 }
 
+const fallbackGradients = [
+  'linear-gradient(135deg, #0284c7, #38bdf8)',
+  'linear-gradient(135deg, #6366f1, #a855f7)',
+  'linear-gradient(135deg, #ec4899, #f43f5e)',
+  'linear-gradient(135deg, #10b981, #14b8a6)',
+  'linear-gradient(135deg, #f59e0b, #ea580c)',
+  'linear-gradient(135deg, #8b5cf6, #3b82f6)'
+];
+
+function getFallbackGradient(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return fallbackGradients[hash % fallbackGradients.length];
+}
+
 let editIndex = -1;
 
 function renderShortcuts() {
   const grid = document.getElementById('sitesGrid');
   if (!grid) return;
   grid.innerHTML = '';
-
   const shortcuts = getShortcuts();
+
   shortcuts.forEach((s, idx) => {
     const card = document.createElement('div');
     card.className = 'site-card';
-    card.onclick = () => window.location.href = s.url;
+    card.onclick = (e) => {
+      if (!e.target.closest('.options-btn') && !e.target.closest('.card-dropdown')) {
+        window.location.href = s.url;
+      }
+    };
 
     const domain = getDomain(s.url);
     const favicon = getFaviconUrl(s.url);
     const initial = (s.name || 'W').charAt(0).toUpperCase();
+    const grad = getFallbackGradient(domain || s.name);
 
     card.innerHTML = `
       <button class="options-btn" title="ตัวเลือก" onclick="toggleCardDropdown(event, ${idx})">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="12" cy="19" r="2.2"></circle></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="2.2"/>
+          <circle cx="12" cy="12" r="2.2"/>
+          <circle cx="12" cy="19" r="2.2"/>
+        </svg>
       </button>
       <div class="card-dropdown" id="dropdown-${idx}">
-        <div class="dropdown-item" onclick="openEditModal(event, ${idx})">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-          <span>แก้ไขทางลัด</span>
-        </div>
-        <div class="dropdown-item danger-item" onclick="deleteShortcut(event, ${idx})">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          <span>ลบทางลัด</span>
-        </div>
+        <div class="card-dropdown-item" onclick="openEditModal(event, ${idx})">แก้ไข</div>
+        <div class="card-dropdown-item delete" onclick="deleteShortcut(event, ${idx})">ลบ</div>
       </div>
       <div class="site-icon-box">
         <img src="${favicon}" class="site-favicon" onerror="this.onerror=null; this.src='https://icon.horse/icon/${domain}'; this.onerror=function(){this.style.display='none'; this.nextElementSibling.style.display='flex';};" alt="${s.name}" />
-        <div class="site-icon-fallback" style="display:none;">${initial}</div>
+        <div class="site-icon-fallback" style="display:none; background: ${grad};">${initial}</div>
       </div>
-      <div class="site-name">${s.name}</div>
+      <div class="site-name" title="${s.name}">${s.name}</div>
     `;
     grid.appendChild(card);
   });
@@ -2698,7 +2924,12 @@ function renderShortcuts() {
   addBtn.className = 'site-card add-card';
   addBtn.onclick = openAddModal;
   addBtn.innerHTML = `
-    <div class="site-icon-box add-icon-box">+</div>
+    <div class="site-icon-box add-icon-box">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </div>
     <div class="site-name">เพิ่มทางลัด</div>
   `;
   grid.appendChild(addBtn);
@@ -2706,53 +2937,56 @@ function renderShortcuts() {
 
 function toggleCardDropdown(e, idx) {
   e.stopPropagation();
-  const allDropdowns = document.querySelectorAll('.card-dropdown');
-  allDropdowns.forEach((d, i) => {
-    if (i !== idx) d.classList.remove('active');
-  });
-  const menu = document.getElementById('dropdown-' + idx);
-  if (menu) menu.classList.toggle('active');
+  const dropdown = document.getElementById('dropdown-' + idx);
+  const wasActive = dropdown.classList.contains('active');
+  document.querySelectorAll('.card-dropdown').forEach(d => d.classList.remove('active'));
+  if (!wasActive) dropdown.classList.add('active');
 }
 
-document.addEventListener('click', () => {
-  const allDropdowns = document.querySelectorAll('.card-dropdown');
-  allDropdowns.forEach(d => d.classList.remove('active'));
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.card-dropdown') && !e.target.closest('.options-btn')) {
+    document.querySelectorAll('.card-dropdown').forEach(d => d.classList.remove('active'));
+  }
 });
 
 function openAddModal() {
   editIndex = -1;
-  document.getElementById('modalTitle').innerText = 'เพิ่มทางลัดเว็บไซต์';
+  document.getElementById('modalTitle').textContent = 'เพิ่มทางลัดใหม่';
   document.getElementById('shortcutName').value = '';
   document.getElementById('shortcutUrl').value = '';
-  document.getElementById('addModal').classList.add('active');
+  document.getElementById('shortcutModal').classList.add('active');
   document.getElementById('shortcutName').focus();
 }
 
 function openEditModal(e, idx) {
   e.stopPropagation();
-  editIndex = idx;
+  document.querySelectorAll('.card-dropdown').forEach(d => d.classList.remove('active'));
   const shortcuts = getShortcuts();
-  const item = shortcuts[idx];
-  if (!item) return;
-  document.getElementById('modalTitle').innerText = 'แก้ไขทางลัดเว็บไซต์';
-  document.getElementById('shortcutName').value = item.name;
-  document.getElementById('shortcutUrl').value = item.url;
-  document.getElementById('addModal').classList.add('active');
+  if (idx < 0 || idx >= shortcuts.length) return;
+  editIndex = idx;
+  document.getElementById('modalTitle').textContent = 'แก้ไขทางลัด';
+  document.getElementById('shortcutName').value = shortcuts[idx].name;
+  document.getElementById('shortcutUrl').value = shortcuts[idx].url;
+  document.getElementById('shortcutModal').classList.add('active');
   document.getElementById('shortcutName').focus();
 }
 
 function closeModal() {
-  document.getElementById('addModal').classList.remove('active');
+  document.getElementById('shortcutModal').classList.remove('active');
+}
+
+function closeModalOnOverlay(e) {
+  if (e.target.id === 'shortcutModal') closeModal();
 }
 
 function saveShortcut() {
   const name = document.getElementById('shortcutName').value.trim();
   let url = document.getElementById('shortcutUrl').value.trim();
   if (!name || !url) return;
+
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
-
   const shortcuts = getShortcuts();
   if (editIndex >= 0 && editIndex < shortcuts.length) {
     shortcuts[editIndex] = { name, url };
@@ -2767,35 +3001,36 @@ function saveShortcut() {
 function deleteShortcut(e, idx) {
   e.stopPropagation();
   const shortcuts = getShortcuts();
-  shortcuts.splice(idx, 1);
-  saveShortcuts(shortcuts);
-  renderShortcuts();
+  if (idx >= 0 && idx < shortcuts.length) {
+    shortcuts.splice(idx, 1);
+    saveShortcuts(shortcuts);
+    renderShortcuts();
+  }
 }
 
-renderShortcuts();
-
 const searchSuggestionsList = [
-  'github', 'github desktop', 'github copilot', 'github login', 'github repository',
-  'google', 'google translate', 'google maps', 'google drive', 'google docs',
-  'youtube', 'youtube music', 'chatgpt', 'openai', 'facebook', 'instagram',
-  'wikipedia', 'reddit', 'twitter', 'x.com', 'twitch', 'pantip',
-  'sanook', 'thairath', 'netflix', 'canva', 'binance', 'shopee', 'lazada',
+  'litewave browser', 'github', 'youtube', 'chatgpt', 'wikipedia',
+  'reddit', 'twitter', 'facebook', 'gmail', 'google maps', 'weather today',
   'stackoverflow', 'python', 'cpp', 'qt framework', 'web development'
 ];
 
-const enableSearchSuggestions = %7;
+const enableSearchSuggestions = %9;
 let currentSuggestions = [];
 let activeSuggestionIndex = -1;
 
 function onSearchInput(val) {
-  if (!enableSearchSuggestions) return;
   const box = document.getElementById('suggestionsBox');
   if (!box) return;
+
+  if (!enableSearchSuggestions) {
+    box.classList.remove('active');
+    return;
+  }
+
   const q = val.trim().toLowerCase();
-  if (!q) {
+  if (q.length === 0) {
     box.classList.remove('active');
     box.innerHTML = '';
-    currentSuggestions = [];
     activeSuggestionIndex = -1;
     return;
   }
@@ -2860,13 +3095,15 @@ document.addEventListener('click', (e) => {
     box.classList.remove('active');
   }
 });
+
+renderShortcuts();
 </script>
 </body>
 </html>
 )HTML")
-                            .arg(bg, cardBg, textCol, subCol, borderCol)
-                            .arg(blockedCount)
-                            .arg(enableSuggestions ? "true" : "false");
+    .arg(ambientGrad, cardBg, textCol, subCol, borderCol,
+         QString::number(blockedCount), engineOptionsHtml, curEngineName,
+         enableSuggestions ? "true" : "false");
 
   view->setHtml(html, QUrl("https://litewave.home/"));
 }
