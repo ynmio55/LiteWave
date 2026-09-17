@@ -46,9 +46,13 @@ static QPixmap createVectorIcon(SuggestionItem::Type type, bool dark) {
 SearchSuggestionPopup::SearchSuggestionPopup(QWidget *parent)
     : QFrame(parent),
       listWidget_(new QListWidget(this)),
-      nam_(new QNetworkAccessManager(this)) {
+      nam_(new QNetworkAccessManager(this)),
+      debounceTimer_(new QTimer(this)) {
   setObjectName("SearchSuggestionPopup");
   setFocusPolicy(Qt::NoFocus);
+
+  debounceTimer_->setSingleShot(true);
+  connect(debounceTimer_, &QTimer::timeout, this, &SearchSuggestionPopup::onDebounceTimeout);
 
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(4, 6, 4, 6);
@@ -70,7 +74,12 @@ SearchSuggestionPopup::SearchSuggestionPopup(QWidget *parent)
 }
 
 SearchSuggestionPopup::~SearchSuggestionPopup() {
+  cancelCurrentReply();
+}
+
+void SearchSuggestionPopup::cancelCurrentReply() {
   if (currentReply_) {
+    currentReply_->disconnect(this);
     currentReply_->abort();
     currentReply_->deleteLater();
     currentReply_ = nullptr;
@@ -135,11 +144,8 @@ void SearchSuggestionPopup::updateStyle() {
 void SearchSuggestionPopup::queryChanged(const QString &rawQuery) {
   const QString query = rawQuery.trimmed();
   if (query.isEmpty()) {
-    if (currentReply_) {
-      currentReply_->abort();
-      currentReply_->deleteLater();
-      currentReply_ = nullptr;
-    }
+    debounceTimer_->stop();
+    cancelCurrentReply();
     hide();
     currentItems_.clear();
     selectedIndex_ = -1;
@@ -154,8 +160,13 @@ void SearchSuggestionPopup::queryChanged(const QString &rawQuery) {
   currentItems_ = items;
   renderItems(currentItems_);
 
-  // Fetch live suggestions asynchronously
-  fetchLiveSuggestions(query);
+  // Debounce network requests to prevent UI thread flooding
+  debounceTimer_->start(120);
+}
+
+void SearchSuggestionPopup::onDebounceTimeout() {
+  if (lastQuery_.isEmpty()) return;
+  fetchLiveSuggestions(lastQuery_);
 }
 
 QVector<SuggestionItem> SearchSuggestionPopup::getHistorySuggestions(const QString &query) {
@@ -227,11 +238,7 @@ QVector<SuggestionItem> SearchSuggestionPopup::getHistorySuggestions(const QStri
 }
 
 void SearchSuggestionPopup::fetchLiveSuggestions(const QString &query) {
-  if (currentReply_) {
-    currentReply_->abort();
-    currentReply_->deleteLater();
-    currentReply_ = nullptr;
-  }
+  cancelCurrentReply();
 
   QUrl suggestUrl = SearchEngineManager::instance().buildSuggestUrl(query);
   if (!suggestUrl.isValid() || suggestUrl.isEmpty()) {
@@ -241,15 +248,20 @@ void SearchSuggestionPopup::fetchLiveSuggestions(const QString &query) {
   QNetworkRequest req(suggestUrl);
   req.setHeader(QNetworkRequest::UserAgentHeader,
                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-  currentReply_ = nam_->get(req);
-  connect(currentReply_, &QNetworkReply::finished, this, &SearchSuggestionPopup::onReplyFinished);
+  auto *reply = nam_->get(req);
+  currentReply_ = reply;
+  connect(reply, &QNetworkReply::finished, this, &SearchSuggestionPopup::onReplyFinished);
 }
 
 void SearchSuggestionPopup::onReplyFinished() {
   if (!currentReply_) return;
 
-  if (currentReply_->error() == QNetworkReply::NoError) {
-    const QByteArray data = currentReply_->readAll();
+  auto *reply = currentReply_.data();
+  currentReply_ = nullptr;
+  reply->deleteLater();
+
+  if (reply->error() == QNetworkReply::NoError) {
+    const QByteArray data = reply->readAll();
     QJsonDocument doc = QJsonDocument::fromJson(data);
 
     QStringList suggestions;
@@ -300,9 +312,6 @@ void SearchSuggestionPopup::onReplyFinished() {
     currentItems_ = merged;
     renderItems(currentItems_);
   }
-
-  currentReply_->deleteLater();
-  currentReply_ = nullptr;
 }
 
 void SearchSuggestionPopup::renderItems(const QVector<SuggestionItem> &items) {
@@ -429,14 +438,15 @@ void SearchSuggestionPopup::onItemClicked(QListWidgetItem *item) {
 bool SearchSuggestionPopup::eventFilter(QObject *watched, QEvent *event) {
   if (watched == targetEdit_) {
     if (event->type() == QEvent::FocusOut) {
-      // Delay hide to allow mouse click to process
-      QPoint mousePos = mapFromGlobal(QCursor::pos());
-      if (!rect().contains(mousePos)) {
-        hide();
+      if (isVisible()) {
+        QPoint mousePos = mapFromGlobal(QCursor::pos());
+        if (!rect().contains(mousePos)) {
+          hide();
+        }
       }
     } else if (event->type() == QEvent::Resize) {
       reposition();
     }
   }
-  return QFrame::eventFilter(watched, event);
+  return QObject::eventFilter(watched, event);
 }

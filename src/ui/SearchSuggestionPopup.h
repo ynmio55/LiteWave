@@ -5,8 +5,10 @@
 #include <QStringList>
 #include <QVector>
 #include <QUrl>
+#include <QPointer>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QTimer>
 
 class QListWidget;
 class QListWidgetItem;
@@ -47,9 +49,11 @@ protected:
 private slots:
   void onReplyFinished();
   void onItemClicked(QListWidgetItem *item);
+  void onDebounceTimeout();
 
 private:
   void updateStyle();
+  void cancelCurrentReply();
   void fetchLiveSuggestions(const QString &query);
   QVector<SuggestionItem> getHistorySuggestions(const QString &query);
   void renderItems(const QVector<SuggestionItem> &items);
@@ -58,7 +62,8 @@ private:
   QLineEdit *targetEdit_ = nullptr;
   QListWidget *listWidget_ = nullptr;
   QNetworkAccessManager *nam_ = nullptr;
-  QNetworkReply *currentReply_ = nullptr;
+  QPointer<QNetworkReply> currentReply_;
+  QTimer *debounceTimer_ = nullptr;
   QString lastQuery_;
   QVector<SuggestionItem> currentItems_;
   int selectedIndex_ = -1;
