@@ -822,7 +822,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
   s->setAttribute(QWebEngineSettings::WebRTCPublicInterfacesOnly, false);
   s->setAttribute(QWebEngineSettings::FocusOnNavigationEnabled, true);
-  s->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, false);
+  s->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, true);
   s->setAttribute(QWebEngineSettings::PluginsEnabled, true);
   s->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, false);
   s->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, false);
@@ -3038,6 +3038,14 @@ body {
       <input type="text" id="shortcutName" placeholder="เช่น YouTube, GitHub" />
       <label for="shortcutUrl">URL เว็บไซต์</label>
       <input type="text" id="shortcutUrl" placeholder="https://..." />
+      <label for="shortcutIcon">URL โลโก้ / รูปภาพ (ไม่บังคับ - ตรวจหาอัตโนมัติ)</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="text" id="shortcutIcon" placeholder="https://.../logo.png หรือเลือกไฟล์" style="flex:1;" />
+        <label class="btn btn-secondary" style="margin:0; padding:10px 14px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; white-space:nowrap; font-size:12px; font-weight:600; border-radius:10px; border:1px solid rgba(2,132,199,0.3);">
+          เลือกไฟล์
+          <input type="file" id="shortcutIconFile" accept="image/*" style="display:none;" onchange="handleIconFileUpload(event)" />
+        </label>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
@@ -3116,16 +3124,67 @@ function saveShortcuts(list) {
 
 function getDomain(urlStr) {
   try {
-    const u = new URL(urlStr.startsWith('http') ? urlStr : 'https://' + urlStr);
+    const u = new URL(urlStr.startsWith('http://') || urlStr.startsWith('https://') ? urlStr : 'https://' + urlStr);
     return u.hostname;
   } catch(e) {
     return urlStr;
   }
 }
 
-function getFaviconUrl(urlStr) {
-  const domain = getDomain(urlStr);
-  return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
+function getOrigin(urlStr) {
+  try {
+    const u = new URL(urlStr.startsWith('http://') || urlStr.startsWith('https://') ? urlStr : 'https://' + urlStr);
+    return u.origin;
+  } catch(e) {
+    return '';
+  }
+}
+
+function getInitialFaviconUrl(s) {
+  if (s.icon && s.icon.trim()) return s.icon.trim();
+  const origin = getOrigin(s.url);
+  const domain = getDomain(s.url);
+  if (origin && (origin.startsWith('http://') || origin.startsWith('https://'))) {
+    return origin + '/favicon.ico';
+  }
+  return 'https://icons.duckduckgo.com/ip3/' + encodeURIComponent(domain) + '.ico';
+}
+
+function handleFaviconError(img) {
+  let step = parseInt(img.dataset.step || '0', 10);
+  const domain = img.dataset.domain;
+  step++;
+  img.dataset.step = step.toString();
+
+  if (step === 1) {
+    img.src = 'https://icons.duckduckgo.com/ip3/' + encodeURIComponent(domain) + '.ico';
+  } else if (step === 2) {
+    img.src = 'https://icon.horse/icon/' + encodeURIComponent(domain);
+  } else if (step === 3) {
+    img.src = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
+  } else {
+    img.style.display = 'none';
+    const fallback = img.nextElementSibling;
+    if (fallback) fallback.style.display = 'flex';
+  }
+}
+
+function handleFaviconLoad(img) {
+  if (img.naturalWidth <= 16 && (img.src.includes('google.com/s2') || img.src.includes('gstatic.com'))) {
+    img.style.display = 'none';
+    const fallback = img.nextElementSibling;
+    if (fallback) fallback.style.display = 'flex';
+  }
+}
+
+function handleIconFileUpload(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('shortcutIcon').value = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 const fallbackGradients = [
@@ -3161,8 +3220,9 @@ function renderShortcuts() {
     };
 
     const domain = getDomain(s.url);
-    const favicon = getFaviconUrl(s.url);
-    const initial = (s.name || 'W').charAt(0).toUpperCase();
+    const origin = getOrigin(s.url);
+    const initialSrc = getInitialFaviconUrl(s);
+    const initial = (s.name || domain || 'W').charAt(0).toUpperCase();
     const grad = getFallbackGradient(domain || s.name);
 
     card.innerHTML = `
@@ -3178,7 +3238,7 @@ function renderShortcuts() {
         <div class="card-dropdown-item delete" onclick="deleteShortcut(event, ${idx})">ลบ</div>
       </div>
       <div class="site-icon-box">
-        <img src="${favicon}" class="site-favicon" onerror="this.onerror=null; this.src='https://icon.horse/icon/${domain}'; this.onerror=function(){this.style.display='none'; this.nextElementSibling.style.display='flex';};" alt="${s.name}" />
+        <img src="${initialSrc}" class="site-favicon" data-step="0" data-domain="${domain}" data-origin="${origin}" onload="handleFaviconLoad(this)" onerror="handleFaviconError(this)" alt="${s.name}" />
         <div class="site-icon-fallback" style="display:none; background: ${grad};">${initial}</div>
       </div>
       <div class="site-name" title="${s.name}">${s.name}</div>
@@ -3220,6 +3280,7 @@ function openAddModal() {
   document.getElementById('modalTitle').textContent = 'เพิ่มทางลัดใหม่';
   document.getElementById('shortcutName').value = '';
   document.getElementById('shortcutUrl').value = '';
+  document.getElementById('shortcutIcon').value = '';
   document.getElementById('shortcutModal').classList.add('active');
   document.getElementById('shortcutName').focus();
 }
@@ -3231,8 +3292,9 @@ function openEditModal(e, idx) {
   if (idx < 0 || idx >= shortcuts.length) return;
   editIndex = idx;
   document.getElementById('modalTitle').textContent = 'แก้ไขทางลัด';
-  document.getElementById('shortcutName').value = shortcuts[idx].name;
-  document.getElementById('shortcutUrl').value = shortcuts[idx].url;
+  document.getElementById('shortcutName').value = shortcuts[idx].name || '';
+  document.getElementById('shortcutUrl').value = shortcuts[idx].url || '';
+  document.getElementById('shortcutIcon').value = shortcuts[idx].icon || '';
   document.getElementById('shortcutModal').classList.add('active');
   document.getElementById('shortcutName').focus();
 }
@@ -3248,16 +3310,20 @@ function closeModalOnOverlay(e) {
 function saveShortcut() {
   const name = document.getElementById('shortcutName').value.trim();
   let url = document.getElementById('shortcutUrl').value.trim();
+  const icon = document.getElementById('shortcutIcon').value.trim();
   if (!name || !url) return;
 
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
   const shortcuts = getShortcuts();
+  const item = { name, url };
+  if (icon) item.icon = icon;
+
   if (editIndex >= 0 && editIndex < shortcuts.length) {
-    shortcuts[editIndex] = { name, url };
+    shortcuts[editIndex] = item;
   } else {
-    shortcuts.push({ name, url });
+    shortcuts.push(item);
   }
   saveShortcuts(shortcuts);
   closeModal();
