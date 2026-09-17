@@ -3,9 +3,11 @@
 #include <QMainWindow>
 #include <QUrl>
 #include <QList>
+#include <QMap>
 #include <QPoint>
 #include <QPointer>
 
+class QTimer;
 class QWebEngineProfile;
 class QWebEngineDownloadRequest;
 class QLineEdit;
@@ -144,5 +146,11 @@ private:
     void restoreSession();
     void loadDownloadRecords();
     void saveDownloadRecords();
+
+    // Sleeping Tabs / Tab Hibernation Manager (Edge/Opera style)
+    QTimer *tabSleepTimer_ = nullptr;
+    QMap<QWebEngineView*, qint64> tabLastActiveTime_;
+    void checkSleepingTabs();
+    void wakeTab(QWebEngineView *view);
 };
 

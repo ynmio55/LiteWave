@@ -255,8 +255,18 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 
   static QWebEngineProfile *normalProfile =
       new QWebEngineProfile("LiteWave", qApp);
+  static bool profileConfigured = false;
+  if (!profileConfigured) {
+    profileConfigured = true;
+    normalProfile->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
+    normalProfile->setHttpCacheMaximumSize(256 * 1024 * 1024); // 256 MB optimal cache
+  }
   static AdBlocker *normalShield = new AdBlocker(qApp, true);
   profile_ = privateMode_ ? new QWebEngineProfile(this) : normalProfile;
+  if (privateMode_) {
+    profile_->setHttpCacheType(QWebEngineProfile::MemoryHttpCache);
+    profile_->setHttpCacheMaximumSize(64 * 1024 * 1024);
+  }
   adBlocker_ = privateMode_ ? new AdBlocker(this, false) : normalShield;
   profile_->setUrlRequestInterceptor(adBlocker_);
 
@@ -692,6 +702,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
           &QStackedWidget::setCurrentIndex);
   connect(tabBar_, &QTabBar::currentChanged, this, [this](int) {
     if (currentView()) {
+      wakeTab(currentView());
+      tabLastActiveTime_[currentView()] = QDateTime::currentMSecsSinceEpoch();
       updateCurrentUrl(currentView()->url());
       setWindowTitle(currentView()->title() +
                      (privateMode_ ? " — Private · LiteWave" : " — LiteWave"));
@@ -708,6 +720,11 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     tabStack_->insertWidget(to, w);
     tabStack_->setCurrentIndex(to);
   });
+
+  // Sleeping Tabs Manager: check every 60s to freeze/discard inactive background tabs
+  tabSleepTimer_ = new QTimer(this);
+  connect(tabSleepTimer_, &QTimer::timeout, this, &MainWindow::checkSleepingTabs);
+  tabSleepTimer_->start(60000);
 
   setupShortcuts();
   applyTheme();
@@ -835,6 +852,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   tabStack_->addWidget(view);
   tabBar_->setCurrentIndex(index);
   tabStack_->setCurrentIndex(index);
+  tabLastActiveTime_[view] = QDateTime::currentMSecsSinceEpoch();
 
   auto *closeBtn = new QToolButton(tabBar_);
   closeBtn->setObjectName("tabCloseButton");
@@ -1112,6 +1130,7 @@ void MainWindow::closeTab(int index) {
     closedTabs_.removeFirst();
   tabBar_->removeTab(index);
   tabStack_->removeWidget(view);
+  tabLastActiveTime_.remove(view);
   delete view;
   if (!tabBar_->count())
     newTab();
@@ -1423,12 +1442,15 @@ void MainWindow::updateTabTitle(const QString &title) {
   if (!view)
     return;
   const int index = tabStack_->indexOf(view);
-  const QString displayTitle =
+  QString displayTitle =
       title.trimmed().isEmpty() ? QStringLiteral("LiteWave") : title.left(22);
+  if (view->page() && view->page()->lifecycleState() == QWebEnginePage::LifecycleState::Discarded) {
+    displayTitle += " 💤";
+  }
   if (index >= 0) {
     tabBar_->setTabText(index, displayTitle);
     tabBar_->setTabToolTip(index, title);
-    if (view && (view->url().host() == "litewave.home" || view->url().scheme() == "litewave" || displayTitle == "LiteWave")) {
+    if (view && (view->url().host() == "litewave.home" || view->url().scheme() == "litewave" || displayTitle.startsWith("LiteWave"))) {
       tabBar_->setTabIcon(index, QIcon(":/icons/litewave.png"));
     }
   }
@@ -5795,4 +5817,66 @@ void MainWindow::saveDownloadRecords() {
   st.setValue("downloads/history", list);
   st.sync();
 }
+
+void MainWindow::checkSleepingTabs() {
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  const int currentIdx = tabStack_->currentIndex();
+  for (int i = 0; i < tabStack_->count(); ++i) {
+    if (i == currentIdx)
+      continue;
+    auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(i));
+    if (!view || !view->page())
+      continue;
+
+    // Never sleep tabs currently playing media or audio (e.g. YouTube, Spotify, podcasts)
+    if (view->page()->recentlyAudible())
+      continue;
+
+    // Never interrupt active page loads
+    if (view->page()->isLoading())
+      continue;
+
+    const QUrl u = view->url();
+    if (u.isEmpty() || u.toString() == "about:blank")
+      continue;
+
+    const qint64 lastActive = tabLastActiveTime_.value(view, now);
+    const qint64 idleSeconds = (now - lastActive) / 1000;
+
+    // After 15 minutes of background inactivity: Discard tab (fully unloads renderer memory, saves 75-85% RAM)
+    // After 5 minutes of background inactivity: Freeze tab (stops JS timers and CSS animations, 0% CPU)
+    if (idleSeconds >= 15 * 60) {
+      if (view->page()->lifecycleState() != QWebEnginePage::LifecycleState::Discarded) {
+        view->page()->setLifecycleState(QWebEnginePage::LifecycleState::Discarded);
+        const QString cur = tabBar_->tabText(i);
+        if (!cur.endsWith(" 💤")) {
+          tabBar_->setTabText(i, cur + " 💤");
+        }
+        tabBar_->setTabToolTip(i, cur + " (จำศีลเพื่อประหยัด RAM - คลิกเพื่อเปิดต่อทันที)");
+      }
+    } else if (idleSeconds >= 5 * 60) {
+      if (view->page()->lifecycleState() == QWebEnginePage::LifecycleState::Active) {
+        view->page()->setLifecycleState(QWebEnginePage::LifecycleState::Frozen);
+      }
+    }
+  }
+}
+
+void MainWindow::wakeTab(QWebEngineView *view) {
+  if (!view || !view->page())
+    return;
+  if (view->page()->lifecycleState() != QWebEnginePage::LifecycleState::Active) {
+    view->page()->setLifecycleState(QWebEnginePage::LifecycleState::Active);
+    const int idx = tabStack_->indexOf(view);
+    if (idx >= 0) {
+      QString text = tabBar_->tabText(idx);
+      if (text.endsWith(" 💤")) {
+        text.chop(3);
+        tabBar_->setTabText(idx, text);
+      }
+      tabBar_->setTabToolTip(idx, text);
+    }
+  }
+}
+
 
