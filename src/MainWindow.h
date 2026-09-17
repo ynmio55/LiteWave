@@ -59,6 +59,7 @@ private:
     QToolButton *maxBtn_ = nullptr;
     QToolButton *themeBtn_ = nullptr;
     QToolButton *shieldBtn_ = nullptr;
+    QAction *sslAction_ = nullptr;
     QLabel *sslLabel_ = nullptr;
     bool darkMode_ = false;
     bool privateMode_ = false;

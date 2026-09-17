@@ -117,6 +117,16 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
     p.drawEllipse(3, 3, 14, 14);
     p.drawLine(3, 10, 17, 10);
     p.drawArc(6, 3, 8, 14, 0, 360 * 16);
+  } else if (name == "shield") {
+    QPainterPath path;
+    path.moveTo(10, 3);
+    path.lineTo(16, 5.5);
+    path.lineTo(16, 10.5);
+    path.cubicTo(16, 14.5, 10, 17.5, 10, 17.5);
+    path.cubicTo(10, 17.5, 4, 14.5, 4, 10.5);
+    path.lineTo(4, 5.5);
+    path.closeSubpath();
+    p.drawPath(path);
   }
 
   return QIcon(pix);
@@ -448,16 +458,14 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
       loadHome(currentView());
   });
 
-  // SSL Lock Icon
-  sslLabel_ = new QLabel(this);
-  sslLabel_->setObjectName("sslLabel");
-  sslLabel_->setStyleSheet("padding: 0 4px;");
-  toolbar_->addWidget(sslLabel_);
+  // Omnibox Address Bar with integrated leading SSL Icon
+  sslAction_ = urlBar_->addAction(createToolbarIcon("globe", darkMode_ ? QColor("#9ca3af") : QColor("#64748b")),
+                                  QLineEdit::LeadingPosition);
+  sslAction_->setToolTip("LiteWave Dashboard");
 
-  // Omnibox Address Bar
   urlBar_->setPlaceholderText("ค้นหาด้วย Google หรือระบุ URL...");
   urlBar_->setClearButtonEnabled(false);
-  urlBar_->setMinimumHeight(32);
+  urlBar_->setMinimumHeight(34);
   toolbar_->addWidget(urlBar_);
   connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
   setupUrlBarCompleter();
@@ -496,8 +504,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   shieldBtn_ = new QToolButton(this);
   shieldBtn_->setObjectName("shieldButton");
   shieldBtn_->setPopupMode(QToolButton::InstantPopup);
-  shieldBtn_->setToolButtonStyle(Qt::ToolButtonTextOnly);
-  shieldBtn_->setMinimumWidth(110);
+  shieldBtn_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  shieldBtn_->setMinimumWidth(80);
   shieldBtn_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
   shieldBtn_->setCursor(Qt::PointingHandCursor);
   auto *shieldMenu = new QMenu(shieldBtn_);
@@ -1394,19 +1402,17 @@ void MainWindow::updateCurrentUrl(const QUrl &url) {
     urlBar_->setCursorPosition(0);
   }
 
-  if (sslLabel_) {
-    const QColor col = darkMode_ ? QColor("#9ca3af") : QColor("#475569");
+  if (sslAction_) {
+    const QColor col = darkMode_ ? QColor("#9ca3af") : QColor("#64748b");
     if (currentUrl.scheme() == "https") {
-      sslLabel_->setPixmap(
-          createToolbarIcon("lock_https", QColor("#10b981")).pixmap(16, 16));
-      sslLabel_->setToolTip("การเชื่อมต่อปลอดภัย (HTTPS)");
+      sslAction_->setIcon(createToolbarIcon("lock_https", QColor("#10b981")));
+      sslAction_->setToolTip("การเชื่อมต่อปลอดภัย (HTTPS)");
     } else if (currentUrl.scheme() == "http") {
-      sslLabel_->setPixmap(
-          createToolbarIcon("lock_http", QColor("#ef4444")).pixmap(16, 16));
-      sslLabel_->setToolTip("การเชื่อมต่อไม่ปลอดภัย (HTTP)");
+      sslAction_->setIcon(createToolbarIcon("lock_http", QColor("#ef4444")));
+      sslAction_->setToolTip("การเชื่อมต่อไม่ปลอดภัย (HTTP)");
     } else {
-      sslLabel_->setPixmap(createToolbarIcon("globe", col).pixmap(16, 16));
-      sslLabel_->setToolTip("LiteWave Dashboard");
+      sslAction_->setIcon(createToolbarIcon("globe", col));
+      sslAction_->setToolTip("LiteWave Dashboard");
     }
   }
 }
@@ -1453,24 +1459,38 @@ void MainWindow::refreshShieldUi() {
   const QUrl pageUrl = currentView() ? currentView()->url() : QUrl();
   const bool enabledForSite = adBlocker_->isEnabledForUrl(pageUrl);
   const int count = adBlocker_->blockedCount();
+  const bool isDark = darkMode_;
+  const QColor activeColor("#ffffff");
+  const QColor inactiveColor = isDark ? QColor("#94a3b8") : QColor("#64748b");
 
   if (!adBlocker_->isEnabled()) {
-    shieldBtn_->setText("🛡️ Shield: ปิด");
+    shieldBtn_->setIcon(createToolbarIcon("shield", inactiveColor));
+    shieldBtn_->setText("ปิด");
     shieldBtn_->setProperty("active", false);
     shieldBtn_->setToolTip("Shield ปิดอยู่ — คลิกเพื่อเปิดใช้งาน");
   } else if (!enabledForSite && (pageUrl.scheme() == "http" || pageUrl.scheme() == "https")) {
-    shieldBtn_->setText("🛡️ Shield: ปิดสำหรับเว็บนี้");
+    shieldBtn_->setIcon(createToolbarIcon("shield", inactiveColor));
+    shieldBtn_->setText("ปิดเฉพาะเว็บ");
     shieldBtn_->setProperty("active", false);
     shieldBtn_->setToolTip("Shield ปิดสำหรับ " + pageUrl.host());
-  } else {
+  } else if (count > 0) {
+    shieldBtn_->setIcon(createToolbarIcon("shield", activeColor));
+    shieldBtn_->setText(QString::number(count));
+    shieldBtn_->setProperty("active", true);
     const QString mode =
         adBlocker_->mode() == AdBlocker::Mode::Aggressive ? "เข้มงวด" : "มาตรฐาน";
-    shieldBtn_->setText("🛡️ Shield: " + QString::number(count));
-    shieldBtn_->setProperty("active", true);
     shieldBtn_->setToolTip(
         QString("Shield %1 — บล็อกแล้ว %2 รายการ\nคลิกเพื่อเปลี่ยนโหมดหรือปิดเฉพาะเว็บ")
             .arg(mode)
             .arg(count));
+  } else {
+    // Enabled but 0 blocked on this session/page so far: keep it subtle and clean
+    shieldBtn_->setIcon(createToolbarIcon("shield", inactiveColor));
+    shieldBtn_->setText("Shield");
+    shieldBtn_->setProperty("active", false);
+    const QString mode =
+        adBlocker_->mode() == AdBlocker::Mode::Aggressive ? "เข้มงวด" : "มาตรฐาน";
+    shieldBtn_->setToolTip(QString("LiteWave Shield (%1) — พร้อมปกป้อง").arg(mode));
   }
 
   shieldBtn_->style()->unpolish(shieldBtn_);
@@ -1555,24 +1575,26 @@ void MainWindow::applyTheme() {
             }
             QTabBar::tab {
                 background-color: transparent;
-                color: #9e9ea0;
+                color: #94a3b8;
                 border: none;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                padding: 6px 4px 6px 12px;
-                margin-right: 2px;
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
+                padding: 6px 6px 6px 14px;
+                margin-right: 3px;
+                margin-top: 3px;
                 font-size: 13px;
-                min-width: 120px;
+                min-width: 130px;
                 max-width: 220px;
             }
             QTabBar::tab:hover {
-                background-color: #282a31;
-                color: #e8eaed;
+                background-color: #282a32;
+                color: #e2e8f0;
             }
             QTabBar::tab:selected {
                 background-color: #2b2d35;
                 color: #ffffff;
-                font-weight: bold;
+                font-weight: 600;
+                margin-top: 1px;
             }
             QTabBar::close-button {
                 background: transparent;
@@ -1648,29 +1670,29 @@ void MainWindow::applyTheme() {
             QToolBar#mainToolbar {
                 background-color: #2b2d35;
                 border-top: none;
-                border-bottom: 1px solid #18191d;
-                padding: 4px 8px;
-                spacing: 4px;
+                border-bottom: 1px solid #23252c;
+                padding: 4px 10px;
+                spacing: 6px;
             }
             QToolBar#mainToolbar QToolButton {
                 background-color: transparent;
-                color: #e2e8f0;
+                color: #cbd5e1;
                 border: none;
                 border-radius: 8px;
                 padding: 2px;
-                font-size: 16px;
-                font-weight: bold;
+                font-size: 15px;
+                font-weight: 500;
                 min-width: 32px;
                 max-width: 32px;
                 min-height: 32px;
                 max-height: 32px;
             }
             QToolBar#mainToolbar QToolButton:hover {
-                background-color: #334155;
+                background-color: #383b46;
                 color: #ffffff;
             }
             QToolBar#mainToolbar QToolButton:pressed {
-                background-color: #475569;
+                background-color: #474b58;
             }
             QToolBar#mainToolbar QToolButton::menu-indicator,
             QToolBar#mainToolbar QToolButton::menu-arrow {
@@ -1680,66 +1702,65 @@ void MainWindow::applyTheme() {
             }
             QLineEdit {
                 background-color: #1e2026;
-                color: #f1f3f4;
-                border: 1px solid #383a42;
+                color: #f1f5f9;
+                border: 1px solid #33363f;
                 border-radius: 17px;
-                padding: 5px 14px 5px 14px;
+                padding: 4px 12px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
+            QLineEdit:hover {
+                background-color: #1a1c22;
+                border: 1px solid #3f434e;
+            }
             QLineEdit:focus {
-                border: 1px solid #ff5500;
-                background-color: #16171c;
+                border: 1.5px solid #ff5500;
+                background-color: #16171d;
             }
             QLineEdit QToolButton {
                 background: transparent;
                 border: none;
-                border-radius: 9px;
+                border-radius: 8px;
                 padding: 0px;
-                margin: 0px 6px 0px 0px;
+                margin: 0px 4px;
                 min-width: 18px;
                 max-width: 18px;
                 min-height: 18px;
                 max-height: 18px;
             }
             QLineEdit QToolButton:hover {
-                background-color: rgba(148, 163, 184, 0.25);
-                border-radius: 9px;
+                background-color: rgba(148, 163, 184, 0.2);
             }
-            QToolBar#mainToolbar QToolButton#shieldButton,
+            QToolBar#mainToolbar QToolButton#shieldButton {
+                background-color: #23252c;
+                color: #94a3b8;
+                border: 1px solid #383b46;
+                border-radius: 15px;
+                padding: 3px 12px;
+                font-weight: 600;
+                font-size: 12px;
+                min-width: 90px;
+                max-width: 180px;
+                min-height: 28px;
+                max-height: 28px;
+            }
+            QToolBar#mainToolbar QToolButton#shieldButton:hover {
+                background-color: #333642;
+                color: #f1f5f9;
+                border-color: #474b58;
+            }
             QToolBar#mainToolbar QToolButton#shieldButton[active="true"] {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff5500, stop:1 #ff2a00);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ea580c, stop:1 #f97316);
                 color: #ffffff;
                 border: none;
-                border-radius: 14px;
-                padding: 2px 10px;
-                font-weight: bold;
-                font-size: 12px;
-                min-width: 110px;
-                max-width: 220px;
-                min-height: 28px;
-                max-height: 28px;
             }
-            QToolBar#mainToolbar QToolButton#shieldButton:hover,
             QToolBar#mainToolbar QToolButton#shieldButton[active="true"]:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff6611, stop:1 #ff3311);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #f97316, stop:1 #fb923c);
             }
             QToolBar#mainToolbar QToolButton#shieldButton[active="false"] {
-                background-color: #374151;
-                color: #9ca3af;
-                border: 1px solid #4b5563;
-                border-radius: 14px;
-                padding: 2px 10px;
-                font-weight: bold;
-                font-size: 12px;
-                min-width: 110px;
-                max-width: 220px;
-                min-height: 28px;
-                max-height: 28px;
-            }
-            QToolBar#mainToolbar QToolButton#shieldButton[active="false"]:hover {
-                background-color: #4b5563;
-                color: #ffffff;
+                background-color: #23252c;
+                color: #64748b;
+                border: 1px solid #333640;
             }
             QToolBar#mainToolbar QToolButton#mainMenuButton {
                 font-size: 18px;
@@ -1826,24 +1847,26 @@ void MainWindow::applyTheme() {
             }
             QTabBar::tab {
                 background-color: transparent;
-                color: #5f6368;
+                color: #64748b;
                 border: none;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                padding: 6px 4px 6px 12px;
-                margin-right: 2px;
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
+                padding: 6px 6px 6px 14px;
+                margin-right: 3px;
+                margin-top: 3px;
                 font-size: 13px;
-                min-width: 120px;
+                min-width: 130px;
                 max-width: 220px;
             }
             QTabBar::tab:hover {
-                background-color: #d8dadf;
-                color: #202124;
+                background-color: #e2e8f0;
+                color: #1e293b;
             }
             QTabBar::tab:selected {
                 background-color: #ffffff;
-                color: #1e1e1e;
-                font-weight: bold;
+                color: #0f172a;
+                font-weight: 600;
+                margin-top: 1px;
             }
             QTabBar::close-button {
                 background: transparent;
@@ -1872,7 +1895,7 @@ void MainWindow::applyTheme() {
             }
             QToolButton#newTabButton {
                 background-color: transparent;
-                color: #5f6368;
+                color: #64748b;
                 border: none;
                 border-radius: 13px;
                 font-size: 16px;
@@ -1889,19 +1912,19 @@ void MainWindow::applyTheme() {
             }
             QToolButton#windowMinButton, QToolButton#windowMaxButton {
                 background-color: transparent;
-                color: #5f6368;
+                color: #64748b;
                 border: none;
                 border-radius: 14px;
                 font-size: 13px;
                 font-weight: bold;
             }
             QToolButton#windowMinButton:hover, QToolButton#windowMaxButton:hover {
-                background-color: #d8dadf;
+                background-color: #e2e8f0;
                 color: #1e1e1e;
             }
             QToolButton#windowCloseButton {
                 background-color: transparent;
-                color: #5f6368;
+                color: #64748b;
                 border: none;
                 border-radius: 14px;
                 font-size: 13px;
@@ -1919,29 +1942,29 @@ void MainWindow::applyTheme() {
             QToolBar#mainToolbar {
                 background-color: #ffffff;
                 border-top: none;
-                border-bottom: 1px solid #d0d2d6;
-                padding: 4px 8px;
-                spacing: 4px;
+                border-bottom: 1px solid #e2e8f0;
+                padding: 4px 10px;
+                spacing: 6px;
             }
             QToolBar#mainToolbar QToolButton {
                 background-color: transparent;
-                color: #1e293b;
+                color: #475569;
                 border: none;
                 border-radius: 8px;
                 padding: 2px;
-                font-size: 16px;
-                font-weight: bold;
+                font-size: 15px;
+                font-weight: 500;
                 min-width: 32px;
                 max-width: 32px;
                 min-height: 32px;
                 max-height: 32px;
             }
             QToolBar#mainToolbar QToolButton:hover {
-                background-color: #e2e8f0;
+                background-color: #f1f5f9;
                 color: #0f172a;
             }
             QToolBar#mainToolbar QToolButton:pressed {
-                background-color: #cbd5e1;
+                background-color: #e2e8f0;
             }
             QToolBar#mainToolbar QToolButton::menu-indicator,
             QToolBar#mainToolbar QToolButton::menu-arrow {
@@ -1950,67 +1973,66 @@ void MainWindow::applyTheme() {
                 height: 0px;
             }
             QLineEdit {
-                background-color: #f1f3f4;
-                color: #202124;
-                border: 1px solid #e0e2e5;
+                background-color: #f1f5f9;
+                color: #0f172a;
+                border: 1px solid #e2e8f0;
                 border-radius: 17px;
-                padding: 5px 14px 5px 14px;
+                padding: 4px 12px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
+            QLineEdit:hover {
+                background-color: #eef2f6;
+                border: 1px solid #cbd5e1;
+            }
             QLineEdit:focus {
-                border: 1px solid #ff5500;
+                border: 1.5px solid #ff5500;
                 background-color: #ffffff;
             }
             QLineEdit QToolButton {
                 background: transparent;
                 border: none;
-                border-radius: 9px;
+                border-radius: 8px;
                 padding: 0px;
-                margin: 0px 6px 0px 0px;
+                margin: 0px 4px;
                 min-width: 18px;
                 max-width: 18px;
                 min-height: 18px;
                 max-height: 18px;
             }
             QLineEdit QToolButton:hover {
-                background-color: rgba(100, 116, 139, 0.25);
-                border-radius: 9px;
+                background-color: rgba(100, 116, 139, 0.2);
             }
-            QToolBar#mainToolbar QToolButton#shieldButton,
+            QToolBar#mainToolbar QToolButton#shieldButton {
+                background-color: #f1f5f9;
+                color: #475569;
+                border: 1px solid #e2e8f0;
+                border-radius: 15px;
+                padding: 3px 12px;
+                font-weight: 600;
+                font-size: 12px;
+                min-width: 90px;
+                max-width: 180px;
+                min-height: 28px;
+                max-height: 28px;
+            }
+            QToolBar#mainToolbar QToolButton#shieldButton:hover {
+                background-color: #e2e8f0;
+                color: #0f172a;
+                border-color: #cbd5e1;
+            }
             QToolBar#mainToolbar QToolButton#shieldButton[active="true"] {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff5500, stop:1 #ff2a00);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ea580c, stop:1 #f97316);
                 color: #ffffff;
                 border: none;
-                border-radius: 14px;
-                padding: 2px 10px;
-                font-weight: bold;
-                font-size: 12px;
-                min-width: 110px;
-                max-width: 220px;
-                min-height: 28px;
-                max-height: 28px;
             }
-            QToolBar#mainToolbar QToolButton#shieldButton:hover,
             QToolBar#mainToolbar QToolButton#shieldButton[active="true"]:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ff6611, stop:1 #ff3311);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #f97316, stop:1 #fb923c);
             }
             QToolBar#mainToolbar QToolButton#shieldButton[active="false"] {
-                background-color: #e2e8f0;
-                color: #64748b;
-                border: 1px solid #cbd5e1;
-                border-radius: 14px;
-                padding: 2px 10px;
-                font-weight: bold;
-                font-size: 12px;
-                min-width: 110px;
-                max-width: 220px;
-                min-height: 28px;
-                max-height: 28px;
-            }
-            QToolBar#mainToolbar QToolButton#shieldButton[active="false"]:hover {
-                background-color: #cbd5e1;
-                color: #1e293b;
+                background-color: #f1f5f9;
+                color: #94a3b8;
+                border: 1px solid #e2e8f0;
             }
             QToolBar#mainToolbar QToolButton#mainMenuButton {
                 font-size: 18px;
