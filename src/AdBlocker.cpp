@@ -63,10 +63,26 @@ AdBlocker::AdBlocker(QObject *parent, bool persistent)
                            ? static_cast<int>(Mode::Aggressive)
                            : static_cast<int>(Mode::Standard));
 
+    dntEnabled_.storeRelease(settings.value("dntEnabled", true).toBool() ? 1 : 0);
+
     for (const QString &site : settings.value("shield/allowedSites").toStringList()) {
         const QByteArray key = normalizedHost(site);
         if (!key.isEmpty())
             allowedSites_.insert(key);
+    }
+}
+
+bool AdBlocker::isDntEnabled() const
+{
+    return dntEnabled_.loadAcquire() != 0;
+}
+
+void AdBlocker::setDntEnabled(bool enabled)
+{
+    dntEnabled_.storeRelease(enabled ? 1 : 0);
+    if (persistent_) {
+        QSettings settings("LiteWave", "LiteWave");
+        settings.setValue("dntEnabled", enabled);
     }
 }
 
@@ -231,6 +247,11 @@ bool AdBlocker::shouldBlock(
 
 void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
+    if (dntEnabled_.loadAcquire()) {
+        info.setHttpHeader("DNT", "1");
+        info.setHttpHeader("Sec-GPC", "1");
+    }
+
     const QUrl reqUrl = info.requestUrl();
     const QByteArray host = normalizedHost(reqUrl.host());
 

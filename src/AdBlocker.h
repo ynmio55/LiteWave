@@ -37,6 +37,9 @@ public:
     QStringList allowedSites() const;
     void setAllowedSites(const QStringList &sites);
 
+    bool isDntEnabled() const;
+    void setDntEnabled(bool enabled);
+
     bool isEnabledForUrl(const QUrl &url) const;
 
     // Kept public for deterministic unit tests. The hot path does no network,
@@ -72,6 +75,7 @@ private:
 
     QAtomicInt enabled_ = 1;
     QAtomicInt mode_ = static_cast<int>(Mode::Standard);
+    QAtomicInt dntEnabled_ = 1;
     QAtomicInt blockedCount_ = 0;
     mutable QReadWriteLock lock_;
     QSet<QByteArray> allowedSites_;

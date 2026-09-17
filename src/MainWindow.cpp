@@ -693,14 +693,24 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   applyTheme();
 
   QSettings startupSettings("LiteWave", "LiteWave");
-  if (!privateMode_ &&
-      startupSettings.value("startupOption", "home").toString() == "restore") {
+  statusBar()->setVisible(startupSettings.value("showStatusBar", true).toBool());
+
+  const QString startupOpt = startupSettings.value("startupOption", "home").toString();
+  if (!privateMode_ && startupOpt == "restore") {
     const QStringList savedTabs =
         startupSettings.value("session/openTabs").toStringList();
     if (!savedTabs.isEmpty()) {
       for (const QString &u : savedTabs) {
         createView(QUrl(u));
       }
+    } else {
+      newTab();
+    }
+  } else if (!privateMode_ && startupOpt == "custom") {
+    const QString customUrl =
+        startupSettings.value("customStartupUrl", "").toString().trimmed();
+    if (!customUrl.isEmpty()) {
+      createView(QUrl::fromUserInput(customUrl));
     } else {
       newTab();
     }
@@ -2180,16 +2190,28 @@ void MainWindow::loadHome(QWebEngineView *view) {
   const QString borderCol = darkMode_ ? "rgba(255, 255, 255, 0.08)" : "rgba(226, 232, 240, 0.85)";
 
   QSettings st("LiteWave", "LiteWave");
-  const bool enableSuggestions = st.value("search/enableSuggestions", false).toBool();
+  const bool enableSuggestions = st.value("search/enableSuggestions", true).toBool();
   const auto curEngine = SearchEngineManager::instance().currentEngine();
 
   QString engineOptionsHtml;
   for (const auto &eng : SearchEngineManager::instance().availableEngines()) {
     const bool sel = (eng.id == curEngine.id);
+    QString shortName = eng.name;
+    if (shortName.contains("Brave")) shortName = "Brave";
+    else if (shortName.contains("Google")) shortName = "Google";
+    else if (shortName.contains("DuckDuckGo")) shortName = "DuckDuckGo";
+    else if (shortName.contains("Bing")) shortName = "Bing";
+    else if (shortName.contains("LiteWave")) shortName = "Custom";
     engineOptionsHtml += QString(R"(<option value="%1"%2>%3</option>)")
-                           .arg(eng.id, sel ? " selected" : "", eng.name);
+                           .arg(eng.id, sel ? " selected" : "", shortName);
   }
-  const QString curEngineName = curEngine.name.isEmpty() ? "Brave Search" : curEngine.name;
+  QString curEngineShort = curEngine.name;
+  if (curEngineShort.contains("Brave")) curEngineShort = "Brave";
+  else if (curEngineShort.contains("Google")) curEngineShort = "Google";
+  else if (curEngineShort.contains("DuckDuckGo")) curEngineShort = "DuckDuckGo";
+  else if (curEngineShort.contains("Bing")) curEngineShort = "Bing";
+  else if (curEngineShort.contains("LiteWave")) curEngineShort = "Custom";
+  const QString curEngineName = curEngineShort.isEmpty() ? "Google" : curEngineShort;
 
   const QString html = QString(R"HTML(
 <!doctype html>
@@ -2299,7 +2321,7 @@ body {
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid %5;
   border-radius: 28px;
-  padding: 5px 8px 5px 14px;
+  padding: 5px 8px 5px 12px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -2312,17 +2334,17 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 20px;
-  background: transparent;
+  padding: 4px 6px 4px 8px;
+  border-radius: 16px;
+  background: rgba(2, 132, 199, 0.08);
   color: %3;
   cursor: pointer;
   transition: background-color 0.15s ease;
   user-select: none;
+  flex-shrink: 0;
 }
 .search-engine-picker:hover {
-  background-color: rgba(2, 132, 199, 0.12);
+  background-color: rgba(2, 132, 199, 0.16);
 }
 .search-engine-picker select {
   appearance: none;
@@ -2330,29 +2352,30 @@ body {
   background: transparent;
   border: none;
   color: inherit;
-  font-size: 13.5px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   outline: none;
-  padding-right: 18px;
+  max-width: 82px;
+  padding-right: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .search-engine-picker select option {
   background-color: %2;
   color: %3;
-}
-.picker-icon {
-  color: #0284c7;
-  flex-shrink: 0;
+  font-weight: normal;
 }
 .chevron-icon {
   position: absolute;
-  right: 8px;
+  right: 6px;
   pointer-events: none;
   color: %4;
 }
 .search-divider {
   width: 1px;
-  height: 24px;
+  height: 22px;
   background-color: %5;
   margin: 0 8px;
   flex-shrink: 0;
@@ -2361,10 +2384,11 @@ body {
   flex: 1;
   border: none;
   background: transparent;
-  padding: 10px 12px;
-  font-size: 15.5px;
+  padding: 10px 10px;
+  font-size: 15px;
   color: %3;
   outline: none;
+  min-width: 120px;
 }
 .search-form input::placeholder {
   color: %4;
@@ -2725,20 +2749,15 @@ body {
 <div class="search-container">
   <form class="search-form" onsubmit="return submitSearch(event)">
     <div class="search-engine-picker" title="เลือกเครื่องมือค้นหา">
-      <svg class="picker-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="2" y1="12" x2="22" y2="12"></line>
-        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-      </svg>
       <select id="engine" name="engine" onchange="onEngineChange()">
         %7
       </select>
-      <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <svg class="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="6 9 12 15 18 9"></polyline>
       </svg>
     </div>
     <div class="search-divider"></div>
-    <input id="q" name="q" type="search" autofocus placeholder="ค้นหาด้วย %8 หรือป้อนที่อยู่เว็บไซต์..." autocomplete="off" oninput="onSearchInput(this.value)" onkeydown="onSearchKeyDown(event)">
+    <input id="q" name="q" type="search" autofocus placeholder="ค้นหาด้วย %8 หรือป้อน URL..." autocomplete="off" oninput="onSearchInput(this.value)" onkeydown="onSearchKeyDown(event)">
     <button type="submit" class="search-btn" title="ค้นหา">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"></circle>
@@ -2805,7 +2824,7 @@ function submitSearch(event) {
 function onEngineChange() {
   const sel = document.getElementById('engine');
   const engineName = sel.options[sel.selectedIndex].text;
-  document.getElementById('q').placeholder = 'ค้นหาด้วย ' + engineName + ' หรือป้อนที่อยู่เว็บไซต์...';
+  document.getElementById('q').placeholder = 'ค้นหาด้วย ' + engineName + ' หรือป้อน URL...';
   localStorage.setItem('litewave_preferred_engine', sel.value);
 }
 
@@ -3008,15 +3027,11 @@ function deleteShortcut(e, idx) {
   }
 }
 
-const searchSuggestionsList = [
-  'litewave browser', 'github', 'youtube', 'chatgpt', 'wikipedia',
-  'reddit', 'twitter', 'facebook', 'gmail', 'google maps', 'weather today',
-  'stackoverflow', 'python', 'cpp', 'qt framework', 'web development'
-];
-
 const enableSearchSuggestions = %9;
 let currentSuggestions = [];
 let activeSuggestionIndex = -1;
+let suggestDebounceTimer = null;
+let currentScriptTag = null;
 
 function onSearchInput(val) {
   const box = document.getElementById('suggestionsBox');
@@ -3027,37 +3042,84 @@ function onSearchInput(val) {
     return;
   }
 
-  const q = val.trim().toLowerCase();
+  const q = val.trim();
   if (q.length === 0) {
     box.classList.remove('active');
     box.innerHTML = '';
     activeSuggestionIndex = -1;
+    currentSuggestions = [];
+    if (currentScriptTag) {
+      currentScriptTag.remove();
+      currentScriptTag = null;
+    }
     return;
   }
 
-  const shortcuts = getShortcuts().map(s => s.name);
-  const pool = Array.from(new Set([...searchSuggestionsList, ...shortcuts]));
-  currentSuggestions = pool.filter(item => item.toLowerCase().includes(q)).slice(0, 7);
+  // Show local matching shortcuts immediately
+  const shortcuts = getShortcuts().map(s => s.name).filter(item => item.toLowerCase().includes(q.toLowerCase()));
+  if (shortcuts.length > 0) {
+    currentSuggestions = shortcuts.slice(0, 5);
+    renderSuggestions();
+    box.classList.add('active');
+  }
 
+  // Live Google autocomplete query
+  clearTimeout(suggestDebounceTimer);
+  suggestDebounceTimer = setTimeout(() => {
+    fetchGoogleSuggestions(q);
+  }, 140);
+}
+
+window.handleGoogleSuggest = function(data) {
+  const box = document.getElementById('suggestionsBox');
+  if (!box) return;
+  const inputVal = document.getElementById('q').value.trim().toLowerCase();
+  if (!inputVal) {
+    box.classList.remove('active');
+    return;
+  }
+
+  if (data && Array.isArray(data) && Array.isArray(data[1])) {
+    const liveMatches = data[1].slice(0, 7);
+    const shortcuts = getShortcuts().map(s => s.name).filter(item => item.toLowerCase().includes(inputVal));
+    const merged = Array.from(new Set([...liveMatches, ...shortcuts])).slice(0, 8);
+
+    if (merged.length > 0) {
+      currentSuggestions = merged;
+      activeSuggestionIndex = -1;
+      renderSuggestions();
+      box.classList.add('active');
+      return;
+    }
+  }
   if (currentSuggestions.length === 0) {
     box.classList.remove('active');
-    box.innerHTML = '';
-    activeSuggestionIndex = -1;
-    return;
   }
+};
 
-  activeSuggestionIndex = -1;
-  renderSuggestions();
-  box.classList.add('active');
+function fetchGoogleSuggestions(query) {
+  if (currentScriptTag) {
+    currentScriptTag.remove();
+    currentScriptTag = null;
+  }
+  currentScriptTag = document.createElement('script');
+  currentScriptTag.src = 'https://suggestqueries.google.com/complete/search?client=chrome&q=' + encodeURIComponent(query) + '&callback=handleGoogleSuggest';
+  currentScriptTag.onerror = function() {
+    // If offline or blocked, keep local shortcut suggestions
+  };
+  document.body.appendChild(currentScriptTag);
 }
 
 function renderSuggestions() {
   const box = document.getElementById('suggestionsBox');
   if (!box) return;
   box.innerHTML = currentSuggestions.map((item, idx) => `
-    <div class="suggestion-item ${idx === activeSuggestionIndex ? 'selected' : ''}" onclick="selectSuggestion('${item.replace(/'/g, "\\'")}')">
+    <div class="suggestion-item ${idx === activeSuggestionIndex ? 'selected' : ''}" onclick="selectSuggestion('${item.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">
       <div class="suggestion-icon">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
       </div>
       <span>${item}</span>
     </div>
@@ -3072,7 +3134,9 @@ function selectSuggestion(text) {
 
 function onSearchKeyDown(e) {
   const box = document.getElementById('suggestionsBox');
-  if (!box || !box.classList.contains('active') || currentSuggestions.length === 0) return;
+  if (!box || !box.classList.contains('active') || currentSuggestions.length === 0) {
+    return;
+  }
 
   if (e.key === 'ArrowDown') {
     e.preventDefault();
@@ -3086,6 +3150,11 @@ function onSearchKeyDown(e) {
     document.getElementById('q').value = currentSuggestions[activeSuggestionIndex];
   } else if (e.key === 'Escape') {
     box.classList.remove('active');
+  } else if (e.key === 'Enter') {
+    if (activeSuggestionIndex >= 0 && activeSuggestionIndex < currentSuggestions.length) {
+      e.preventDefault();
+      selectSuggestion(currentSuggestions[activeSuggestionIndex]);
+    }
   }
 }
 
@@ -4128,6 +4197,20 @@ void MainWindow::showSettingsDialog() {
       if (darkMode_)
         toggleTheme();
       statusBar()->show();
+      if (adBlocker_) {
+        adBlocker_->setEnabled(true);
+        adBlocker_->setMode(AdBlocker::Mode::Standard);
+        adBlocker_->setAllowedSites({});
+        adBlocker_->setDntEnabled(true);
+      }
+      SearchEngineManager::instance().setCurrentEngineId("google");
+      for (int i = 0; i < tabStack_->count(); ++i) {
+        if (auto *v = qobject_cast<QWebEngineView *>(tabStack_->widget(i))) {
+          if (v->url().scheme() == "litewave" || v->url().host() == "litewave.home") {
+            loadHome(v);
+          }
+        }
+      }
       QMessageBox::information(&dialog, "สำเร็จ", "คืนค่าการตั้งค่าทั้งหมดเรียบร้อยแล้ว");
       dialog.accept();
     }
@@ -4170,7 +4253,10 @@ void MainWindow::showSettingsDialog() {
     statusBar()->setVisible(showStatusBarBox->isChecked());
     st.setValue("showStatusBar", showStatusBarBox->isChecked());
 
-    SearchEngineManager::instance().setCurrentEngineId(searchCombo->currentData().toString());
+    const QString oldEngineId = SearchEngineManager::instance().currentEngine().id;
+    const QString newEngineId = searchCombo->currentData().toString();
+    const bool engineChanged = (oldEngineId != newEngineId);
+    SearchEngineManager::instance().setCurrentEngineId(newEngineId);
     st.setValue("search/enableSuggestions", enableSuggestionsBox->isChecked());
     setupUrlBarCompleter();
 
@@ -4184,6 +4270,19 @@ void MainWindow::showSettingsDialog() {
     }
 
     st.setValue("dntEnabled", dntBox->isChecked());
+    if (adBlocker_) {
+      adBlocker_->setDntEnabled(dntBox->isChecked());
+    }
+
+    if (engineChanged) {
+      for (int i = 0; i < tabStack_->count(); ++i) {
+        if (auto *v = qobject_cast<QWebEngineView *>(tabStack_->widget(i))) {
+          if (v->url().scheme() == "litewave" || v->url().host() == "litewave.home") {
+            loadHome(v);
+          }
+        }
+      }
+    }
 
     if (adBlocker_) {
       const bool shieldWasEnabled = adBlocker_->isEnabled();
