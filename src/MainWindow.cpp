@@ -2579,6 +2579,7 @@ body {
   width: 100%;
   max-width: 680px;
   margin-bottom: 34px;
+  z-index: 100;
 }
 .suggestions-box {
   position: absolute;
@@ -2623,6 +2624,8 @@ body {
   color: #ffffff;
 }
 .search-form {
+  position: relative;
+  z-index: 10;
   display: flex;
   align-items: center;
   background-color: %2;
@@ -2688,18 +2691,18 @@ body {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
-  min-width: 170px;
+  min-width: 175px;
   background: %2;
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
   border: 1px solid %5;
   border-radius: 16px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(2, 132, 199, 0.1);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.22), 0 6px 16px rgba(2, 132, 199, 0.15);
   padding: 6px;
   display: none;
   flex-direction: column;
   gap: 2px;
-  z-index: 600;
+  z-index: 9999;
   transform-origin: top left;
   animation: engineMenuAnim 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -2797,6 +2800,8 @@ body {
 .section-container {
   width: 100%;
   max-width: 820px;
+  position: relative;
+  z-index: 1;
 }
 .section-header {
   display: flex;
