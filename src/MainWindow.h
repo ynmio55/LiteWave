@@ -6,6 +6,7 @@
 #include <QPoint>
 
 class QWebEngineProfile;
+class QWebEngineDownloadRequest;
 class QLineEdit;
 class QProgressBar;
 class QTabBar;
@@ -79,7 +80,16 @@ private:
         bool completed = false;
     };
 
+    struct BookmarkItem {
+        QString title;
+        QString url;
+        qint64 addedTime = 0;
+    };
+
     QList<DownloadRecord> downloadRecords_;
+    QList<BookmarkItem> bookmarks_;
+    QToolBar *bookmarkBar_ = nullptr;
+    QAction *bookmarkAction_ = nullptr;
     QToolButton *menuBtn_ = nullptr;
     QCompleter *urlCompleter_ = nullptr;
     FindBar *findBar_ = nullptr;
@@ -94,6 +104,13 @@ private:
     void populateHistoryMenu(QMenu *menu);
     void populateBookmarksMenu(QMenu *menu);
     void addHistoryItem(const QString &title, const QUrl &url);
+    void loadBookmarks();
+    void saveBookmarks();
+    void updateBookmarkBar();
+    void showBookmarksManagerDialog();
+    void toggleBookmarkBar();
+    void updateBookmarkStarState();
+    void handleDownloadRequested(QWebEngineDownloadRequest *download);
     void showDownloadsDialog();
     void clearBrowsingDataDialog();
     void showSettingsDialog();
@@ -108,3 +125,4 @@ private:
     void loadDownloadRecords();
     void saveDownloadRecords();
 };
+

@@ -71,6 +71,8 @@
 #include <QWebEngineView>
 #include <algorithm>
 
+static QIcon createMenuIcon(const QString &name, const QColor &color);
+
 static QIcon createToolbarIcon(const QString &name, const QColor &color) {
   QPixmap pix(20, 20);
   pix.fill(Qt::transparent);
@@ -528,8 +530,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
             }
           });
 
-  auto *bookmark = addNavAction("★", "บันทึกหน้าเว็บนี้ (Ctrl+D)");
-  connect(bookmark, &QAction::triggered, this, &MainWindow::addBookmark);
+  bookmarkAction_ = addNavAction("☆", "บันทึกหน้าเว็บนี้ (Ctrl+D)");
+  connect(bookmarkAction_, &QAction::triggered, this, &MainWindow::addBookmark);
 
   // Shield has one clear menu: Standard, Aggressive, Off, plus a per-site
   // compatibility escape hatch. It reports only requests actually blocked.
@@ -655,6 +657,21 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   headerLayout->addWidget(toolbar_);
   headerLayout->addWidget(progress_);
 
+  bookmarkBar_ = new QToolBar("Bookmarks", this);
+  bookmarkBar_->setObjectName("bookmarkBar");
+  bookmarkBar_->setMovable(false);
+  bookmarkBar_->setFloatable(false);
+  bookmarkBar_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+
+  QSettings st("LiteWave", "LiteWave");
+  const bool showBmBar = st.value("ui/showBookmarkBar", true).toBool();
+  bookmarkBar_->setVisible(showBmBar);
+
+  loadBookmarks();
+  updateBookmarkBar();
+
+  headerLayout->addWidget(bookmarkBar_);
+
   // Assemble Main Layout
   mainLayout->addWidget(headerWidget_);
   findBar_ = new FindBar(this);
@@ -663,6 +680,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   mainLayout->addWidget(tabStack_);
 
   loadDownloadRecords();
+
+  connect(profile_, &QWebEngineProfile::downloadRequested, this,
+          &MainWindow::handleDownloadRequested);
 
   tabBar_->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(tabBar_, &QTabBar::customContextMenuRequested, this,
@@ -968,76 +988,6 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
       });
 #endif
 
-  connect(
-      profile_, &QWebEngineProfile::downloadRequested, view,
-      [this, page](QWebEngineDownloadRequest *download) {
-        // A shared profile emits to every tab: only the originating page
-        // handles it.
-        if (!download || download->page() != page ||
-            download->state() != QWebEngineDownloadRequest::DownloadRequested)
-          return;
-        if (download->isSavePageDownload()) {
-          download->accept(); // Keep the filename selected by Ctrl+S.
-          return;
-        }
-        QSettings st("LiteWave", "LiteWave");
-        const QString defaultDir =
-            QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
-        QString dir = st.value("downloadDirectory", defaultDir).toString();
-        if (dir.isEmpty() || !QDir(dir).exists())
-          dir = defaultDir;
-        const bool askLocation =
-            st.value("askDownloadLocation", false).toBool();
-
-        QString name = download->downloadFileName().isEmpty()
-                           ? QStringLiteral("LiteWave-download")
-                           : download->downloadFileName();
-
-        if (askLocation) {
-          const QString fullPath = QFileDialog::getSaveFileName(
-              this, "บันทึกไฟล์ดาวน์โหลด", dir + "/" + name);
-          if (fullPath.isEmpty()) {
-            download->cancel();
-            return;
-          }
-          QFileInfo fi(fullPath);
-          dir = fi.absolutePath();
-          name = fi.fileName();
-        }
-
-        download->setDownloadDirectory(dir);
-        download->setDownloadFileName(name);
-
-        DownloadRecord rec;
-        rec.fileName = name;
-        rec.path = dir + "/" + name;
-        rec.completed = false;
-        downloadRecords_.prepend(rec);
-        saveDownloadRecords();
-
-        connect(
-            download, &QWebEngineDownloadRequest::stateChanged, this,
-            [this, download,
-             name](QWebEngineDownloadRequest::DownloadState state) {
-              if (state == QWebEngineDownloadRequest::DownloadCompleted) {
-                statusBar()->showMessage("ดาวน์โหลดเสร็จแล้ว: " + name, 5000);
-                for (auto &r : downloadRecords_) {
-                  if (r.fileName == name) {
-                    r.completed = true;
-                    break;
-                  }
-                }
-                saveDownloadRecords();
-              } else if (state ==
-                             QWebEngineDownloadRequest::DownloadCancelled ||
-                         state ==
-                             QWebEngineDownloadRequest::DownloadInterrupted) {
-                statusBar()->showMessage("ดาวน์โหลดไม่สำเร็จ", 5000);
-              }
-            });
-        download->accept();
-        statusBar()->showMessage("กำลังดาวน์โหลด: " + name, 2500);
-      });
 
   connect(page, &QWebEnginePage::recentlyAudibleChanged, this,
           [this, view](bool recentlyAudible) {
@@ -1229,6 +1179,8 @@ void MainWindow::setupShortcuts() {
   key("Ctrl+Shift+R", hard);
   key("Shift+F5", hard);
   key("Ctrl+D", [this] { addBookmark(); });
+  key("Ctrl+Shift+B", [this] { toggleBookmarkBar(); });
+  key("Ctrl+Shift+O", [this] { showBookmarksManagerDialog(); });
   key("Ctrl+Shift+D", [this] {
     bool ok = false;
     QString name = QInputDialog::getText(this, "Bookmarks", "Folder name",
@@ -1464,6 +1416,7 @@ void MainWindow::updateCurrentUrl(const QUrl &url) {
       sslAction_->setToolTip("LiteWave Dashboard");
     }
   }
+  updateBookmarkStarState();
 }
 
 void MainWindow::updateTabTitle(const QString &title) {
@@ -1489,16 +1442,512 @@ void MainWindow::updateTabTitle(const QString &title) {
   }
 }
 
-void MainWindow::addBookmark() {
-  if (!currentView() || currentView()->url().isEmpty())
+void MainWindow::updateBookmarkStarState() {
+  if (!bookmarkAction_)
     return;
-  const QString title = currentView()->title().isEmpty()
-                            ? currentView()->url().host()
-                            : currentView()->title();
-  QSettings settings("LiteWave", "LiteWave");
-  settings.setValue("bookmarks/" + currentView()->url().toString(), title);
-  setupUrlBarCompleter();
-  statusBar()->showMessage("บันทึกเว็บแล้ว: " + title, 3000);
+  auto *view = currentView();
+  if (!view) {
+    bookmarkAction_->setText("☆");
+    bookmarkAction_->setToolTip("บันทึกหน้าเว็บนี้ (Ctrl+D)");
+    return;
+  }
+  const QString currentUrlStr = view->url().toString();
+  bool bookmarked = false;
+  for (const auto &item : bookmarks_) {
+    if (item.url == currentUrlStr) {
+      bookmarked = true;
+      break;
+    }
+  }
+  bookmarkAction_->setText(bookmarked ? "★" : "☆");
+  bookmarkAction_->setToolTip(bookmarked ? "แก้ไขบุ๊กมาร์กสำหรับหน้านี้ (Ctrl+D)"
+                                         : "บันทึกหน้าเว็บนี้ (Ctrl+D)");
+}
+
+void MainWindow::loadBookmarks() {
+  bookmarks_.clear();
+  QSettings st("LiteWave", "LiteWave");
+  const QVariantList list = st.value("bookmarks/items").toList();
+  if (!list.isEmpty()) {
+    for (const auto &var : list) {
+      const QVariantMap map = var.toMap();
+      BookmarkItem item;
+      item.title = map.value("title").toString();
+      item.url = map.value("url").toString();
+      item.addedTime = map.value("addedTime").toLongLong();
+      if (!item.url.isEmpty()) {
+        bookmarks_.append(item);
+      }
+    }
+  } else {
+    // Check legacy bookmarks format to prevent data loss
+    st.beginGroup("bookmarks");
+    const QStringList keys = st.allKeys();
+    for (const QString &key : keys) {
+      if (key == "items")
+        continue;
+      const QString title = st.value(key).toString();
+      BookmarkItem item;
+      item.title = title.isEmpty() ? key : title;
+      QString url = key;
+      if (url.startsWith("https:/") && !url.startsWith("https://")) {
+        url.replace("https:/", "https://");
+      } else if (url.startsWith("http:/") && !url.startsWith("http://")) {
+        url.replace("http:/", "http://");
+      }
+      item.url = url;
+      item.addedTime = QDateTime::currentMSecsSinceEpoch();
+      bookmarks_.append(item);
+    }
+    st.endGroup();
+    if (!bookmarks_.isEmpty()) {
+      saveBookmarks();
+    }
+  }
+}
+
+void MainWindow::saveBookmarks() {
+  QSettings st("LiteWave", "LiteWave");
+  QVariantList list;
+  for (const auto &item : bookmarks_) {
+    QVariantMap map;
+    map["title"] = item.title;
+    map["url"] = item.url;
+    map["addedTime"] = item.addedTime;
+    list.append(map);
+  }
+  st.setValue("bookmarks/items", list);
+  st.sync();
+}
+
+void MainWindow::updateBookmarkBar() {
+  if (!bookmarkBar_)
+    return;
+  bookmarkBar_->clear();
+  const QColor iconCol = darkMode_ ? QColor("#94a3b8") : QColor("#475569");
+  for (int i = 0; i < bookmarks_.size(); ++i) {
+    const auto &bm = bookmarks_[i];
+    auto *btn = new QToolButton(bookmarkBar_);
+    btn->setText(bm.title);
+    btn->setIcon(createMenuIcon("bookmark", iconCol));
+    btn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    btn->setToolTip(bm.title + "\n" + bm.url);
+    btn->setCursor(Qt::PointingHandCursor);
+    const QString url = bm.url;
+    connect(btn, &QToolButton::clicked, this, [this, url] {
+      openUrl(url);
+    });
+    btn->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(btn, &QToolButton::customContextMenuRequested, this,
+            [this, btn, url, i](const QPoint &pos) {
+              QMenu ctxMenu(this);
+              auto *openTabAct = ctxMenu.addAction("เปิดในแท็บใหม่");
+              auto *deleteAct = ctxMenu.addAction("ลบบุ๊กมาร์ก");
+              connect(openTabAct, &QAction::triggered, this, [this, url] {
+                createView(QUrl(url));
+              });
+              connect(deleteAct, &QAction::triggered, this, [this, i] {
+                if (i >= 0 && i < bookmarks_.size()) {
+                  bookmarks_.removeAt(i);
+                  saveBookmarks();
+                  updateBookmarkBar();
+                  updateBookmarkStarState();
+                  statusBar()->showMessage("ลบบุ๊กมาร์กแล้ว", 3000);
+                }
+              });
+              ctxMenu.exec(btn->mapToGlobal(pos));
+            });
+    bookmarkBar_->addWidget(btn);
+  }
+}
+
+void MainWindow::toggleBookmarkBar() {
+  if (!bookmarkBar_)
+    return;
+  const bool visible = !bookmarkBar_->isVisible();
+  bookmarkBar_->setVisible(visible);
+  QSettings st("LiteWave", "LiteWave");
+  st.setValue("ui/showBookmarkBar", visible);
+}
+
+void MainWindow::addBookmark() {
+  auto *view = currentView();
+  if (!view)
+    return;
+  QUrl url = view->url();
+  if (url.isEmpty() || url.host() == "litewave.home" || url.scheme() == "litewave") {
+    url = QUrl("https://litewave.home/");
+  }
+
+  const QString currentUrlStr = url.toString();
+  QString currentTitle = view->title().trimmed();
+  if (currentTitle.isEmpty()) {
+    currentTitle = url.host().isEmpty() ? "หน้าแรก (Home)" : url.host();
+  }
+
+  int existingIndex = -1;
+  for (int i = 0; i < bookmarks_.size(); ++i) {
+    if (bookmarks_[i].url == currentUrlStr) {
+      existingIndex = i;
+      currentTitle = bookmarks_[i].title;
+      break;
+    }
+  }
+
+  QDialog dialog(this);
+  dialog.setWindowTitle(existingIndex >= 0 ? "แก้ไขบุ๊กมาร์ก" : "เพิ่มบุ๊กมาร์ก");
+  dialog.setFixedWidth(420);
+
+  const QString bg = darkMode_ ? "#0f172a" : "#ffffff";
+  const QString cardBg = darkMode_ ? "#1e293b" : "#f8fafc";
+  const QString textCol = darkMode_ ? "#f8fafc" : "#0f172a";
+  const QString borderCol = darkMode_ ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.15)";
+  const QString primaryCol = "#0ea5e9";
+
+  dialog.setStyleSheet(QString(R"(
+    QDialog {
+      background-color: %1;
+      color: %2;
+      border: 1px solid %3;
+      border-radius: 12px;
+    }
+    QLabel {
+      color: %2;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    QLineEdit {
+      background-color: %4;
+      color: %2;
+      border: 1px solid %3;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      selection-background-color: %5;
+    }
+    QLineEdit:focus {
+      border: 1.5px solid %5;
+    }
+    QPushButton {
+      background-color: %4;
+      color: %2;
+      border: 1px solid %3;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    QPushButton:hover {
+      background-color: rgba(14, 165, 233, 0.15);
+      border-color: %5;
+    }
+    QPushButton#primaryBtn {
+      background-color: %5;
+      color: #ffffff;
+      border: none;
+      font-weight: 600;
+    }
+    QPushButton#primaryBtn:hover {
+      background-color: #0284c7;
+    }
+    QPushButton#deleteBtn {
+      background-color: rgba(239, 68, 68, 0.12);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    QPushButton#deleteBtn:hover {
+      background-color: #ef4444;
+      color: #ffffff;
+    }
+  )").arg(bg, textCol, borderCol, cardBg, primaryCol));
+
+  auto *layout = new QVBoxLayout(&dialog);
+  layout->setContentsMargins(20, 20, 20, 20);
+  layout->setSpacing(14);
+
+  auto *titleLabel = new QLabel(existingIndex >= 0 ? "⭐ แก้ไขบุ๊กมาร์ก" : "⭐ บันทึกบุ๊กมาร์กแล้ว", &dialog);
+  titleLabel->setStyleSheet("font-size: 16px; font-weight: 700;");
+  layout->addWidget(titleLabel);
+
+  auto *nameFormLayout = new QVBoxLayout();
+  nameFormLayout->setSpacing(4);
+  auto *nameLbl = new QLabel("ชื่อเว็บ:", &dialog);
+  auto *nameEdit = new QLineEdit(&dialog);
+  nameEdit->setText(currentTitle);
+  nameFormLayout->addWidget(nameLbl);
+  nameFormLayout->addWidget(nameEdit);
+  layout->addLayout(nameFormLayout);
+
+  auto *urlFormLayout = new QVBoxLayout();
+  urlFormLayout->setSpacing(4);
+  auto *urlLbl = new QLabel("ที่อยู่ URL:", &dialog);
+  auto *urlEdit = new QLineEdit(&dialog);
+  urlEdit->setText(currentUrlStr);
+  urlFormLayout->addWidget(urlLbl);
+  urlFormLayout->addWidget(urlEdit);
+  layout->addLayout(urlFormLayout);
+
+  auto *btnLayout = new QHBoxLayout();
+  btnLayout->setSpacing(8);
+
+  QPushButton *deleteBtn = nullptr;
+  if (existingIndex >= 0) {
+    deleteBtn = new QPushButton("ลบบุ๊กมาร์ก", &dialog);
+    deleteBtn->setObjectName("deleteBtn");
+    btnLayout->addWidget(deleteBtn);
+  }
+
+  btnLayout->addStretch();
+
+  auto *cancelBtn = new QPushButton("ยกเลิก", &dialog);
+  auto *saveBtn = new QPushButton("เสร็จสิ้น", &dialog);
+  saveBtn->setObjectName("primaryBtn");
+  saveBtn->setDefault(true);
+
+  btnLayout->addWidget(cancelBtn);
+  btnLayout->addWidget(saveBtn);
+  layout->addLayout(btnLayout);
+
+  connect(cancelBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+  if (deleteBtn) {
+    connect(deleteBtn, &QPushButton::clicked, &dialog, [this, &dialog, existingIndex] {
+      if (existingIndex >= 0 && existingIndex < bookmarks_.size()) {
+        bookmarks_.removeAt(existingIndex);
+        saveBookmarks();
+        updateBookmarkBar();
+        updateBookmarkStarState();
+        statusBar()->showMessage("ลบบุ๊กมาร์กเรียบร้อยแล้ว", 3000);
+      }
+      dialog.accept();
+    });
+  }
+
+  connect(saveBtn, &QPushButton::clicked, &dialog, [this, &dialog, nameEdit, urlEdit, existingIndex] {
+    const QString finalTitle = nameEdit->text().trimmed();
+    const QString finalUrl = urlEdit->text().trimmed();
+    if (!finalUrl.isEmpty()) {
+      BookmarkItem item;
+      item.title = finalTitle.isEmpty() ? finalUrl : finalTitle;
+      item.url = finalUrl;
+      item.addedTime = QDateTime::currentMSecsSinceEpoch();
+      if (existingIndex >= 0 && existingIndex < bookmarks_.size()) {
+        bookmarks_[existingIndex] = item;
+      } else {
+        bookmarks_.prepend(item);
+      }
+      saveBookmarks();
+      updateBookmarkBar();
+      updateBookmarkStarState();
+      statusBar()->showMessage("บันทึกบุ๊กมาร์กแล้ว: " + item.title, 3000);
+    }
+    dialog.accept();
+  });
+
+  dialog.exec();
+}
+
+void MainWindow::showBookmarksManagerDialog() {
+  auto *dialog = new QDialog(this);
+  dialog->setWindowTitle("จัดการบุ๊กมาร์ก (Bookmark Manager)");
+  dialog->resize(660, 480);
+
+  const QString bg = darkMode_ ? "#0f172a" : "#ffffff";
+  const QString cardBg = darkMode_ ? "#1e293b" : "#f8fafc";
+  const QString itemHover = darkMode_ ? "#334155" : "#f1f5f9";
+  const QString textCol = darkMode_ ? "#f8fafc" : "#0f172a";
+  const QString borderCol = darkMode_ ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)";
+  const QString primaryCol = "#0ea5e9";
+
+  dialog->setStyleSheet(QString(R"(
+    QDialog {
+      background-color: %1;
+      color: %2;
+    }
+    QLabel {
+      color: %2;
+      font-size: 13px;
+    }
+    QLineEdit {
+      background-color: %3;
+      color: %2;
+      border: 1px solid %4;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+    QLineEdit:focus {
+      border: 1.5px solid %5;
+    }
+    QListWidget {
+      background-color: %3;
+      color: %2;
+      border: 1px solid %4;
+      border-radius: 8px;
+      padding: 6px;
+      font-size: 13px;
+    }
+    QListWidget::item {
+      padding: 10px 12px;
+      border-bottom: 1px solid %4;
+      border-radius: 6px;
+      margin-bottom: 2px;
+    }
+    QListWidget::item:hover {
+      background-color: %6;
+    }
+    QListWidget::item:selected {
+      background-color: rgba(14, 165, 233, 0.2);
+      color: %2;
+    }
+    QPushButton {
+      background-color: %3;
+      color: %2;
+      border: 1px solid %4;
+      border-radius: 6px;
+      padding: 7px 14px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    QPushButton:hover {
+      background-color: rgba(14, 165, 233, 0.15);
+      border-color: %5;
+    }
+    QPushButton#primaryBtn {
+      background-color: %5;
+      color: #ffffff;
+      border: none;
+      font-weight: 600;
+    }
+    QPushButton#primaryBtn:hover {
+      background-color: #0284c7;
+    }
+    QPushButton#dangerBtn:hover {
+      background-color: rgba(239, 68, 68, 0.15);
+      border-color: #ef4444;
+      color: #ef4444;
+    }
+  )").arg(bg, textCol, cardBg, borderCol, primaryCol, itemHover));
+
+  auto *layout = new QVBoxLayout(dialog);
+  layout->setContentsMargins(18, 18, 18, 18);
+  layout->setSpacing(12);
+
+  auto *headerLayout = new QHBoxLayout();
+  auto *titleLbl = new QLabel("⭐ จัดการบุ๊กมาร์ก", dialog);
+  titleLbl->setStyleSheet("font-size: 16px; font-weight: 700;");
+  headerLayout->addWidget(titleLbl);
+  headerLayout->addStretch();
+  layout->addLayout(headerLayout);
+
+  auto *searchEdit = new QLineEdit(dialog);
+  searchEdit->setPlaceholderText("🔍 ค้นหาบุ๊กมาร์ก (ชื่อ หรือ URL)...");
+  layout->addWidget(searchEdit);
+
+  auto *listWidget = new QListWidget(dialog);
+
+  auto populateList = [this, listWidget, searchEdit] {
+    listWidget->clear();
+    const QString filter = searchEdit->text().trimmed().toLower();
+    bool found = false;
+    for (int i = 0; i < bookmarks_.size(); ++i) {
+      const auto &bm = bookmarks_[i];
+      if (!filter.isEmpty() && !bm.title.toLower().contains(filter) && !bm.url.toLower().contains(filter)) {
+        continue;
+      }
+      found = true;
+      auto *item = new QListWidgetItem(QString("%1\n%2").arg(bm.title, bm.url), listWidget);
+      item->setData(Qt::UserRole, bm.url);
+      item->setData(Qt::UserRole + 1, i);
+    }
+    if (!found) {
+      auto *emptyItem = new QListWidgetItem("ไม่พบบุ๊กมาร์ก", listWidget);
+      emptyItem->setFlags(Qt::NoItemFlags);
+    }
+  };
+
+  populateList();
+  connect(searchEdit, &QLineEdit::textChanged, dialog, populateList);
+
+  layout->addWidget(listWidget);
+
+  auto *btnLayout = new QHBoxLayout();
+  btnLayout->setSpacing(8);
+
+  auto *openBtn = new QPushButton("เปิด", dialog);
+  openBtn->setObjectName("primaryBtn");
+  auto *openTabBtn = new QPushButton("เปิดในแท็บใหม่", dialog);
+  auto *deleteBtn = new QPushButton("ลบ", dialog);
+  deleteBtn->setObjectName("dangerBtn");
+  auto *clearAllBtn = new QPushButton("ลบทั้งหมด", dialog);
+  clearAllBtn->setObjectName("dangerBtn");
+  auto *closeBtn = new QPushButton("ปิด", dialog);
+
+  btnLayout->addWidget(openBtn);
+  btnLayout->addWidget(openTabBtn);
+  btnLayout->addWidget(deleteBtn);
+  btnLayout->addWidget(clearAllBtn);
+  btnLayout->addStretch();
+  btnLayout->addWidget(closeBtn);
+  layout->addLayout(btnLayout);
+
+  auto openSelected = [this, dialog, listWidget] {
+    auto *item = listWidget->currentItem();
+    if (item) {
+      const QString url = item->data(Qt::UserRole).toString();
+      if (!url.isEmpty()) {
+        openUrl(url);
+        dialog->accept();
+      }
+    }
+  };
+
+  connect(openBtn, &QPushButton::clicked, dialog, openSelected);
+  connect(listWidget, &QListWidget::itemDoubleClicked, dialog, [openSelected](QListWidgetItem *) {
+    openSelected();
+  });
+
+  connect(openTabBtn, &QPushButton::clicked, dialog, [this, listWidget] {
+    auto *item = listWidget->currentItem();
+    if (item) {
+      const QString url = item->data(Qt::UserRole).toString();
+      if (!url.isEmpty()) {
+        createView(QUrl(url));
+      }
+    }
+  });
+
+  connect(deleteBtn, &QPushButton::clicked, dialog, [this, listWidget, populateList] {
+    auto *item = listWidget->currentItem();
+    if (item) {
+      const int idx = item->data(Qt::UserRole + 1).toInt();
+      if (idx >= 0 && idx < bookmarks_.size()) {
+        bookmarks_.removeAt(idx);
+        saveBookmarks();
+        updateBookmarkBar();
+        updateBookmarkStarState();
+        populateList();
+      }
+    }
+  });
+
+  connect(clearAllBtn, &QPushButton::clicked, dialog, [this, populateList] {
+    if (bookmarks_.isEmpty())
+      return;
+    const auto ans = QMessageBox::question(this, "ลบทั้งหมด", "คุณแน่ใจหรือไม่ว่าต้องการลบบุ๊กมาร์กทั้งหมด?", QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (ans == QMessageBox::Yes) {
+      bookmarks_.clear();
+      saveBookmarks();
+      updateBookmarkBar();
+      updateBookmarkStarState();
+      populateList();
+    }
+  });
+
+  connect(closeBtn, &QPushButton::clicked, dialog, &QDialog::accept);
+
+  dialog->exec();
+  dialog->deleteLater();
 }
 
 void MainWindow::refreshShieldUi() {
@@ -1718,6 +2167,27 @@ void MainWindow::applyTheme() {
                 border-bottom: 1px solid #23252c;
                 padding: 4px 10px;
                 spacing: 6px;
+            }
+            QToolBar#bookmarkBar {
+                background-color: #24262e;
+                border-top: none;
+                border-bottom: 1px solid #1e2026;
+                padding: 2px 10px;
+                spacing: 4px;
+                min-height: 28px;
+            }
+            QToolBar#bookmarkBar QToolButton {
+                background-color: transparent;
+                color: #cbd5e1;
+                border: none;
+                border-radius: 6px;
+                padding: 3px 8px;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            QToolBar#bookmarkBar QToolButton:hover {
+                background-color: #383b46;
+                color: #ffffff;
             }
             QToolBar#mainToolbar QToolButton {
                 background-color: transparent;
@@ -1987,6 +2457,27 @@ void MainWindow::applyTheme() {
                 border-bottom: 1px solid #e2e8f0;
                 padding: 4px 10px;
                 spacing: 6px;
+            }
+            QToolBar#bookmarkBar {
+                background-color: #f8fafc;
+                border-top: none;
+                border-bottom: 1px solid #e2e8f0;
+                padding: 2px 10px;
+                spacing: 4px;
+                min-height: 28px;
+            }
+            QToolBar#bookmarkBar QToolButton {
+                background-color: transparent;
+                color: #475569;
+                border: none;
+                border-radius: 6px;
+                padding: 3px 8px;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            QToolBar#bookmarkBar QToolButton:hover {
+                background-color: #f1f5f9;
+                color: #0f172a;
             }
             QToolBar#mainToolbar QToolButton {
                 background-color: transparent;
@@ -3382,74 +3873,267 @@ void MainWindow::populateHistoryMenu(QMenu *historyMenu) {
 void MainWindow::populateBookmarksMenu(QMenu *bookmarksMenu) {
   bookmarksMenu->clear();
   const QColor iconCol = darkMode_ ? QColor("#94a3b8") : QColor("#475569");
-  auto *addBm = bookmarksMenu->addAction(createMenuIcon("bookmark", iconCol), "บันทึกแท็บนี้ (Ctrl+D)");
+  auto *addBm = bookmarksMenu->addAction(createMenuIcon("bookmark", iconCol), "บุ๊กมาร์กหน้านี้ (Ctrl+D)");
   connect(addBm, &QAction::triggered, this, &MainWindow::addBookmark);
 
-  auto *clearBm = bookmarksMenu->addAction(createMenuIcon("trash", iconCol), "ลบบุ๊กมาร์กทั้งหมด");
-  connect(clearBm, &QAction::triggered, this, [this] {
-    QSettings st("LiteWave", "LiteWave");
-    st.remove("bookmarks");
-    statusBar()->showMessage("ลบบุ๊กมาร์กทั้งหมดเรียบร้อยแล้ว", 3000);
-  });
+  auto *manageBm = bookmarksMenu->addAction(createMenuIcon("settings", iconCol), "จัดการบุ๊กมาร์ก (Ctrl+Shift+O)");
+  connect(manageBm, &QAction::triggered, this, &MainWindow::showBookmarksManagerDialog);
+
+  auto *toggleBar = bookmarksMenu->addAction("แสดงแถบบุ๊กมาร์ก (Ctrl+Shift+B)");
+  toggleBar->setCheckable(true);
+  toggleBar->setChecked(bookmarkBar_ && bookmarkBar_->isVisible());
+  connect(toggleBar, &QAction::triggered, this, &MainWindow::toggleBookmarkBar);
+
   bookmarksMenu->addSeparator();
 
-  QSettings st("LiteWave", "LiteWave");
-  st.beginGroup("bookmarks");
-  const QStringList keys = st.allKeys();
-  if (keys.isEmpty()) {
+  if (bookmarks_.isEmpty()) {
     auto *emptyItem = bookmarksMenu->addAction("ไม่มีบุ๊กมาร์กที่บันทึกไว้");
     emptyItem->setEnabled(false);
   } else {
-    for (const QString &key : keys) {
-      const QString title = st.value(key).toString();
-      auto *act = bookmarksMenu->addAction(createMenuIcon("bookmark", iconCol), title + " — " + key);
-      connect(act, &QAction::triggered, this, [this, key] { openUrl(key); });
+    int count = 0;
+    for (const auto &item : bookmarks_) {
+      if (++count > 15)
+        break;
+      auto *act = bookmarksMenu->addAction(createMenuIcon("bookmark", iconCol), item.title + " — " + item.url);
+      const QString url = item.url;
+      connect(act, &QAction::triggered, this, [this, url] { openUrl(url); });
+    }
+    bookmarksMenu->addSeparator();
+    auto *clearBm = bookmarksMenu->addAction(createMenuIcon("trash", iconCol), "ลบบุ๊กมาร์กทั้งหมด");
+    connect(clearBm, &QAction::triggered, this, [this] {
+      const auto ans = QMessageBox::question(
+          this, "ลบบุ๊กมาร์กทั้งหมด",
+          "คุณแน่ใจหรือไม่ว่าต้องการลบบุ๊กมาร์กทั้งหมด?",
+          QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+      if (ans == QMessageBox::Yes) {
+        bookmarks_.clear();
+        saveBookmarks();
+        updateBookmarkBar();
+        updateBookmarkStarState();
+        statusBar()->showMessage("ลบบุ๊กมาร์กทั้งหมดเรียบร้อยแล้ว", 3000);
+      }
+    });
+  }
+}
+
+void MainWindow::handleDownloadRequested(QWebEngineDownloadRequest *download) {
+  if (!download || download->state() != QWebEngineDownloadRequest::DownloadRequested)
+    return;
+  if (download->page()) {
+    bool belongsToThisWindow = false;
+    for (int i = 0; i < tabStack_->count(); ++i) {
+      auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(i));
+      if (view && view->page() == download->page()) {
+        belongsToThisWindow = true;
+        break;
+      }
+    }
+    if (!belongsToThisWindow && !isActiveWindow()) {
+      return;
     }
   }
-  st.endGroup();
+  if (download->isSavePageDownload()) {
+    download->accept();
+    return;
+  }
+
+  QSettings st("LiteWave", "LiteWave");
+  const QString defaultDir =
+      QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+  QString dir = st.value("downloadDirectory", defaultDir).toString();
+  if (dir.isEmpty() || !QDir(dir).exists())
+    dir = defaultDir;
+  const bool askLocation =
+      st.value("askDownloadLocation", false).toBool();
+
+  QString name = download->downloadFileName().isEmpty()
+                     ? QStringLiteral("LiteWave-download")
+                     : download->downloadFileName();
+
+  if (askLocation) {
+    const QString fullPath = QFileDialog::getSaveFileName(
+        this, "บันทึกไฟล์ดาวน์โหลด", dir + "/" + name);
+    if (fullPath.isEmpty()) {
+      download->cancel();
+      return;
+    }
+    QFileInfo fi(fullPath);
+    dir = fi.absolutePath();
+    name = fi.fileName();
+  }
+
+  download->setDownloadDirectory(dir);
+  download->setDownloadFileName(name);
+
+  DownloadRecord rec;
+  rec.fileName = name;
+  rec.path = dir + "/" + name;
+  rec.totalBytes = download->totalBytes();
+  rec.completed = false;
+  downloadRecords_.prepend(rec);
+  saveDownloadRecords();
+
+  connect(
+      download, &QWebEngineDownloadRequest::receivedBytesChanged, this,
+      [this, download, name] {
+        const qint64 total = download->totalBytes();
+        const qint64 recvd = download->receivedBytes();
+        if (total > 0) {
+          const int pct = static_cast<int>((recvd * 100) / total);
+          statusBar()->showMessage(QString("กำลังดาวน์โหลด: %1 (%2%)").arg(name).arg(pct), 2000);
+        }
+      });
+
+  connect(
+      download, &QWebEngineDownloadRequest::stateChanged, this,
+      [this, name](QWebEngineDownloadRequest::DownloadState state) {
+        if (state == QWebEngineDownloadRequest::DownloadCompleted) {
+          statusBar()->showMessage("ดาวน์โหลดเสร็จแล้ว: " + name, 6000);
+          for (auto &r : downloadRecords_) {
+            if (r.fileName == name) {
+              r.completed = true;
+              break;
+            }
+          }
+          saveDownloadRecords();
+        } else if (state == QWebEngineDownloadRequest::DownloadCancelled ||
+                   state == QWebEngineDownloadRequest::DownloadInterrupted) {
+          statusBar()->showMessage("ดาวน์โหลดไม่สำเร็จ: " + name, 5000);
+        }
+      });
+
+  download->accept();
+  statusBar()->showMessage("เริ่มการดาวน์โหลด: " + name, 3000);
 }
 
 void MainWindow::showDownloadsDialog() {
   auto *dialog = new QDialog(this);
   dialog->setWindowTitle("รายการดาวน์โหลด (Downloads)");
-  dialog->resize(520, 360);
+  dialog->resize(640, 420);
+
+  const QString bg = darkMode_ ? "#0f172a" : "#ffffff";
+  const QString cardBg = darkMode_ ? "#1e293b" : "#f8fafc";
+  const QString itemHover = darkMode_ ? "#334155" : "#f1f5f9";
+  const QString textCol = darkMode_ ? "#f8fafc" : "#0f172a";
+  const QString borderCol = darkMode_ ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)";
+  const QString primaryCol = "#0ea5e9";
+
+  dialog->setStyleSheet(QString(R"(
+    QDialog {
+      background-color: %1;
+      color: %2;
+    }
+    QLabel {
+      color: %2;
+      font-size: 13px;
+    }
+    QListWidget {
+      background-color: %3;
+      color: %2;
+      border: 1px solid %4;
+      border-radius: 8px;
+      padding: 6px;
+      font-size: 13px;
+    }
+    QListWidget::item {
+      padding: 10px 12px;
+      border-bottom: 1px solid %4;
+      border-radius: 6px;
+      margin-bottom: 2px;
+    }
+    QListWidget::item:hover {
+      background-color: %5;
+    }
+    QListWidget::item:selected {
+      background-color: rgba(14, 165, 233, 0.2);
+      color: %2;
+    }
+    QPushButton {
+      background-color: %3;
+      color: %2;
+      border: 1px solid %4;
+      border-radius: 6px;
+      padding: 7px 14px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    QPushButton:hover {
+      background-color: rgba(14, 165, 233, 0.15);
+      border-color: %6;
+    }
+    QPushButton#primaryBtn {
+      background-color: %6;
+      color: #ffffff;
+      border: none;
+      font-weight: 600;
+    }
+    QPushButton#primaryBtn:hover {
+      background-color: #0284c7;
+    }
+    QPushButton#dangerBtn:hover {
+      background-color: rgba(239, 68, 68, 0.15);
+      border-color: #ef4444;
+      color: #ef4444;
+    }
+  )").arg(bg, textCol, cardBg, borderCol, itemHover, primaryCol));
 
   auto *layout = new QVBoxLayout(dialog);
+  layout->setContentsMargins(18, 18, 18, 18);
+  layout->setSpacing(12);
+
+  auto *headerLbl = new QLabel("⬇️ รายการดาวน์โหลด", dialog);
+  headerLbl->setStyleSheet("font-size: 16px; font-weight: 700;");
+  layout->addWidget(headerLbl);
+
   auto *listWidget = new QListWidget(dialog);
 
-  if (downloadRecords_.isEmpty()) {
-    listWidget->addItem("ยังไม่มีประวัติการดาวน์โหลด");
-  } else {
-    for (const auto &rec : downloadRecords_) {
-      QString text = rec.fileName + (rec.completed ? " — [เสร็จสิ้น]"
-                                                   : " — [กำลังดาวน์โหลด/ยกเลิก]");
-      auto *item = new QListWidgetItem(text, listWidget);
-      item->setData(Qt::UserRole, rec.path);
+  auto refreshList = [this, listWidget] {
+    listWidget->clear();
+    if (downloadRecords_.isEmpty()) {
+      auto *emptyItem = new QListWidgetItem("ยังไม่มีประวัติการดาวน์โหลด", listWidget);
+      emptyItem->setFlags(Qt::NoItemFlags);
+    } else {
+      for (const auto &rec : downloadRecords_) {
+        QString statusText = rec.completed ? "✓ เสร็จสิ้น" : "⟳ กำลังดาวน์โหลด/ยกเลิก";
+        QString sizeText;
+        if (rec.totalBytes > 0) {
+          if (rec.totalBytes >= 1024 * 1024) {
+            sizeText = QString(" (%1 MB)").arg(QString::number(rec.totalBytes / (1024.0 * 1024.0), 'f', 1));
+          } else {
+            sizeText = QString(" (%1 KB)").arg(rec.totalBytes / 1024);
+          }
+        }
+        QString line = QString("%1%2\n[%3] %4").arg(rec.fileName, sizeText, statusText, rec.path);
+        auto *item = new QListWidgetItem(line, listWidget);
+        item->setData(Qt::UserRole, rec.path);
+      }
     }
-  }
+  };
+  refreshList();
 
   layout->addWidget(listWidget);
 
   auto *btnLayout = new QHBoxLayout();
+  btnLayout->setSpacing(8);
+
   auto *openFileBtn = new QPushButton("เปิดไฟล์", dialog);
-  auto *openDirBtn = new QPushButton("เปิดโฟลเดอร์ดาวน์โหลด", dialog);
-  auto *clearBtn = new QPushButton("ล้างรายการ", dialog);
+  openFileBtn->setObjectName("primaryBtn");
+  auto *openDirBtn = new QPushButton("เปิดโฟลเดอร์", dialog);
+  auto *deleteItemBtn = new QPushButton("ลบจากรายการ", dialog);
+  deleteItemBtn->setObjectName("dangerBtn");
+  auto *clearAllBtn = new QPushButton("ล้างประวัติทั้งหมด", dialog);
+  clearAllBtn->setObjectName("dangerBtn");
   auto *closeBtn = new QPushButton("ปิด", dialog);
 
   btnLayout->addWidget(openFileBtn);
   btnLayout->addWidget(openDirBtn);
-  btnLayout->addWidget(clearBtn);
+  btnLayout->addWidget(deleteItemBtn);
+  btnLayout->addWidget(clearAllBtn);
+  btnLayout->addStretch();
   btnLayout->addWidget(closeBtn);
   layout->addLayout(btnLayout);
 
-  connect(clearBtn, &QPushButton::clicked, dialog, [this, listWidget] {
-    downloadRecords_.clear();
-    saveDownloadRecords();
-    listWidget->clear();
-    listWidget->addItem("ยังไม่มีประวัติการดาวน์โหลด");
-  });
-
-  connect(openFileBtn, &QPushButton::clicked, dialog, [listWidget] {
+  auto openCurrentFile = [listWidget] {
     auto *item = listWidget->currentItem();
     if (item) {
       const QString path = item->data(Qt::UserRole).toString();
@@ -3457,12 +4141,44 @@ void MainWindow::showDownloadsDialog() {
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
       }
     }
+  };
+
+  connect(openFileBtn, &QPushButton::clicked, dialog, openCurrentFile);
+  connect(listWidget, &QListWidget::itemDoubleClicked, dialog, [openCurrentFile](QListWidgetItem *) {
+    openCurrentFile();
   });
 
-  connect(openDirBtn, &QPushButton::clicked, dialog, [] {
-    const QString dir =
-        QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+  connect(openDirBtn, &QPushButton::clicked, dialog, [listWidget] {
+    auto *item = listWidget->currentItem();
+    QString dir;
+    if (item) {
+      const QString path = item->data(Qt::UserRole).toString();
+      if (!path.isEmpty()) {
+        QFileInfo fi(path);
+        dir = fi.absolutePath();
+      }
+    }
+    if (dir.isEmpty() || !QDir(dir).exists()) {
+      QSettings st("LiteWave", "LiteWave");
+      dir = st.value("downloadDirectory",
+                     QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)).toString();
+    }
     QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+  });
+
+  connect(deleteItemBtn, &QPushButton::clicked, dialog, [this, listWidget, refreshList] {
+    const int row = listWidget->currentRow();
+    if (row >= 0 && row < downloadRecords_.size()) {
+      downloadRecords_.removeAt(row);
+      saveDownloadRecords();
+      refreshList();
+    }
+  });
+
+  connect(clearAllBtn, &QPushButton::clicked, dialog, [this, refreshList] {
+    downloadRecords_.clear();
+    saveDownloadRecords();
+    refreshList();
   });
 
   connect(closeBtn, &QPushButton::clicked, dialog, &QDialog::accept);
@@ -3527,6 +4243,7 @@ QMenu *MainWindow::createMainMenu() {
   populateBookmarksMenu(bookmarksMenu);
 
   auto *downloadsAct = menu->addAction(createMenuIcon("download", iconColor), "การดาวน์โหลด\tCtrl+J");
+  downloadsAct->setShortcut(QKeySequence("Ctrl+J"));
   connect(downloadsAct, &QAction::triggered, this,
           &MainWindow::showDownloadsDialog);
 
