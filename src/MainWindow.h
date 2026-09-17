@@ -4,6 +4,7 @@
 #include <QUrl>
 #include <QList>
 #include <QPoint>
+#include <QPointer>
 
 class QWebEngineProfile;
 class QWebEngineDownloadRequest;
@@ -80,6 +81,19 @@ private:
         bool completed = false;
     };
 
+    struct ActiveDownload {
+        QPointer<QWebEngineDownloadRequest> request;
+        QString fileName;
+        QString path;
+        qint64 totalBytes = 0;
+        qint64 receivedBytes = 0;
+        qint64 lastBytes = 0;
+        qint64 lastTimeMs = 0;
+        double speed = 0.0;
+        bool completed = false;
+        bool failed = false;
+    };
+
     struct BookmarkItem {
         QString title;
         QString url;
@@ -87,12 +101,18 @@ private:
     };
 
     QList<DownloadRecord> downloadRecords_;
+    QList<ActiveDownload> activeDownloads_;
     QList<BookmarkItem> bookmarks_;
     QAction *bookmarkAction_ = nullptr;
+    QToolButton *downloadsBtn_ = nullptr;
+    QPointer<QWidget> downloadPopup_;
     QToolButton *menuBtn_ = nullptr;
     QCompleter *urlCompleter_ = nullptr;
     FindBar *findBar_ = nullptr;
     SearchSuggestionPopup *suggestionPopup_ = nullptr;
+
+    void updateDownloadsButtonUi();
+    void showDownloadPopup();
 
     void setupShortcuts();
     QWebEngineView *currentView() const;
