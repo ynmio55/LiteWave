@@ -100,10 +100,7 @@ int main(int argc, char *argv[])
             "--ignore-gpu-blocklist "
             "--enable-quic "
             "--enable-tcp-fastopen "
-            "--enable-smooth-scrolling "
-            "--smooth-scrolling "
-            "--disable-frame-rate-limit "
-            "--enable-features=ParallelDownloading,NetworkServiceInProcess,SmoothScrolling,ImpulseScrollAnimations,VaapiVideoDecoder,CanvasOopRasterization "
+            "--enable-features=ParallelDownloading,NetworkServiceInProcess,VaapiVideoDecoder "
             "--disable-blink-features=AutomationControlled");
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
