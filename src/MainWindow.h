@@ -25,6 +25,7 @@ class FindBar;
 class SearchSuggestionPopup;
 class QCloseEvent;
 class QResizeEvent;
+class QSplitter;
 
 class MainWindow final : public QMainWindow
 {
@@ -142,10 +143,17 @@ private:
     void showTabContextMenu(const QPoint &pos);
     void updateTabAudioIcon(int index, bool audible, bool muted);
     void openDevTools(QWebEngineView *targetView);
+    void toggleDevTools(QWebEngineView *targetView = nullptr);
+    void openDevToolsUndocked(QWebEngineView *targetView);
     void saveSession();
     void restoreSession();
     void loadDownloadRecords();
     void saveDownloadRecords();
+
+    QSplitter *mainSplitter_ = nullptr;
+    QWidget *devToolsContainer_ = nullptr;
+    QWebEngineView *devToolsView_ = nullptr;
+    QLabel *devToolsTitleLabel_ = nullptr;
 
     // Sleeping Tabs / Tab Hibernation Manager (Edge/Opera style)
     QTimer *tabSleepTimer_ = nullptr;

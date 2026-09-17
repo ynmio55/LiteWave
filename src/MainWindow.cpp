@@ -46,6 +46,7 @@
 #include <QShortcut>
 #include <QSignalBlocker>
 #include <QStackedWidget>
+#include <QSplitter>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QStringListModel>
@@ -687,7 +688,60 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   findBar_ = new FindBar(this);
   findBar_->setDarkMode(darkMode_);
   mainLayout->addWidget(findBar_);
-  mainLayout->addWidget(tabStack_);
+
+  mainSplitter_ = new QSplitter(Qt::Vertical, this);
+  mainSplitter_->setChildrenCollapsible(false);
+  mainSplitter_->addWidget(tabStack_);
+
+  devToolsContainer_ = new QWidget(mainSplitter_);
+  devToolsContainer_->setObjectName("devToolsContainer");
+  auto *devLayout = new QVBoxLayout(devToolsContainer_);
+  devLayout->setContentsMargins(0, 0, 0, 0);
+  devLayout->setSpacing(0);
+
+  auto *devHeader = new QWidget(devToolsContainer_);
+  devHeader->setObjectName("devToolsHeader");
+  devHeader->setFixedHeight(30);
+  auto *devHeaderLayout = new QHBoxLayout(devHeader);
+  devHeaderLayout->setContentsMargins(10, 0, 8, 0);
+  devHeaderLayout->setSpacing(8);
+
+  devToolsTitleLabel_ = new QLabel("🛠️ เครื่องมือนักพัฒนา (DevTools)", devHeader);
+  devToolsTitleLabel_->setObjectName("devToolsTitleLabel");
+  devHeaderLayout->addWidget(devToolsTitleLabel_);
+  devHeaderLayout->addStretch();
+
+  auto *undockBtn = new QToolButton(devHeader);
+  undockBtn->setObjectName("devToolsUndockBtn");
+  undockBtn->setText("⧉");
+  undockBtn->setToolTip("เปิดในหน้าต่างแยก (Undock)");
+  undockBtn->setFixedSize(24, 22);
+  undockBtn->setCursor(Qt::PointingHandCursor);
+  connect(undockBtn, &QToolButton::clicked, this, [this] {
+    openDevToolsUndocked(currentView());
+  });
+  devHeaderLayout->addWidget(undockBtn);
+
+  auto *closeDevBtn = new QToolButton(devHeader);
+  closeDevBtn->setObjectName("devToolsCloseBtn");
+  closeDevBtn->setText("✕");
+  closeDevBtn->setToolTip("ปิด DevTools (F12)");
+  closeDevBtn->setFixedSize(24, 22);
+  closeDevBtn->setCursor(Qt::PointingHandCursor);
+  connect(closeDevBtn, &QToolButton::clicked, this, [this] {
+    toggleDevTools();
+  });
+  devHeaderLayout->addWidget(closeDevBtn);
+
+  devLayout->addWidget(devHeader);
+
+  devToolsView_ = new QWebEngineView(devToolsContainer_);
+  devLayout->addWidget(devToolsView_);
+
+  mainSplitter_->addWidget(devToolsContainer_);
+  devToolsContainer_->hide();
+
+  mainLayout->addWidget(mainSplitter_);
 
   loadDownloadRecords();
 
@@ -709,6 +763,13 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
                      (privateMode_ ? " — Private · LiteWave" : " — LiteWave"));
       if (findBar_) {
         findBar_->attachView(currentView());
+      }
+      if (devToolsContainer_ && devToolsContainer_->isVisible()) {
+        currentView()->page()->setDevToolsPage(devToolsView_->page());
+        if (devToolsTitleLabel_) {
+          devToolsTitleLabel_->setText(QStringLiteral("🛠️ DevTools — %1").arg(
+              currentView()->title().isEmpty() ? "LiteWave" : currentView()->title()));
+        }
       }
     }
     progress_->hide();
@@ -1235,7 +1296,10 @@ void MainWindow::setupShortcuts() {
     }
   });
   key("F12", [this] {
-    openDevTools(currentView());
+    toggleDevTools(currentView());
+  });
+  key("Ctrl+Shift+I", [this] {
+    toggleDevTools(currentView());
   });
   auto zoomIn = [this] {
     if (currentView())
@@ -1462,6 +1526,10 @@ void MainWindow::updateTabTitle(const QString &title) {
       setWindowTitle(displayTitle +
                      (privateMode_ ? QStringLiteral(" — Private · LiteWave")
                                    : QStringLiteral(" — LiteWave")));
+    }
+    if (devToolsContainer_ && devToolsContainer_->isVisible() && devToolsTitleLabel_) {
+      devToolsTitleLabel_->setText(QStringLiteral("🛠️ DevTools — %1").arg(
+          title.trimmed().isEmpty() ? "LiteWave" : title.trimmed()));
     }
   }
 }
@@ -2108,6 +2176,34 @@ void MainWindow::applyTheme() {
                 selection-color: #ffffff;
                 outline: none;
             }
+            QSplitter::handle:vertical {
+                height: 4px;
+                background-color: #282a31;
+            }
+            QSplitter::handle:vertical:hover {
+                background-color: #0284c7;
+            }
+            QWidget#devToolsHeader {
+                background-color: #1e2026;
+                border-top: 1px solid #282a31;
+                border-bottom: 1px solid #282a31;
+            }
+            QLabel#devToolsTitleLabel {
+                font-size: 12px;
+                font-weight: 600;
+                color: #94a3b8;
+            }
+            QToolButton#devToolsUndockBtn, QToolButton#devToolsCloseBtn {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                color: #94a3b8;
+                font-size: 12px;
+            }
+            QToolButton#devToolsUndockBtn:hover, QToolButton#devToolsCloseBtn:hover {
+                background-color: rgba(255, 255, 255, 0.08);
+                color: #f1f5f9;
+            }
         )QSS"));
   } else {
     qApp->setStyleSheet(QStringLiteral(R"QSS(
@@ -2396,6 +2492,34 @@ void MainWindow::applyTheme() {
                 selection-color: #ffffff;
                 outline: none;
             }
+            QSplitter::handle:vertical {
+                height: 4px;
+                background-color: #e2e8f0;
+            }
+            QSplitter::handle:vertical:hover {
+                background-color: #0284c7;
+            }
+            QWidget#devToolsHeader {
+                background-color: #f8fafc;
+                border-top: 1px solid #e2e8f0;
+                border-bottom: 1px solid #e2e8f0;
+            }
+            QLabel#devToolsTitleLabel {
+                font-size: 12px;
+                font-weight: 600;
+                color: #475569;
+            }
+            QToolButton#devToolsUndockBtn, QToolButton#devToolsCloseBtn {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                color: #64748b;
+                font-size: 12px;
+            }
+            QToolButton#devToolsUndockBtn:hover, QToolButton#devToolsCloseBtn:hover {
+                background-color: rgba(0, 0, 0, 0.06);
+                color: #0f172a;
+            }
         )QSS"));
   }
   if (findBar_) {
@@ -2519,6 +2643,7 @@ void MainWindow::loadHome(QWebEngineView *view) {
 <head>
 <meta charset="utf-8">
 <title>LiteWave</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,%10">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
@@ -2531,8 +2656,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 50px 20px 24px;
+  justify-content: flex-start;
+  gap: 28px;
+  padding: 44px 20px 24px;
 }
 .hero-section {
   display: flex;
@@ -3068,7 +3194,8 @@ body {
   background: linear-gradient(135deg, #0369a1 0%, #0284c7 100%);
 }
 .shield-badge-container {
-  margin-top: 36px;
+  margin-top: auto;
+  padding-top: 16px;
   display: flex;
   justify-content: center;
   user-select: none;
@@ -3299,12 +3426,8 @@ function getOrigin(urlStr) {
 
 function getInitialFaviconUrl(s) {
   if (s.icon && s.icon.trim()) return s.icon.trim();
-  const origin = getOrigin(s.url);
   const domain = getDomain(s.url);
-  if (origin && (origin.startsWith('http://') || origin.startsWith('https://'))) {
-    return origin + '/favicon.ico';
-  }
-  return 'https://icons.duckduckgo.com/ip3/' + encodeURIComponent(domain) + '.ico';
+  return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=64';
 }
 
 function handleFaviconError(img) {
@@ -3317,8 +3440,6 @@ function handleFaviconError(img) {
     img.src = 'https://icons.duckduckgo.com/ip3/' + encodeURIComponent(domain) + '.ico';
   } else if (step === 2) {
     img.src = 'https://icon.horse/icon/' + encodeURIComponent(domain);
-  } else if (step === 3) {
-    img.src = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
   } else {
     img.style.display = 'none';
     const fallback = img.nextElementSibling;
@@ -5866,14 +5987,48 @@ void MainWindow::updateTabAudioIcon(int index, bool audible, bool muted) {
   }
 }
 
+void MainWindow::toggleDevTools(QWebEngineView *targetView) {
+  if (!targetView)
+    targetView = currentView();
+  if (!targetView || !targetView->page() || !devToolsContainer_ || !devToolsView_)
+    return;
+
+  if (devToolsContainer_->isVisible()) {
+    devToolsContainer_->hide();
+    targetView->page()->setDevToolsPage(nullptr);
+  } else {
+    targetView->page()->setDevToolsPage(devToolsView_->page());
+    devToolsContainer_->show();
+    if (devToolsTitleLabel_) {
+      devToolsTitleLabel_->setText(QStringLiteral("🛠️ DevTools — %1").arg(
+          targetView->title().isEmpty() ? "LiteWave" : targetView->title()));
+    }
+    if (mainSplitter_) {
+      const int totalHeight = mainSplitter_->height();
+      const int devHeight = std::max(200, std::min(450, totalHeight * 38 / 100));
+      mainSplitter_->setSizes({std::max(100, totalHeight - devHeight), devHeight});
+    }
+  }
+}
+
 void MainWindow::openDevTools(QWebEngineView *targetView) {
+  toggleDevTools(targetView);
+}
+
+void MainWindow::openDevToolsUndocked(QWebEngineView *targetView) {
   if (!targetView)
     targetView = currentView();
   if (!targetView || !targetView->page())
     return;
 
+  if (devToolsContainer_ && devToolsContainer_->isVisible()) {
+    devToolsContainer_->hide();
+    targetView->page()->setDevToolsPage(nullptr);
+  }
+
   auto *devWindow = new QMainWindow(this);
-  devWindow->setWindowTitle(QStringLiteral("LiteWave DevTools — %1").arg(targetView->title()));
+  devWindow->setWindowTitle(QStringLiteral("LiteWave DevTools — %1").arg(
+      targetView->title().isEmpty() ? "LiteWave" : targetView->title()));
   devWindow->resize(960, 640);
   devWindow->setAttribute(Qt::WA_DeleteOnClose);
 
