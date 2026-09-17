@@ -80,19 +80,20 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
   p.setBrush(Qt::NoBrush);
 
   if (name == "lock_https") {
-    p.drawRoundedRect(4, 9, 12, 9, 2, 2);
-    p.drawArc(7, 4, 6, 8, 0, 180 * 16);
+    // Perfectly centered 12x13 lock body & shackle in 20x20
+    p.drawRoundedRect(4, 8, 12, 9, 2, 2);
+    p.drawArc(6, 3, 8, 9, 0, 180 * 16);
     p.setBrush(color);
-    p.drawEllipse(9, 12, 2, 2);
+    p.drawEllipse(9, 11, 2, 2);
   } else if (name == "lock_http") {
     QPainterPath path;
-    path.moveTo(10, 3);
-    path.lineTo(18, 17);
-    path.lineTo(2, 17);
+    path.moveTo(10, 2);
+    path.lineTo(18, 16);
+    path.lineTo(2, 16);
     path.closeSubpath();
     p.drawPath(path);
-    p.drawLine(10, 8, 10, 12);
-    p.drawPoint(10, 15);
+    p.drawLine(10, 7, 10, 11);
+    p.drawPoint(10, 14);
   } else if (name == "moon") {
     p.setBrush(color);
     QPainterPath path;
@@ -1705,7 +1706,7 @@ void MainWindow::applyTheme() {
                 color: #f1f5f9;
                 border: 1px solid #33363f;
                 border-radius: 17px;
-                padding: 4px 12px;
+                padding: 3px 12px 3px 6px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
@@ -1720,13 +1721,14 @@ void MainWindow::applyTheme() {
             QLineEdit QToolButton {
                 background: transparent;
                 border: none;
-                border-radius: 8px;
+                border-radius: 9px;
                 padding: 0px;
-                margin: 0px 4px;
-                min-width: 18px;
-                max-width: 18px;
-                min-height: 18px;
-                max-height: 18px;
+                margin: 0px 6px 0px 6px;
+                min-width: 20px;
+                max-width: 20px;
+                min-height: 20px;
+                max-height: 20px;
+                qproperty-iconSize: 16px 16px;
             }
             QLineEdit QToolButton:hover {
                 background-color: rgba(148, 163, 184, 0.2);
@@ -1977,7 +1979,7 @@ void MainWindow::applyTheme() {
                 color: #0f172a;
                 border: 1px solid #e2e8f0;
                 border-radius: 17px;
-                padding: 4px 12px;
+                padding: 3px 12px 3px 6px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
@@ -1992,13 +1994,14 @@ void MainWindow::applyTheme() {
             QLineEdit QToolButton {
                 background: transparent;
                 border: none;
-                border-radius: 8px;
+                border-radius: 9px;
                 padding: 0px;
-                margin: 0px 4px;
-                min-width: 18px;
-                max-width: 18px;
-                min-height: 18px;
-                max-height: 18px;
+                margin: 0px 6px 0px 6px;
+                min-width: 20px;
+                max-width: 20px;
+                min-height: 20px;
+                max-height: 20px;
+                qproperty-iconSize: 16px 16px;
             }
             QLineEdit QToolButton:hover {
                 background-color: rgba(100, 116, 139, 0.2);
