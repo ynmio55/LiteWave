@@ -18,7 +18,9 @@ class QToolButton;
 class QCompleter;
 class AdBlocker;
 class FindBar;
+class SearchSuggestionPopup;
 class QCloseEvent;
+class QResizeEvent;
 
 class MainWindow final : public QMainWindow
 {
@@ -34,6 +36,7 @@ public:
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
 
 private slots:
@@ -76,6 +79,7 @@ private:
     QToolButton *menuBtn_ = nullptr;
     QCompleter *urlCompleter_ = nullptr;
     FindBar *findBar_ = nullptr;
+    SearchSuggestionPopup *suggestionPopup_ = nullptr;
 
     void setupShortcuts();
     QWebEngineView *currentView() const;

@@ -35,6 +35,8 @@ qt_add_executable(LiteWave
     src/search/SearchEngineManager.h
     src/ui/FindBar.cpp
     src/ui/FindBar.h
+    src/ui/SearchSuggestionPopup.cpp
+    src/ui/SearchSuggestionPopup.h
     resources.qrc
 )
 

@@ -2,10 +2,13 @@
 #include "AdBlocker.h"
 #include "SearchEngineManager.h"
 #include "FindBar.h"
+#include "SearchSuggestionPopup.h"
 
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QKeyEvent>
+#include <QResizeEvent>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCompleter>
@@ -459,6 +462,32 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
   setupUrlBarCompleter();
 
+  urlBar_->installEventFilter(this);
+  suggestionPopup_ = new SearchSuggestionPopup(this);
+  suggestionPopup_->attachTo(urlBar_);
+  suggestionPopup_->setDarkMode(darkMode_);
+
+  connect(urlBar_, &QLineEdit::textEdited, this, [this](const QString &text) {
+    QSettings st("LiteWave", "LiteWave");
+    if (!st.value("search/enableSuggestions", true).toBool()) {
+      if (suggestionPopup_) suggestionPopup_->hide();
+      return;
+    }
+    if (suggestionPopup_) {
+      suggestionPopup_->queryChanged(text);
+    }
+  });
+
+  connect(suggestionPopup_, &SearchSuggestionPopup::suggestionSelected, this,
+          [this](const QString &queryOrUrl, bool isDirectUrl) {
+            if (isDirectUrl) {
+              openUrl(queryOrUrl);
+            } else {
+              const QUrl searchUrl = SearchEngineManager::instance().buildSearchUrl(queryOrUrl);
+              openUrl(searchUrl.toString());
+            }
+          });
+
   auto *bookmark = addNavAction("★", "บันทึกหน้าเว็บนี้ (Ctrl+D)");
   connect(bookmark, &QAction::triggered, this, &MainWindow::addBookmark);
 
@@ -641,6 +670,15 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
+  if (watched == urlBar_) {
+    if (event->type() == QEvent::KeyPress) {
+      auto *keyEvent = static_cast<QKeyEvent *>(event);
+      if (suggestionPopup_ && suggestionPopup_->handleKeyPress(keyEvent->key())) {
+        return true;
+      }
+    }
+  }
+
   if (watched == tabBarContainer_ || watched == headerWidget_ ||
       watched == tabBar_) {
     if (event->type() == QEvent::MouseButtonPress) {
@@ -676,6 +714,13 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   saveSession();
   saveDownloadRecords();
   QMainWindow::closeEvent(event);
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event) {
+  QMainWindow::resizeEvent(event);
+  if (suggestionPopup_ && suggestionPopup_->isVisible()) {
+    suggestionPopup_->reposition();
+  }
 }
 
 QWebEngineView *MainWindow::currentView() const {
@@ -1279,9 +1324,17 @@ void MainWindow::reloadCurrentView() {
   }
 }
 
-void MainWindow::navigate() { openUrl(urlBar_->text()); }
+void MainWindow::navigate() {
+  if (suggestionPopup_) {
+    suggestionPopup_->hide();
+  }
+  openUrl(urlBar_->text());
+}
 
 void MainWindow::openUrl(const QString &text) {
+  if (suggestionPopup_) {
+    suggestionPopup_->hide();
+  }
   const QString input = text.trimmed();
   if (input.isEmpty() || !currentView())
     return;
@@ -2005,60 +2058,15 @@ void MainWindow::applyTheme() {
   if (findBar_) {
     findBar_->setDarkMode(darkMode_);
   }
+  if (suggestionPopup_) {
+    suggestionPopup_->setDarkMode(darkMode_);
+  }
 }
 
 void MainWindow::setupUrlBarCompleter() {
-  QSettings st("LiteWave", "LiteWave");
-  const bool enableSuggestions = st.value("search/enableSuggestions", false).toBool();
-  if (!enableSuggestions) {
-    if (urlBar_) {
-      urlBar_->setCompleter(nullptr);
-    }
-    return;
-  }
-
-  if (!urlCompleter_) {
-    urlCompleter_ = new QCompleter(this);
-    urlCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
-    urlCompleter_->setFilterMode(Qt::MatchContains);
-    urlCompleter_->setCompletionMode(QCompleter::PopupCompletion);
-    urlCompleter_->setMaxVisibleItems(10);
-  }
   if (urlBar_) {
-    urlBar_->setCompleter(urlCompleter_);
+    urlBar_->setCompleter(nullptr);
   }
-
-  QStringList suggestions = {
-      "google.com",   "youtube.com",    "github.com",       "chatgpt.com",
-      "facebook.com", "wikipedia.org",  "reddit.com",       "twitter.com",
-      "x.com",        "instagram.com",  "twitch.tv",        "pantip.com",
-      "sanook.com",   "thairath.co.th", "netflix.com",      "amazon.com",
-      "bing.com",     "duckduckgo.com", "brave.com",        "canva.com",
-      "shopee.co.th", "lazada.co.th",   "stackoverflow.com"};
-
-  const QVariantList history = st.value("history").toList();
-  for (const auto &var : history) {
-    const QVariantMap map = var.toMap();
-    const QString urlStr = map.value("url").toString();
-    const QString title = map.value("title").toString();
-    if (!urlStr.isEmpty() && !suggestions.contains(urlStr)) {
-      suggestions.append(urlStr);
-    }
-    if (!title.isEmpty() && !suggestions.contains(title)) {
-      suggestions.append(title);
-    }
-  }
-
-  st.beginGroup("bookmarks");
-  for (const QString &bmUrl : st.allKeys()) {
-    if (!suggestions.contains(bmUrl)) {
-      suggestions.append(bmUrl);
-    }
-  }
-  st.endGroup();
-
-  auto *model = new QStringListModel(suggestions, urlCompleter_);
-  urlCompleter_->setModel(model);
 }
 
 void MainWindow::loadHome(QWebEngineView *view) {
@@ -3300,8 +3308,8 @@ void MainWindow::showSettingsDialog() {
   grpSearchLayout->addWidget(searchCombo);
 
   auto *enableSuggestionsBox = new QCheckBox(
-      "แสดงรายการคำแนะนำและประวัติค้นหาอัตโนมัติขณะพิมพ์ (Autocomplete Suggestions)", grpSearch);
-  enableSuggestionsBox->setChecked(st.value("search/enableSuggestions", false).toBool());
+      "แสดงรายการคำแนะนำและประวัติการค้นหาขณะพิมพ์ (Search Suggestions Dropdown)", grpSearch);
+  enableSuggestionsBox->setChecked(st.value("search/enableSuggestions", true).toBool());
   grpSearchLayout->addWidget(enableSuggestionsBox);
   p1Layout->addWidget(grpSearch);
   p1Layout->addStretch();
