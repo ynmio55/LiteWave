@@ -1725,7 +1725,7 @@ void MainWindow::applyTheme() {
                 border: none;
                 border-radius: 9px;
                 padding: 0px;
-                margin: -1px 4px 0px 4px;
+                margin: -5px 4px 0px 4px;
                 min-width: 20px;
                 max-width: 20px;
                 min-height: 20px;
@@ -1998,7 +1998,7 @@ void MainWindow::applyTheme() {
                 border: none;
                 border-radius: 9px;
                 padding: 0px;
-                margin: -1px 4px 0px 4px;
+                margin: -5px 4px 0px 4px;
                 min-width: 20px;
                 max-width: 20px;
                 min-height: 20px;
