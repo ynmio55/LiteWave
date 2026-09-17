@@ -80,9 +80,11 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
   p.setBrush(Qt::NoBrush);
 
   if (name == "lock_https") {
-    // Perfectly centered 12x13 lock body & shackle in 20x20
+    // Perfectly centered and proportioned 12x13 lock in 20x20
     p.drawRoundedRect(4, 8, 12, 9, 2, 2);
-    p.drawArc(6, 3, 8, 9, 0, 180 * 16);
+    p.drawArc(6, 3, 8, 8, 0, 180 * 16);
+    p.drawLine(6, 7, 6, 8);
+    p.drawLine(14, 7, 14, 8);
     p.setBrush(color);
     p.drawEllipse(9, 11, 2, 2);
   } else if (name == "lock_http") {
@@ -1706,7 +1708,7 @@ void MainWindow::applyTheme() {
                 color: #f1f5f9;
                 border: 1px solid #33363f;
                 border-radius: 17px;
-                padding: 3px 12px 3px 6px;
+                padding: 3px 12px 3px 30px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
@@ -1723,7 +1725,7 @@ void MainWindow::applyTheme() {
                 border: none;
                 border-radius: 9px;
                 padding: 0px;
-                margin: 0px 6px 0px 6px;
+                margin: 0px 4px 0px 4px;
                 min-width: 20px;
                 max-width: 20px;
                 min-height: 20px;
@@ -1979,7 +1981,7 @@ void MainWindow::applyTheme() {
                 color: #0f172a;
                 border: 1px solid #e2e8f0;
                 border-radius: 17px;
-                padding: 3px 12px 3px 6px;
+                padding: 3px 12px 3px 30px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
@@ -1996,7 +1998,7 @@ void MainWindow::applyTheme() {
                 border: none;
                 border-radius: 9px;
                 padding: 0px;
-                margin: 0px 6px 0px 6px;
+                margin: 0px 4px 0px 4px;
                 min-width: 20px;
                 max-width: 20px;
                 min-height: 20px;
