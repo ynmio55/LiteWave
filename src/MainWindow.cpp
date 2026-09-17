@@ -80,22 +80,22 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
   p.setBrush(Qt::NoBrush);
 
   if (name == "lock_https") {
-    // Shifted up significantly as requested
-    p.drawRoundedRect(4, 3, 12, 9, 2, 2);
-    p.drawArc(6, -2, 8, 8, 0, 180 * 16);
-    p.drawLine(6, 2, 6, 3);
-    p.drawLine(14, 2, 14, 3);
+    // Professional 12x13 lock centered within 20x20 canvas (safe bounds Y: 3 to 17)
+    p.drawRoundedRect(4, 8, 12, 9, 2, 2);
+    p.drawArc(6, 2, 8, 8, 0, 180 * 16);
+    p.drawLine(6, 6, 6, 8);
+    p.drawLine(14, 6, 14, 8);
     p.setBrush(color);
-    p.drawEllipse(9, 6, 2, 2);
+    p.drawEllipse(9, 11, 2, 2);
   } else if (name == "lock_http") {
     QPainterPath path;
-    path.moveTo(10, -2);
-    path.lineTo(18, 12);
-    path.lineTo(2, 12);
+    path.moveTo(10, 2);
+    path.lineTo(18, 16);
+    path.lineTo(2, 16);
     path.closeSubpath();
     p.drawPath(path);
-    p.drawLine(10, 3, 10, 7);
-    p.drawPoint(10, 10);
+    p.drawLine(10, 7, 10, 11);
+    p.drawPoint(10, 14);
   } else if (name == "moon") {
     p.setBrush(color);
     QPainterPath path;
@@ -1708,7 +1708,7 @@ void MainWindow::applyTheme() {
                 color: #f1f5f9;
                 border: 1px solid #33363f;
                 border-radius: 17px;
-                padding: 3px 12px 3px 30px;
+                padding: 4px 12px 4px 32px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
@@ -1725,7 +1725,7 @@ void MainWindow::applyTheme() {
                 border: none;
                 border-radius: 9px;
                 padding: 0px;
-                margin: 0px 4px 0px 4px;
+                margin: -1px 4px 0px 4px;
                 min-width: 20px;
                 max-width: 20px;
                 min-height: 20px;
@@ -1981,7 +1981,7 @@ void MainWindow::applyTheme() {
                 color: #0f172a;
                 border: 1px solid #e2e8f0;
                 border-radius: 17px;
-                padding: 3px 12px 3px 30px;
+                padding: 4px 12px 4px 32px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
@@ -1998,7 +1998,7 @@ void MainWindow::applyTheme() {
                 border: none;
                 border-radius: 9px;
                 padding: 0px;
-                margin: 0px 4px 0px 4px;
+                margin: -1px 4px 0px 4px;
                 min-width: 20px;
                 max-width: 20px;
                 min-height: 20px;
