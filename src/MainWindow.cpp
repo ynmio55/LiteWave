@@ -839,7 +839,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   s->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
   s->setAttribute(QWebEngineSettings::WebRTCPublicInterfacesOnly, false);
   s->setAttribute(QWebEngineSettings::FocusOnNavigationEnabled, true);
-  s->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, true);
+  s->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, false);
   s->setAttribute(QWebEngineSettings::PluginsEnabled, true);
   s->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, false);
   s->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, false);
