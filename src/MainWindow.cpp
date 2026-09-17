@@ -80,22 +80,22 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
   p.setBrush(Qt::NoBrush);
 
   if (name == "lock_https") {
-    // Perfectly centered lock icon (balance between baseline and lineedit height)
-    p.drawRoundedRect(4, 7, 12, 9, 2, 2);
-    p.drawArc(6, 2, 8, 8, 0, 180 * 16);
-    p.drawLine(6, 6, 6, 7);
-    p.drawLine(14, 6, 14, 7);
+    // Shifted up significantly as requested
+    p.drawRoundedRect(4, 3, 12, 9, 2, 2);
+    p.drawArc(6, -2, 8, 8, 0, 180 * 16);
+    p.drawLine(6, 2, 6, 3);
+    p.drawLine(14, 2, 14, 3);
     p.setBrush(color);
-    p.drawEllipse(9, 10, 2, 2);
+    p.drawEllipse(9, 6, 2, 2);
   } else if (name == "lock_http") {
     QPainterPath path;
-    path.moveTo(10, 1);
-    path.lineTo(18, 15);
-    path.lineTo(2, 15);
+    path.moveTo(10, -2);
+    path.lineTo(18, 12);
+    path.lineTo(2, 12);
     path.closeSubpath();
     p.drawPath(path);
-    p.drawLine(10, 6, 10, 10);
-    p.drawPoint(10, 13);
+    p.drawLine(10, 3, 10, 7);
+    p.drawPoint(10, 10);
   } else if (name == "moon") {
     p.setBrush(color);
     QPainterPath path;
