@@ -88,7 +88,6 @@ private:
 
     QList<DownloadRecord> downloadRecords_;
     QList<BookmarkItem> bookmarks_;
-    QToolBar *bookmarkBar_ = nullptr;
     QAction *bookmarkAction_ = nullptr;
     QToolButton *menuBtn_ = nullptr;
     QCompleter *urlCompleter_ = nullptr;
@@ -106,14 +105,12 @@ private:
     void addHistoryItem(const QString &title, const QUrl &url);
     void loadBookmarks();
     void saveBookmarks();
-    void updateBookmarkBar();
     void showBookmarksManagerDialog();
-    void toggleBookmarkBar();
     void updateBookmarkStarState();
     void handleDownloadRequested(QWebEngineDownloadRequest *download);
     void showDownloadsDialog();
     void clearBrowsingDataDialog();
-    void showSettingsDialog();
+    void showSettingsDialog(int initialPage = 0);
     void setupUrlBarCompleter();
     void refreshShieldUi();
     void applyShieldCosmetics(QWebEngineView *view);
