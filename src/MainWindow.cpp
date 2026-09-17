@@ -2513,7 +2513,7 @@ void MainWindow::loadHome(QWebEngineView *view) {
       .arg(sel ? " selected" : "", eng.id, shortName, iconSvg);
   }
 
-  const QString html = QString(R"HTML(
+  static const char html_head[] = R"HTML_HEAD(
 <!doctype html>
 <html lang="th">
 <head>
@@ -3105,6 +3105,9 @@ body {
 }
 </style>
 </head>
+)HTML_HEAD";
+
+  static const char html_body[] = R"HTML_BODY(
 <body>
 
 <div class="hero-section">
@@ -3190,6 +3193,9 @@ body {
   </div>
 </div>
 
+)HTML_BODY";
+
+  static const char html_script1[] = R"HTML_S1(
 <script>
 function submitSearch(event) {
   if (event && event.preventDefault) event.preventDefault();
@@ -3491,6 +3497,9 @@ function deleteShortcut(e, idx) {
   }
 }
 
+)HTML_S1";
+
+  static const char html_script2[] = R"HTML_S2(
 const enableSearchSuggestions = %9;
 let currentSuggestions = [];
 let activeSuggestionIndex = -1;
@@ -3637,7 +3646,14 @@ renderShortcuts();
 </script>
 </body>
 </html>
-)HTML")
+)HTML_S2";
+
+  const QString templateHtml = QString::fromUtf8(html_head) +
+                               QString::fromUtf8(html_body) +
+                               QString::fromUtf8(html_script1) +
+                               QString::fromUtf8(html_script2);
+
+  const QString html = templateHtml
     .arg(ambientGrad, cardBg, textCol, subCol, borderCol,
          QString::number(blockedCount), curEngine.id, curEngineName,
          enableSuggestions ? "true" : "false")
