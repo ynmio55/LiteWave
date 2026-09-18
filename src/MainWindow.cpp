@@ -1601,8 +1601,10 @@ void MainWindow::updateBookmarkStarState() {
 void MainWindow::loadBookmarks() {
   bookmarks_.clear();
   QSettings st("LiteWave", "LiteWave");
-  const QVariantList list = st.value("bookmarks/items").toList();
-  if (!list.isEmpty()) {
+
+  // If already migrated or modern items key exists, load strictly from bookmarks/items
+  if (st.value("bookmarks/migrated", false).toBool() || st.contains("bookmarks/items")) {
+    const QVariantList list = st.value("bookmarks/items").toList();
     for (const auto &var : list) {
       const QVariantMap map = var.toMap();
       BookmarkItem item;
@@ -1613,35 +1615,38 @@ void MainWindow::loadBookmarks() {
         bookmarks_.append(item);
       }
     }
-  } else {
-    // Check legacy bookmarks format to prevent data loss
-    st.beginGroup("bookmarks");
-    const QStringList keys = st.allKeys();
-    for (const QString &key : keys) {
-      if (key == "items")
-        continue;
-      const QString title = st.value(key).toString();
-      BookmarkItem item;
-      item.title = title.isEmpty() ? key : title;
-      QString url = key;
-      if (url.startsWith("https:/") && !url.startsWith("https://")) {
-        url.replace("https:/", "https://");
-      } else if (url.startsWith("http:/") && !url.startsWith("http://")) {
-        url.replace("http:/", "http://");
-      }
-      item.url = url;
-      item.addedTime = QDateTime::currentMSecsSinceEpoch();
-      bookmarks_.append(item);
-    }
-    st.endGroup();
-    if (!bookmarks_.isEmpty()) {
-      saveBookmarks();
-    }
+    return;
   }
+
+  // One-time legacy bookmarks migration for very old builds
+  st.beginGroup("bookmarks");
+  const QStringList keys = st.allKeys();
+  for (const QString &key : keys) {
+    if (key == "items" || key == "migrated")
+      continue;
+    const QString title = st.value(key).toString();
+    BookmarkItem item;
+    item.title = title.isEmpty() ? key : title;
+    QString url = key;
+    if (url.startsWith("https:/") && !url.startsWith("https://")) {
+      url.replace("https:/", "https://");
+    } else if (url.startsWith("http:/") && !url.startsWith("http://")) {
+      url.replace("http:/", "http://");
+    }
+    item.url = url;
+    item.addedTime = QDateTime::currentMSecsSinceEpoch();
+    bookmarks_.append(item);
+  }
+  st.endGroup();
+
+  saveBookmarks();
 }
 
 void MainWindow::saveBookmarks() {
   QSettings st("LiteWave", "LiteWave");
+  // Clean up any legacy single-key bookmarks to prevent ghost resurrection
+  st.remove("bookmarks");
+
   QVariantList list;
   for (const auto &item : bookmarks_) {
     QVariantMap map;
@@ -1651,6 +1656,7 @@ void MainWindow::saveBookmarks() {
     list.append(map);
   }
   st.setValue("bookmarks/items", list);
+  st.setValue("bookmarks/migrated", true);
   st.sync();
 }
 
