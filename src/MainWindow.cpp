@@ -134,6 +134,12 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
     path.lineTo(4, 5.5);
     path.closeSubpath();
     p.drawPath(path);
+  } else if (name == "menu") {
+    // Crisp modern vector hamburger icon with rounded caps
+    p.setPen(QPen(color, 2.0, Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(3, 5, 17, 5);
+    p.drawLine(3, 10, 17, 10);
+    p.drawLine(3, 15, 17, 15);
   }
 
   return QIcon(pix);
@@ -657,7 +663,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   // Main Menu Button (Brave style main menu)
   menuBtn_ = new QToolButton(this);
   menuBtn_->setObjectName("mainMenuButton");
-  menuBtn_->setText("☰");
+  menuBtn_->setIcon(createToolbarIcon("menu", darkMode_ ? QColor("#f1f5f9") : QColor("#475569")));
+  menuBtn_->setIconSize(QSize(20, 20));
   menuBtn_->setToolTip("เมนูหลัก (LiteWave)");
   menuBtn_->setPopupMode(QToolButton::InstantPopup);
   menuBtn_->setCursor(Qt::PointingHandCursor);
@@ -1883,10 +1890,13 @@ void MainWindow::toggleTheme() {
 }
 
 void MainWindow::applyTheme() {
+  const QColor iconCol = darkMode_ ? QColor("#f1f5f9") : QColor("#475569");
   if (themeBtn_) {
-    const QColor iconCol = darkMode_ ? QColor("#f1f5f9") : QColor("#475569");
     themeBtn_->setIcon(createToolbarIcon(darkMode_ ? "sun" : "moon", iconCol));
     themeBtn_->setToolTip(darkMode_ ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด");
+  }
+  if (menuBtn_) {
+    menuBtn_->setIcon(createToolbarIcon("menu", iconCol));
   }
 
   if (darkMode_) {
@@ -2118,8 +2128,7 @@ void MainWindow::applyTheme() {
                 font-weight: bold;
             }
             QToolBar#mainToolbar QToolButton#mainMenuButton {
-                font-size: 18px;
-                font-weight: bold;
+                padding: 4px;
             }
             QStackedWidget {
                 border: none;
@@ -2434,8 +2443,7 @@ void MainWindow::applyTheme() {
                 font-weight: bold;
             }
             QToolBar#mainToolbar QToolButton#mainMenuButton {
-                font-size: 18px;
-                font-weight: bold;
+                padding: 4px;
             }
             QStackedWidget {
                 border: none;
