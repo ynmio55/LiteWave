@@ -3,8 +3,8 @@
 IDI_ICON1 ICON DISCARDABLE "litewave.ico"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     0,9,0,0
-PRODUCTVERSION  0,9,0,0
+FILEVERSION     1,1,0,0
+PRODUCTVERSION  1,1,0,0
 FILEFLAGSMASK   0x3fL
 #ifdef _DEBUG
 FILEFLAGS       0x1L
@@ -21,12 +21,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "Yanaphat Ngaolakhorn (ynmio55)\0"
             VALUE "FileDescription",  "LiteWave Web Browser\0"
-            VALUE "FileVersion",      "0.9.0.0\0"
+            VALUE "FileVersion",      "1.1.0.0\0"
             VALUE "InternalName",     "LiteWave\0"
             VALUE "LegalCopyright",   "Copyright (C) 2026 Yanaphat Ngaolakhorn\0"
             VALUE "OriginalFilename", "LiteWave.exe\0"
             VALUE "ProductName",      "LiteWave\0"
-            VALUE "ProductVersion",   "0.9.0.0\0"
+            VALUE "ProductVersion",   "1.1.0.0\0"
         END
     END
     BLOCK "VarFileInfo"
