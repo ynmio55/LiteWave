@@ -26,6 +26,7 @@ class SearchSuggestionPopup;
 class QCloseEvent;
 class QResizeEvent;
 class QSplitter;
+class QNetworkAccessManager;
 
 class MainWindow final : public QMainWindow
 {
@@ -143,6 +144,9 @@ private:
     void showTabContextMenu(const QPoint &pos);
     void updateTabAudioIcon(int index, bool audible, bool muted);
     void openDevTools(QWebEngineView *targetView);
+    void checkForUpdates(bool silentIfUpToDate = false);
+    void downloadAndInstallUpdate(const QString &downloadUrl, const QString &fileName);
+    QNetworkAccessManager *updateNam_ = nullptr;
     void toggleDevTools(QWebEngineView *targetView = nullptr);
     void openDevToolsUndocked(QWebEngineView *targetView);
     void saveSession();

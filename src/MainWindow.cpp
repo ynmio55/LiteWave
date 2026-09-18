@@ -39,6 +39,15 @@
 #include <QPrinter>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QProgressDialog>
+#include <QProcess>
+#include <QDesktopServices>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QScrollArea>
 #include <QRadioButton>
 #include <QRegularExpression>
@@ -3953,6 +3962,11 @@ static QIcon createMenuIcon(const QString &name, const QColor &color) {
     p.drawEllipse(3, 3, 14, 14);
     p.drawPoint(10, 7);
     p.drawLine(10, 9.5, 10, 13.5);
+  } else if (name == "update") {
+    // Sync / update circular arrow
+    p.drawArc(3, 3, 14, 14, 45 * 16, 270 * 16);
+    p.drawLine(10, 2, 13, 5);
+    p.drawLine(13, 5, 10, 8);
   } else if (name == "exit") {
     // Power / Logout icon
     p.drawArc(3, 5, 14, 12, 30 * 16, 300 * 16);
@@ -5028,6 +5042,11 @@ QMenu *MainWindow::createMainMenu() {
   connect(settingsAct, &QAction::triggered, this,
           &MainWindow::showSettingsDialog);
 
+  auto *updateAct = menu->addAction(createMenuIcon("update", iconColor), "ตรวจสอบการอัปเดต (Check for Updates)…");
+  connect(updateAct, &QAction::triggered, this, [this] {
+    checkForUpdates(false);
+  });
+
   auto *aboutAct = menu->addAction(createMenuIcon("about", iconColor), "เกี่ยวกับ LiteWave");
   connect(aboutAct, &QAction::triggered, this, [this] {
     QMessageBox msg(this);
@@ -5051,6 +5070,176 @@ QMenu *MainWindow::createMainMenu() {
   connect(exitAct, &QAction::triggered, this, &QWidget::close);
 
   return menu;
+}
+
+void MainWindow::checkForUpdates(bool silentIfUpToDate) {
+  if (!updateNam_) {
+    updateNam_ = new QNetworkAccessManager(this);
+  }
+
+  statusBar()->showMessage("กำลังตรวจสอบการอัปเดต...", 3000);
+
+  QNetworkRequest request(QUrl("https://api.github.com/repos/ynmio55/LiteWave/releases/latest"));
+  request.setHeader(QNetworkRequest::UserAgentHeader, "LiteWave-Browser/1.1.0");
+  request.setRawHeader("Accept", "application/vnd.github.v3+json");
+
+  QNetworkReply *reply = updateNam_->get(request);
+  connect(reply, &QNetworkReply::finished, this, [this, reply, silentIfUpToDate]() {
+    reply->deleteLater();
+
+    if (reply->error() != QNetworkReply::NoError) {
+      if (!silentIfUpToDate) {
+        QMessageBox::warning(this, "ตรวจสอบการอัปเดต",
+                             "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์เพื่อตรวจสอบการอัปเดตได้\nกรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต");
+      }
+      return;
+    }
+
+    const QByteArray data = reply->readAll();
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (!doc.isObject()) {
+      if (!silentIfUpToDate) {
+        QMessageBox::warning(this, "ตรวจสอบการอัปเดต", "ข้อมูลการอัปเดตไม่ถูกต้อง");
+      }
+      return;
+    }
+
+    QJsonObject root = doc.object();
+    QString releaseTitle = root.value("name").toString();
+    QJsonArray assets = root.value("assets").toArray();
+
+    QString targetAssetUrl;
+    QString targetAssetName;
+    qint64 targetAssetSize = 0;
+
+#ifdef Q_OS_WIN
+    for (const auto &val : assets) {
+      QJsonObject a = val.toObject();
+      QString name = a.value("name").toString();
+      if (name.endsWith("-Setup-Windows-x64.exe", Qt::CaseInsensitive)) {
+        targetAssetUrl = a.value("browser_download_url").toString();
+        targetAssetName = name;
+        targetAssetSize = a.value("size").toInteger();
+        break;
+      }
+    }
+#else
+    for (const auto &val : assets) {
+      QJsonObject a = val.toObject();
+      QString name = a.value("name").toString();
+      if (name.endsWith("-Linux-x64.tar.gz", Qt::CaseInsensitive)) {
+        targetAssetUrl = a.value("browser_download_url").toString();
+        targetAssetName = name;
+        targetAssetSize = a.value("size").toInteger();
+        break;
+      }
+    }
+#endif
+
+    if (targetAssetUrl.isEmpty()) {
+      if (!silentIfUpToDate) {
+        QMessageBox::information(this, "ตรวจสอบการอัปเดต",
+                                 "คุณกำลังใช้งาน LiteWave เวอร์ชันล่าสุดอยู่แล้ว (v1.1.0)");
+      }
+      return;
+    }
+
+    double sizeMb = targetAssetSize > 0 ? (targetAssetSize / (1024.0 * 1024.0)) : 0.0;
+    QString sizeStr = sizeMb > 0 ? QString(" (ขนาด: %1 MB)").arg(sizeMb, 0, 'f', 1) : "";
+
+    QMessageBox updateBox(this);
+    updateBox.setWindowTitle("พบเวอร์ชันใหม่ - LiteWave");
+    updateBox.setIconPixmap(QPixmap(":/icons/litewave.png").scaled(56, 56, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    updateBox.setText(QString("<h3>มี LiteWave เวอร์ชันใหม่พร้อมติดตั้ง!</h3><p><b>%1</b>%2</p>")
+                          .arg(releaseTitle.isEmpty() ? "LiteWave Update" : releaseTitle, sizeStr));
+    updateBox.setInformativeText(
+        "<p>คุณต้องการดาวน์โหลดและติดตั้งการอัปเดตทันทีหรือไม่?</p>"
+        "<p style='color: #64748b; font-size: 11px;'>ระบบจะดาวน์โหลดตัวติดตั้งและอัปเดตโปรแกรมให้โดยอัตโนมัติ โดยข้อมูลการใช้งานทั้งหมดจะยังคงอยู่ครบถ้วน</p>");
+
+    auto *installBtn = updateBox.addButton("ดาวน์โหลดและอัปเดตทันที", QMessageBox::AcceptRole);
+    updateBox.addButton("ยกเลิก", QMessageBox::RejectRole);
+
+    updateBox.exec();
+
+    if (updateBox.clickedButton() == installBtn) {
+      downloadAndInstallUpdate(targetAssetUrl, targetAssetName);
+    }
+  });
+}
+
+void MainWindow::downloadAndInstallUpdate(const QString &downloadUrl, const QString &fileName) {
+  if (downloadUrl.isEmpty() || fileName.isEmpty()) return;
+
+  QString savePath = QDir::tempPath() + "/" + fileName;
+  auto *file = new QFile(savePath);
+  if (!file->open(QIODevice::WriteOnly)) {
+    delete file;
+    QMessageBox::critical(this, "ข้อผิดพลาด", "ไม่สามารถสร้างไฟล์ชั่วคราวสำหรับอัปเดตได้");
+    return;
+  }
+
+  auto *progress = new QProgressDialog("กำลังดาวน์โหลดตัวอัปเดต LiteWave...", "ยกเลิก", 0, 100, this);
+  progress->setWindowTitle("กำลังดาวน์โหลดอัปเดต");
+  progress->setWindowModality(Qt::WindowModal);
+  progress->setMinimumDuration(0);
+  progress->setValue(0);
+  progress->show();
+
+  QNetworkRequest request(downloadUrl);
+  request.setHeader(QNetworkRequest::UserAgentHeader, "LiteWave-Browser/1.1.0");
+  request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+
+  QNetworkReply *reply = updateNam_->get(request);
+
+  connect(reply, &QNetworkReply::downloadProgress, this, [progress](qint64 received, qint64 total) {
+    if (total > 0) {
+      int pct = static_cast<int>((received * 100) / total);
+      progress->setValue(pct);
+      double mbReceived = received / (1024.0 * 1024.0);
+      double mbTotal = total / (1024.0 * 1024.0);
+      progress->setLabelText(QString("กำลังดาวน์โหลด: %1 / %2 MB (%3%)")
+                                 .arg(mbReceived, 0, 'f', 1)
+                                 .arg(mbTotal, 0, 'f', 1)
+                                 .arg(pct));
+    }
+  });
+
+  connect(reply, &QNetworkReply::readyRead, this, [reply, file]() {
+    file->write(reply->readAll());
+  });
+
+  connect(progress, &QProgressDialog::canceled, this, [reply]() {
+    reply->abort();
+  });
+
+  connect(reply, &QNetworkReply::finished, this, [this, reply, file, progress, savePath]() {
+    progress->close();
+    progress->deleteLater();
+    file->flush();
+    file->close();
+    delete file;
+    reply->deleteLater();
+
+    if (reply->error() != QNetworkReply::NoError) {
+      QFile::remove(savePath);
+      if (reply->error() != QNetworkReply::OperationCanceledError) {
+        QMessageBox::warning(this, "การดาวน์โหลดล้มเหลว",
+                             "ไม่สามารถดาวน์โหลดไฟล์อัปเดตได้สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      }
+      return;
+    }
+
+#ifdef Q_OS_WIN
+    QMessageBox::information(this, "ดาวน์โหลดเสร็จสมบูรณ์",
+                             "ดาวน์โหลดตัวอัปเดตเรียบร้อยแล้ว!\nระบบจะเปิดหน้าต่างติดตั้งและปิด LiteWave เพื่อทำการอัปเดตทันที");
+    QProcess::startDetached(savePath, QStringList());
+    qApp->quit();
+#else
+    QMessageBox::information(this, "ดาวน์โหลดเสร็จสมบูรณ์",
+                             QString("ดาวน์โหลดไฟล์อัปเดตเรียบร้อยแล้ว:\n%1\n\nระบบจะเปิดโฟลเดอร์ไฟล์ให้เพื่อทำการแตกไฟล์ใช้งาน").arg(savePath));
+    QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(savePath).absolutePath()));
+#endif
+  });
 }
 
 static QIcon createCategoryIcon(const QString &name, const QColor &color) {
