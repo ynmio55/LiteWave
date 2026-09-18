@@ -3967,6 +3967,13 @@ static QIcon createMenuIcon(const QString &name, const QColor &color) {
     p.drawArc(3, 3, 14, 14, 45 * 16, 270 * 16);
     p.drawLine(10, 2, 13, 5);
     p.drawLine(13, 5, 10, 8);
+  } else if (name == "feedback") {
+    // Chat bubble with exclamation mark
+    p.drawRoundedRect(3, 3, 14, 11, 2, 2);
+    p.drawLine(6, 14, 4, 17);
+    p.drawLine(4, 17, 9, 14);
+    p.drawLine(10, 6, 10, 9);
+    p.drawPoint(10, 11);
   } else if (name == "exit") {
     // Power / Logout icon
     p.drawArc(3, 5, 14, 12, 30 * 16, 300 * 16);
@@ -5045,6 +5052,11 @@ QMenu *MainWindow::createMainMenu() {
   auto *updateAct = menu->addAction(createMenuIcon("update", iconColor), "ตรวจสอบการอัปเดต (Check for Updates)…");
   connect(updateAct, &QAction::triggered, this, [this] {
     checkForUpdates(false);
+  });
+
+  auto *feedbackAct = menu->addAction(createMenuIcon("feedback", iconColor), "ส่งข้อเสนอแนะ / แจ้งปัญหา (Send Feedback)…");
+  connect(feedbackAct, &QAction::triggered, this, [this] {
+    createView(QUrl("https://github.com/ynmio55/LiteWave/issues/new"));
   });
 
   auto *aboutAct = menu->addAction(createMenuIcon("about", iconColor), "เกี่ยวกับ LiteWave");
