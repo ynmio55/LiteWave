@@ -5169,12 +5169,15 @@ void MainWindow::checkForUpdates(bool silentIfUpToDate) {
         "<p style='color: #64748b; font-size: 11px;'>ระบบจะดาวน์โหลดตัวติดตั้งและอัปเดตโปรแกรมให้โดยอัตโนมัติ โดยข้อมูลการใช้งานทั้งหมดจะยังคงอยู่ครบถ้วน</p>");
 
     auto *installBtn = updateBox.addButton("ดาวน์โหลดและอัปเดตทันที", QMessageBox::AcceptRole);
+    auto *webBtn = updateBox.addButton("เปิดหน้าเว็บดาวน์โหลด", QMessageBox::ActionRole);
     updateBox.addButton("ยกเลิก", QMessageBox::RejectRole);
 
     updateBox.exec();
 
     if (updateBox.clickedButton() == installBtn) {
       downloadAndInstallUpdate(targetAssetUrl, targetAssetName);
+    } else if (updateBox.clickedButton() == webBtn) {
+      QDesktopServices::openUrl(QUrl("https://litewave.miosmooth.com"));
     }
   });
 }
@@ -5200,19 +5203,26 @@ void MainWindow::downloadAndInstallUpdate(const QString &downloadUrl, const QStr
   QNetworkRequest request(downloadUrl);
   request.setHeader(QNetworkRequest::UserAgentHeader, "LiteWave-Browser/1.1.0");
   request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+  request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 
   QNetworkReply *reply = updateNam_->get(request);
+  reply->setReadBufferSize(4 * 1024 * 1024);
 
-  connect(reply, &QNetworkReply::downloadProgress, this, [progress](qint64 received, qint64 total) {
+  auto lastUpdateMs = std::make_shared<qint64>(0);
+  connect(reply, &QNetworkReply::downloadProgress, this, [progress, lastUpdateMs](qint64 received, qint64 total) {
     if (total > 0) {
+      qint64 now = QDateTime::currentMSecsSinceEpoch();
       int pct = static_cast<int>((received * 100) / total);
-      progress->setValue(pct);
-      double mbReceived = received / (1024.0 * 1024.0);
-      double mbTotal = total / (1024.0 * 1024.0);
-      progress->setLabelText(QString("กำลังดาวน์โหลด: %1 / %2 MB (%3%)")
-                                 .arg(mbReceived, 0, 'f', 1)
-                                 .arg(mbTotal, 0, 'f', 1)
-                                 .arg(pct));
+      if (now - *lastUpdateMs > 150 || pct >= 100) {
+        *lastUpdateMs = now;
+        progress->setValue(pct);
+        double mbReceived = received / (1024.0 * 1024.0);
+        double mbTotal = total / (1024.0 * 1024.0);
+        progress->setLabelText(QString("กำลังดาวน์โหลด: %1 / %2 MB (%3%)")
+                                   .arg(mbReceived, 0, 'f', 1)
+                                   .arg(mbTotal, 0, 'f', 1)
+                                   .arg(pct));
+      }
     }
   });
 
