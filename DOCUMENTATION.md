@@ -22,7 +22,7 @@ LiteWave เป็นเบราว์เซอร์สำหรับคอ�
 
 ## 2. วิธีการติดตั้งและใช้งานผ่านแพ็กเกจสำเร็จรูป (Prebuilt Binaries)
 
-หากไม่ต้องการคอมไพล์โค้ดเอง สามารถดาวน์โหลดไฟล์สำเร็จรูปได้จาก [GitHub Releases](https://github.com/ynmio55/LiteWave/releases/v1.1.0):
+หากไม่ต้องการคอมไพล์โค้ดเอง สามารถดาวน์โหลดไฟล์สำเร็จรูปได้จากหน้าเว็บไซต์ทางการ [litewave.miosmooth.com](https://litewave.miosmooth.com) หรือ [GitHub Releases](https://github.com/ynmio55/LiteWave/releases/latest):
 
 ### 2.1 บนระบบ Linux (x86_64)
 
@@ -30,7 +30,7 @@ LiteWave เป็นเบราว์เซอร์สำหรับคอ�
 
 1. ดาวน์โหลดไฟล์:
    ```bash
-   wget https://github.com/ynmio55/LiteWave/releases/download/v1.1.0/LiteWave-Linux-x64.tar.gz
+   wget https://github.com/ynmio55/LiteWave/releases/download/latest/LiteWave-Linux-x64.tar.gz
    ```
 2. แตกไฟล์ tar.gz:
    ```bash
