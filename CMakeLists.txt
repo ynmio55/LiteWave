@@ -42,6 +42,22 @@ qt_add_executable(LiteWave
 
 target_include_directories(LiteWave PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/search ${CMAKE_CURRENT_SOURCE_DIR}/src/ui)
 
+execute_process(
+    COMMAND git rev-parse HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE LITEWAVE_GIT_COMMIT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT LITEWAVE_GIT_COMMIT)
+    set(LITEWAVE_GIT_COMMIT "dev")
+endif()
+
+target_compile_definitions(LiteWave PRIVATE
+    LITEWAVE_APP_VERSION="${PROJECT_VERSION}"
+    LITEWAVE_GIT_COMMIT="${LITEWAVE_GIT_COMMIT}"
+)
+
 add_dependencies(LiteWave LiteWaveFilterEngineBuild)
 target_link_libraries(LiteWave PRIVATE
     Qt6::Widgets

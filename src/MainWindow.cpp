@@ -82,6 +82,32 @@
 #include <QWebEngineView>
 #include <algorithm>
 
+#ifndef LITEWAVE_APP_VERSION
+#define LITEWAVE_APP_VERSION "1.1.0"
+#endif
+
+#ifndef LITEWAVE_GIT_COMMIT
+#define LITEWAVE_GIT_COMMIT ""
+#endif
+
+static QList<int> parseVersionNumbers(const QString &str, QString *cleanedStr = nullptr) {
+  QRegularExpression re(R"(\bv?(\d+)\.(\d+)(?:\.(\d+))?\b)", QRegularExpression::CaseInsensitiveOption);
+  auto match = re.match(str);
+  if (match.hasMatch()) {
+    int major = match.captured(1).toInt();
+    int minor = match.captured(2).toInt();
+    int patch = match.captured(3).isEmpty() ? 0 : match.captured(3).toInt();
+    if (cleanedStr) {
+      *cleanedStr = QString("%1.%2.%3").arg(major).arg(minor).arg(patch);
+    }
+    return {major, minor, patch};
+  }
+  if (cleanedStr) {
+    *cleanedStr = str;
+  }
+  return {0, 0, 0};
+}
+
 static QIcon createMenuIcon(const QString &name, const QColor &color);
 
 static QIcon createToolbarIcon(const QString &name, const QColor &color) {
@@ -5064,7 +5090,7 @@ QMenu *MainWindow::createMainMenu() {
     QMessageBox msg(this);
     msg.setWindowTitle("เกี่ยวกับ LiteWave Browser");
     msg.setIconPixmap(QPixmap(":/icons/litewave.png").scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    msg.setText("<h3>LiteWave Browser v1.1.0</h3>");
+    msg.setText(QString("<h3>LiteWave Browser v%1</h3>").arg(LITEWAVE_APP_VERSION));
     msg.setInformativeText(
         "<p>เบราว์เซอร์ความเร็วสูง น้ำหนักเบา ปลอดภัย และใช้งานง่าย</p>"
         "<p><b>ฟีเจอร์หลัก:</b>"
@@ -5089,10 +5115,12 @@ void MainWindow::checkForUpdates(bool silentIfUpToDate) {
     updateNam_ = new QNetworkAccessManager(this);
   }
 
-  statusBar()->showMessage("กำลังตรวจสอบการอัปเดต...", 3000);
+  if (!silentIfUpToDate) {
+    statusBar()->showMessage("กำลังตรวจสอบการอัปเดต...", 3000);
+  }
 
   QNetworkRequest request(QUrl("https://api.github.com/repos/ynmio55/LiteWave/releases/latest"));
-  request.setHeader(QNetworkRequest::UserAgentHeader, "LiteWave-Browser/1.1.0");
+  request.setHeader(QNetworkRequest::UserAgentHeader, QString("LiteWave-Browser/%1").arg(LITEWAVE_APP_VERSION));
   request.setRawHeader("Accept", "application/vnd.github.v3+json");
 
   QNetworkReply *reply = updateNam_->get(request);
@@ -5117,7 +5145,9 @@ void MainWindow::checkForUpdates(bool silentIfUpToDate) {
     }
 
     QJsonObject root = doc.object();
-    QString releaseTitle = root.value("name").toString();
+    QString releaseTitle = root.value("name").toString().trimmed();
+    QString tagName = root.value("tag_name").toString().trimmed();
+    QString targetCommit = root.value("target_commitish").toString().trimmed();
     QJsonArray assets = root.value("assets").toArray();
 
     QString targetAssetUrl;
@@ -5148,10 +5178,60 @@ void MainWindow::checkForUpdates(bool silentIfUpToDate) {
     }
 #endif
 
-    if (targetAssetUrl.isEmpty()) {
+    QString localVer = QString::fromUtf8(LITEWAVE_APP_VERSION).trimmed();
+    QString localCommit = QString::fromUtf8(LITEWAVE_GIT_COMMIT).trimmed();
+
+    QString remoteVerClean;
+    QList<int> remoteV = parseVersionNumbers(tagName, &remoteVerClean);
+    if (remoteV == QList<int>{0, 0, 0}) {
+      remoteV = parseVersionNumbers(releaseTitle, &remoteVerClean);
+    }
+    QList<int> localV = parseVersionNumbers(localVer);
+
+    // Check if remote version is strictly newer than local version
+    bool isNewerVersion = false;
+    if (remoteV[0] > localV[0]) {
+      isNewerVersion = true;
+    } else if (remoteV[0] == localV[0]) {
+      if (remoteV[1] > localV[1]) {
+        isNewerVersion = true;
+      } else if (remoteV[1] == localV[1]) {
+        if (remoteV[2] > localV[2]) {
+          isNewerVersion = true;
+        }
+      }
+    }
+
+    // Check saved update records in QSettings
+    QSettings st("LiteWave", "LiteWave");
+    QString installedCommit = st.value("update/installedCommit").toString().trimmed();
+    QString installedVersion = st.value("update/installedVersion").toString().trimmed();
+
+    bool sameCommit = false;
+    if (!targetCommit.isEmpty()) {
+      if (!localCommit.isEmpty() && localCommit != "dev" &&
+          (targetCommit.startsWith(localCommit) || localCommit.startsWith(targetCommit))) {
+        sameCommit = true;
+      }
+      if (!installedCommit.isEmpty() &&
+          (targetCommit.startsWith(installedCommit) || installedCommit.startsWith(targetCommit))) {
+        sameCommit = true;
+      }
+    }
+
+    bool alreadyUpdated = false;
+    if (!installedVersion.isEmpty() && !remoteVerClean.isEmpty() && installedVersion == remoteVerClean) {
+      alreadyUpdated = true;
+    }
+
+    // Only prompt if remote is strictly newer, not already on same commit/version, and asset exists
+    bool hasNewVersion = isNewerVersion && !sameCommit && !alreadyUpdated && !targetAssetUrl.isEmpty();
+
+    if (!hasNewVersion) {
       if (!silentIfUpToDate) {
         QMessageBox::information(this, "ตรวจสอบการอัปเดต",
-                                 "คุณกำลังใช้งาน LiteWave เวอร์ชันล่าสุดอยู่แล้ว (v1.1.0)");
+                                 QString("คุณกำลังใช้งาน LiteWave เวอร์ชันล่าสุดแล้ว (v%1)\nไม่มีการอัปเดตใหม่ในขณะนี้")
+                                     .arg(localVer));
       }
       return;
     }
@@ -5163,7 +5243,7 @@ void MainWindow::checkForUpdates(bool silentIfUpToDate) {
     updateBox.setWindowTitle("พบเวอร์ชันใหม่ - LiteWave");
     updateBox.setIconPixmap(QPixmap(":/icons/litewave.png").scaled(56, 56, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     updateBox.setText(QString("<h3>มี LiteWave เวอร์ชันใหม่พร้อมติดตั้ง!</h3><p><b>%1</b>%2</p>")
-                          .arg(releaseTitle.isEmpty() ? "LiteWave Update" : releaseTitle, sizeStr));
+                          .arg(releaseTitle.isEmpty() ? ("LiteWave v" + remoteVerClean) : releaseTitle, sizeStr));
     updateBox.setInformativeText(
         "<p>คุณต้องการดาวน์โหลดและติดตั้งการอัปเดตทันทีหรือไม่?</p>"
         "<p style='color: #64748b; font-size: 11px;'>ระบบจะดาวน์โหลดตัวติดตั้งและอัปเดตโปรแกรมให้โดยอัตโนมัติ โดยข้อมูลการใช้งานทั้งหมดจะยังคงอยู่ครบถ้วน</p>");
@@ -5175,14 +5255,15 @@ void MainWindow::checkForUpdates(bool silentIfUpToDate) {
     updateBox.exec();
 
     if (updateBox.clickedButton() == installBtn) {
-      downloadAndInstallUpdate(targetAssetUrl, targetAssetName);
+      downloadAndInstallUpdate(targetAssetUrl, targetAssetName, remoteVerClean, targetCommit);
     } else if (updateBox.clickedButton() == webBtn) {
       QDesktopServices::openUrl(QUrl("https://litewave.miosmooth.com"));
     }
   });
 }
 
-void MainWindow::downloadAndInstallUpdate(const QString &downloadUrl, const QString &fileName) {
+void MainWindow::downloadAndInstallUpdate(const QString &downloadUrl, const QString &fileName,
+                                          const QString &newVersion, const QString &newCommit) {
   if (downloadUrl.isEmpty() || fileName.isEmpty()) return;
 
   QString savePath = QDir::tempPath() + "/" + fileName;
@@ -5201,7 +5282,7 @@ void MainWindow::downloadAndInstallUpdate(const QString &downloadUrl, const QStr
   progress->show();
 
   QNetworkRequest request(downloadUrl);
-  request.setHeader(QNetworkRequest::UserAgentHeader, "LiteWave-Browser/1.1.0");
+  request.setHeader(QNetworkRequest::UserAgentHeader, QString("LiteWave-Browser/%1").arg(LITEWAVE_APP_VERSION));
   request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
   request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 
@@ -5234,7 +5315,7 @@ void MainWindow::downloadAndInstallUpdate(const QString &downloadUrl, const QStr
     reply->abort();
   });
 
-  connect(reply, &QNetworkReply::finished, this, [this, reply, file, progress, savePath]() {
+  connect(reply, &QNetworkReply::finished, this, [this, reply, file, progress, savePath, newVersion, newCommit]() {
     progress->close();
     progress->deleteLater();
     file->flush();
@@ -5249,6 +5330,15 @@ void MainWindow::downloadAndInstallUpdate(const QString &downloadUrl, const QStr
                              "ไม่สามารถดาวน์โหลดไฟล์อัปเดตได้สำเร็จ กรุณาลองใหม่อีกครั้ง");
       }
       return;
+    }
+
+    // Save installed update metadata into QSettings so subsequent checks know it is up-to-date
+    QSettings st("LiteWave", "LiteWave");
+    if (!newVersion.isEmpty()) {
+      st.setValue("update/installedVersion", newVersion);
+    }
+    if (!newCommit.isEmpty()) {
+      st.setValue("update/installedCommit", newCommit);
     }
 
 #ifdef Q_OS_WIN

@@ -145,7 +145,8 @@ private:
     void updateTabAudioIcon(int index, bool audible, bool muted);
     void openDevTools(QWebEngineView *targetView);
     void checkForUpdates(bool silentIfUpToDate = false);
-    void downloadAndInstallUpdate(const QString &downloadUrl, const QString &fileName);
+    void downloadAndInstallUpdate(const QString &downloadUrl, const QString &fileName,
+                                  const QString &newVersion = QString(), const QString &newCommit = QString());
     QNetworkAccessManager *updateNam_ = nullptr;
     void toggleDevTools(QWebEngineView *targetView = nullptr);
     void openDevToolsUndocked(QWebEngineView *targetView);
