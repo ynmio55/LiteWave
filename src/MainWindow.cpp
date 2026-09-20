@@ -824,10 +824,19 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     tabStack_->setCurrentIndex(to);
   });
 
-  // Sleeping Tabs Manager: check every 60s to freeze/discard inactive background tabs
+  // Sleeping Tabs Manager: check every 60s to freeze/discard inactive background tabs.
+  // Session autosave runs independently so an unexpected process/OS shutdown loses
+  // at most a small amount of tab-state history.
   tabSleepTimer_ = new QTimer(this);
   connect(tabSleepTimer_, &QTimer::timeout, this, &MainWindow::checkSleepingTabs);
   tabSleepTimer_->start(60000);
+
+  if (!privateMode_) {
+    auto *sessionSaveTimer = new QTimer(this);
+    sessionSaveTimer->setInterval(30000);
+    connect(sessionSaveTimer, &QTimer::timeout, this, &MainWindow::saveSession);
+    sessionSaveTimer->start();
+  }
 
   setupShortcuts();
   applyTheme();
@@ -837,15 +846,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 
   const QString startupOpt = startupSettings.value("startupOption", "home").toString();
   if (!privateMode_ && startupOpt == "restore") {
-    const QStringList savedTabs =
-        startupSettings.value("session/openTabs").toStringList();
-    if (!savedTabs.isEmpty()) {
-      for (const QString &u : savedTabs) {
-        createView(QUrl(u));
-      }
-    } else {
+    restoreSession();
+    if (tabStack_->count() == 0)
       newTab();
-    }
   } else if (!privateMode_ && startupOpt == "custom") {
     const QString customUrl =
         startupSettings.value("customStartupUrl", "").toString().trimmed();
@@ -6361,18 +6364,37 @@ void MainWindow::openDevToolsUndocked(QWebEngineView *targetView) {
 }
 
 void MainWindow::saveSession() {
-  if (privateMode_)
+  if (privateMode_ || !tabStack_)
     return;
 
   QSettings st("LiteWave", "LiteWave");
   QStringList urls;
+  urls.reserve(tabStack_->count());
+
   for (int i = 0; i < tabStack_->count(); ++i) {
     auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(i));
-    if (view && !view->url().isEmpty() && view->url().host() != "litewave.home") {
-      urls.append(view->url().toString());
+    if (!view)
+      continue;
+
+    const QUrl url = view->url();
+    if (url.isEmpty() || url.toString() == "about:blank")
+      continue;
+
+    // Preserve LiteWave home tabs as an explicit internal URL so the restored
+    // tab order matches what the user actually had open.
+    if (url.scheme() == "litewave" || url.host() == "litewave.home") {
+      urls.append(QStringLiteral("litewave://home"));
+    } else if (url.scheme() == "http" || url.scheme() == "https" ||
+               url.scheme() == "file") {
+      urls.append(url.toString(QUrl::FullyEncoded));
     }
   }
+
   st.setValue("session/openTabs", urls);
+  st.setValue("session/activeIndex",
+              std::clamp(tabStack_->currentIndex(), 0,
+                         std::max(0, urls.size() - 1)));
+  st.setValue("session/savedAtMs", QDateTime::currentMSecsSinceEpoch());
   st.sync();
 }
 
@@ -6389,8 +6411,33 @@ void MainWindow::restoreSession() {
   if (urls.isEmpty())
     return;
 
-  for (const QString &u : urls) {
-    createView(QUrl(u));
+  // Avoid pathological startup if a damaged settings file contains thousands
+  // of entries. 50 restored tabs is still generous for a desktop browser.
+  const int restoreCount = std::min(urls.size(), 50);
+  for (int i = 0; i < restoreCount; ++i) {
+    const QString raw = urls.at(i).trimmed();
+    if (raw.isEmpty())
+      continue;
+
+    if (raw == QStringLiteral("litewave://home")) {
+      newTab();
+      continue;
+    }
+
+    const QUrl url(raw);
+    if (url.isValid() &&
+        (url.scheme() == "http" || url.scheme() == "https" ||
+         url.scheme() == "file")) {
+      createView(url);
+    }
+  }
+
+  if (tabStack_->count() > 0) {
+    const int requestedIndex = st.value("session/activeIndex", 0).toInt();
+    const int activeIndex =
+        std::clamp(requestedIndex, 0, tabStack_->count() - 1);
+    tabBar_->setCurrentIndex(activeIndex);
+    tabStack_->setCurrentIndex(activeIndex);
   }
 }
 
@@ -6440,6 +6487,14 @@ void MainWindow::saveDownloadRecords() {
 void MainWindow::checkSleepingTabs() {
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
   const int currentIdx = tabStack_->currentIndex();
+
+  QSettings perfSettings("LiteWave", "LiteWave");
+  const int freezeMinutes =
+      std::clamp(perfSettings.value("performance/tabFreezeMinutes", 10).toInt(),
+                 2, 120);
+  const int discardMinutes =
+      std::clamp(perfSettings.value("performance/tabDiscardMinutes", 30).toInt(),
+                 freezeMinutes + 1, 240);
   for (int i = 0; i < tabStack_->count(); ++i) {
     if (i == currentIdx)
       continue;
@@ -6462,9 +6517,10 @@ void MainWindow::checkSleepingTabs() {
     const qint64 lastActive = tabLastActiveTime_.value(view, now);
     const qint64 idleSeconds = (now - lastActive) / 1000;
 
-    // After 15 minutes of background inactivity: Discard tab (fully unloads renderer memory, saves 75-85% RAM)
-    // After 5 minutes of background inactivity: Freeze tab (stops JS timers and CSS animations, 0% CPU)
-    if (idleSeconds >= 15 * 60) {
+    // Freeze first to stop background timers without throwing away the page.
+    // Discard only after a longer idle period so forms/web-app state is less
+    // likely to be interrupted during normal tab switching.
+    if (idleSeconds >= static_cast<qint64>(discardMinutes) * 60) {
       if (view->page()->lifecycleState() != QWebEnginePage::LifecycleState::Discarded) {
         view->page()->setLifecycleState(QWebEnginePage::LifecycleState::Discarded);
         const QString cur = tabBar_->tabText(i);
@@ -6473,7 +6529,7 @@ void MainWindow::checkSleepingTabs() {
         }
         tabBar_->setTabToolTip(i, cur + " (จำศีลเพื่อประหยัด RAM - คลิกเพื่อเปิดต่อทันที)");
       }
-    } else if (idleSeconds >= 5 * 60) {
+    } else if (idleSeconds >= static_cast<qint64>(freezeMinutes) * 60) {
       if (view->page()->lifecycleState() == QWebEnginePage::LifecycleState::Active) {
         view->page()->setLifecycleState(QWebEnginePage::LifecycleState::Frozen);
       }
