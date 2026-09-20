@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(LiteWave VERSION 1.2.1 LANGUAGES CXX)
+project(LiteWave VERSION 1.2.2 LANGUAGES CXX)
 find_program(CARGO_EXECUTABLE cargo REQUIRED)
 set(LITEWAVE_RUST_TARGET ${CMAKE_CURRENT_BINARY_DIR}/rust-target)
 if(WIN32)
