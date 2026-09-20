@@ -466,11 +466,69 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   tabBar_->setTabsClosable(true);
   tabBar_->setMovable(true);
   tabBar_->setDrawBase(false);
+  tabBar_->setDocumentMode(true);
+  tabBar_->setExpanding(false);
   tabBar_->setIconSize(QSize(16, 16));
-  tabBar_->setUsesScrollButtons(false);
+  tabBar_->setUsesScrollButtons(true);
   tabBar_->setElideMode(Qt::ElideRight);
 
-  tabBarLayout->addWidget(tabBar_);
+  tabBarLayout->addWidget(tabBar_, 1);
+
+  // Tab search / switcher for crowded tab strips.
+  auto *tabSearchBtn = new QToolButton(this);
+  tabSearchBtn->setObjectName("tabSearchButton");
+  tabSearchBtn->setText("⌄");
+  tabSearchBtn->setToolTip("ค้นหาและสลับแท็บ");
+  tabSearchBtn->setFixedSize(26, 26);
+  tabSearchBtn->setCursor(Qt::PointingHandCursor);
+  tabSearchBtn->setPopupMode(QToolButton::InstantPopup);
+  auto *tabSearchMenu = new QMenu(tabSearchBtn);
+  tabSearchBtn->setMenu(tabSearchMenu);
+  connect(tabSearchMenu, &QMenu::aboutToShow, this, [this, tabSearchMenu] {
+    tabSearchMenu->clear();
+
+    auto *header = tabSearchMenu->addAction(
+        QString("แท็บที่เปิดอยู่ (%1)").arg(tabBar_->count()));
+    header->setEnabled(false);
+    tabSearchMenu->addSeparator();
+
+    for (int i = 0; i < tabBar_->count(); ++i) {
+      auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(i));
+      QString title = tabBar_->tabText(i);
+      if (title.endsWith(" 💤"))
+        title.chop(3);
+      if (title.trimmed().isEmpty())
+        title = QStringLiteral("แท็บใหม่");
+
+      auto *act = tabSearchMenu->addAction(
+          view && !view->icon().isNull() ? view->icon()
+                                         : QIcon(":/icons/litewave.png"),
+          title);
+      act->setCheckable(true);
+      act->setChecked(i == tabBar_->currentIndex());
+      const int tabIndex = i;
+      connect(act, &QAction::triggered, this, [this, tabIndex] {
+        if (tabIndex >= 0 && tabIndex < tabBar_->count())
+          tabBar_->setCurrentIndex(tabIndex);
+      });
+    }
+
+    if (!closedTabs_.isEmpty()) {
+      tabSearchMenu->addSeparator();
+      auto *reopen = tabSearchMenu->addAction("↶ เปิดแท็บที่เพิ่งปิด");
+      connect(reopen, &QAction::triggered, this, [this] {
+        if (closedTabs_.isEmpty())
+          return;
+        const QUrl u = closedTabs_.takeLast();
+        if (u.isEmpty() || u.host() == "litewave.home" ||
+            u.scheme() == "litewave")
+          newTab();
+        else
+          createView(u);
+      });
+    }
+  });
+  tabBarLayout->addWidget(tabSearchBtn);
 
   // '+' New Tab Button right next to the tabs (ชิดแท็บ)
   auto *newTabBtn = new QToolButton(this);
@@ -553,8 +611,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
                                   QLineEdit::LeadingPosition);
   sslAction_->setToolTip("LiteWave Dashboard");
 
-  urlBar_->setPlaceholderText("ค้นหาด้วย Google หรือระบุ URL...");
-  urlBar_->setClearButtonEnabled(false);
+  urlBar_->setPlaceholderText("ค้นหาเว็บหรือพิมพ์ URL");
+  urlBar_->setToolTip("ค้นหาเว็บหรือพิมพ์ที่อยู่เว็บไซต์ (Ctrl+L)");
+  urlBar_->setClearButtonEnabled(true);
   urlBar_->setMinimumHeight(34);
   toolbar_->addWidget(urlBar_);
   connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
@@ -876,6 +935,15 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
       watched == tabBar_) {
     if (event->type() == QEvent::MouseButtonPress) {
       auto *mouseEvent = static_cast<QMouseEvent *>(event);
+
+      if (watched == tabBar_ && mouseEvent->button() == Qt::MiddleButton) {
+        const int tabIndex = tabBar_->tabAt(mouseEvent->pos());
+        if (tabIndex >= 0) {
+          closeTab(tabIndex);
+          return true;
+        }
+      }
+
       if (mouseEvent->button() == Qt::LeftButton) {
         if (watched == tabBar_ && tabBar_->tabAt(mouseEvent->pos()) != -1) {
           return false;
@@ -1060,12 +1128,18 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
               permission.deny();
               return;
             }
-            const auto answer = QMessageBox::question(
-                this, "Site permission",
-                permission.origin().toDisplayString() + "\nAllow access to " +
-                    capability + "?",
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-            if (answer == QMessageBox::Yes)
+            QMessageBox box(this);
+            box.setWindowTitle("สิทธิ์เว็บไซต์");
+            box.setIcon(QMessageBox::Question);
+            box.setText(QString("<b>%1</b> ต้องการใช้ %2")
+                            .arg(permission.origin().host().toHtmlEscaped(),
+                                 capability.toHtmlEscaped()));
+            box.setInformativeText(
+                "อนุญาตเฉพาะเว็บไซต์ที่คุณเชื่อถือ คุณสามารถปฏิเสธได้โดยไม่กระทบแท็บอื่น");
+            auto *allowBtn = box.addButton("อนุญาต", QMessageBox::AcceptRole);
+            box.addButton("ไม่อนุญาต", QMessageBox::RejectRole);
+            box.exec();
+            if (box.clickedButton() == allowBtn)
               permission.grant();
             else
               permission.deny();
@@ -1100,13 +1174,20 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
                                      QWebEnginePage::PermissionDeniedByUser);
           return;
         }
-        const auto answer = QMessageBox::question(
-            this, "Site permission",
-            origin.toDisplayString() + "\nAllow access to " + capability + "?",
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        QMessageBox box(this);
+        box.setWindowTitle("สิทธิ์เว็บไซต์");
+        box.setIcon(QMessageBox::Question);
+        box.setText(QString("<b>%1</b> ต้องการใช้ %2")
+                        .arg(origin.host().toHtmlEscaped(),
+                             capability.toHtmlEscaped()));
+        box.setInformativeText(
+            "อนุญาตเฉพาะเว็บไซต์ที่คุณเชื่อถือ คุณสามารถปฏิเสธได้โดยไม่กระทบแท็บอื่น");
+        auto *allowBtn = box.addButton("อนุญาต", QMessageBox::AcceptRole);
+        box.addButton("ไม่อนุญาต", QMessageBox::RejectRole);
+        box.exec();
         page->setFeaturePermission(
             origin, feature,
-            answer == QMessageBox::Yes
+            box.clickedButton() == allowBtn
                 ? QWebEnginePage::PermissionGrantedByUser
                 : QWebEnginePage::PermissionDeniedByUser);
       });
@@ -1870,7 +1951,7 @@ void MainWindow::refreshShieldUi() {
     const QString mode =
         adBlocker_->mode() == AdBlocker::Mode::Aggressive ? "เข้มงวด" : "มาตรฐาน";
     shieldBtn_->setToolTip(
-        QString("Shield %1 — บล็อกแล้ว %2 รายการ\nคลิกเพื่อเปลี่ยนโหมดหรือปิดเฉพาะเว็บ")
+        QString("Shield %1 — บล็อกแล้ว %2 รายการในเซสชันนี้\nคลิกเพื่อเปลี่ยนโหมดหรือปิดเฉพาะเว็บ")
             .arg(mode)
             .arg(count));
   } else {
@@ -1959,12 +2040,12 @@ void MainWindow::applyTheme() {
                 qproperty-drawBase: 0;
             }
             QTabBar::scroller {
-                width: 0px;
-                height: 0px;
+                width: 24px;
+                height: 24px;
             }
             QTabBar::left-button, QTabBar::right-button {
-                width: 0px;
-                height: 0px;
+                width: 22px;
+                height: 22px;
             }
             QTabBar::tab {
                 background-color: transparent;
@@ -1976,7 +2057,7 @@ void MainWindow::applyTheme() {
                 margin-right: 3px;
                 margin-top: 3px;
                 font-size: 13px;
-                min-width: 130px;
+                min-width: 96px;
                 max-width: 220px;
             }
             QTabBar::tab:hover {
@@ -2014,7 +2095,7 @@ void MainWindow::applyTheme() {
                 color: #ffffff;
                 border-radius: 9px;
             }
-            QToolButton#newTabButton {
+            QToolButton#tabSearchButton, QToolButton#newTabButton {
                 background-color: transparent;
                 color: #9e9ea0;
                 border: none;
@@ -2027,7 +2108,7 @@ void MainWindow::applyTheme() {
                 min-height: 26px;
                 max-height: 26px;
             }
-            QToolButton#newTabButton:hover {
+            QToolButton#tabSearchButton:hover, QToolButton#newTabButton:hover {
                 background-color: #2b2d35;
                 color: #ffffff;
             }
@@ -2274,12 +2355,12 @@ void MainWindow::applyTheme() {
                 qproperty-drawBase: 0;
             }
             QTabBar::scroller {
-                width: 0px;
-                height: 0px;
+                width: 24px;
+                height: 24px;
             }
             QTabBar::left-button, QTabBar::right-button {
-                width: 0px;
-                height: 0px;
+                width: 22px;
+                height: 22px;
             }
             QTabBar::tab {
                 background-color: transparent;
@@ -2291,7 +2372,7 @@ void MainWindow::applyTheme() {
                 margin-right: 3px;
                 margin-top: 3px;
                 font-size: 13px;
-                min-width: 130px;
+                min-width: 96px;
                 max-width: 220px;
             }
             QTabBar::tab:hover {
@@ -2329,7 +2410,7 @@ void MainWindow::applyTheme() {
                 color: #ffffff;
                 border-radius: 9px;
             }
-            QToolButton#newTabButton {
+            QToolButton#tabSearchButton, QToolButton#newTabButton {
                 background-color: transparent;
                 color: #64748b;
                 border: none;
@@ -2342,7 +2423,7 @@ void MainWindow::applyTheme() {
                 min-height: 26px;
                 max-height: 26px;
             }
-            QToolButton#newTabButton:hover {
+            QToolButton#tabSearchButton:hover, QToolButton#newTabButton:hover {
                 background-color: #ffffff;
                 color: #1e1e1e;
             }
