@@ -69,6 +69,7 @@
 #include <QWebEngineCertificateError>
 #include <QWebEngineDownloadRequest>
 #include <QWebEngineFullScreenRequest>
+#include <QWebEngineHistory>
 #include <QWebEngineNewWindowRequest>
 #include <QWebEnginePage>
 #include <QWindow>
@@ -466,12 +467,72 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   tabBar_->setTabsClosable(true);
   tabBar_->setMovable(true);
   tabBar_->setDrawBase(false);
+  tabBar_->setDocumentMode(true);
+  tabBar_->setExpanding(false);
+  // Keep the tab strip only as wide as its tabs so the + button follows the
+  // last visible tab. The strip may still shrink when space runs out, at which
+  // point QTabBar's scroll buttons handle overflow.
+  tabBar_->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
   tabBar_->setIconSize(QSize(16, 16));
-  tabBar_->setUsesScrollButtons(false);
+  tabBar_->setUsesScrollButtons(true);
   tabBar_->setElideMode(Qt::ElideRight);
 
   tabBarLayout->addWidget(tabBar_);
 
+  // Tab search / switcher for crowded tab strips.
+  auto *tabSearchBtn = new QToolButton(this);
+  tabSearchBtn->setObjectName("tabSearchButton");
+  tabSearchBtn->setText("⌄");
+  tabSearchBtn->setToolTip("ค้นหาและสลับแท็บ");
+  tabSearchBtn->setFixedSize(26, 26);
+  tabSearchBtn->setCursor(Qt::PointingHandCursor);
+  tabSearchBtn->setPopupMode(QToolButton::InstantPopup);
+  auto *tabSearchMenu = new QMenu(tabSearchBtn);
+  tabSearchBtn->setMenu(tabSearchMenu);
+  connect(tabSearchMenu, &QMenu::aboutToShow, this, [this, tabSearchMenu] {
+    tabSearchMenu->clear();
+
+    auto *header = tabSearchMenu->addAction(
+        QString("แท็บที่เปิดอยู่ (%1)").arg(tabBar_->count()));
+    header->setEnabled(false);
+    tabSearchMenu->addSeparator();
+
+    for (int i = 0; i < tabBar_->count(); ++i) {
+      auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(i));
+      QString title = tabBar_->tabText(i);
+      if (title.endsWith(" ·"))
+        title.chop(2);
+      if (title.trimmed().isEmpty())
+        title = QStringLiteral("แท็บใหม่");
+
+      auto *act = tabSearchMenu->addAction(
+          view && !view->icon().isNull() ? view->icon()
+                                         : QIcon(":/icons/litewave.png"),
+          title);
+      act->setCheckable(true);
+      act->setChecked(i == tabBar_->currentIndex());
+      const int tabIndex = i;
+      connect(act, &QAction::triggered, this, [this, tabIndex] {
+        if (tabIndex >= 0 && tabIndex < tabBar_->count())
+          tabBar_->setCurrentIndex(tabIndex);
+      });
+    }
+
+    if (!closedTabs_.isEmpty()) {
+      tabSearchMenu->addSeparator();
+      auto *reopen = tabSearchMenu->addAction("↶ เปิดแท็บที่เพิ่งปิด");
+      connect(reopen, &QAction::triggered, this, [this] {
+        if (closedTabs_.isEmpty())
+          return;
+        const QUrl u = closedTabs_.takeLast();
+        if (u.isEmpty() || u.host() == "litewave.home" ||
+            u.scheme() == "litewave")
+          newTab();
+        else
+          createView(u);
+      });
+    }
+  });
   // '+' New Tab Button right next to the tabs (ชิดแท็บ)
   auto *newTabBtn = new QToolButton(this);
   newTabBtn->setObjectName("newTabButton");
@@ -482,6 +543,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   connect(newTabBtn, &QToolButton::clicked, this, &MainWindow::newTab);
   tabBarLayout->addWidget(newTabBtn);
   tabBarLayout->addStretch(); // Keeps + button right next to the tabs!
+  tabBarLayout->addWidget(tabSearchBtn);
 
   // Window Controls on far right of Tab Bar Row (Minimize, Maximize/Restore, Close)
   minWinBtn_ = new QToolButton(this);
@@ -528,15 +590,19 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   };
 
   auto *back = addNavAction("←", "ย้อนกลับ (Alt+Left)");
+  back->setObjectName("navBackAction");
+  back->setEnabled(false);
   connect(back, &QAction::triggered, this, [this] {
-    if (currentView())
-      currentView()->back();
+    if (auto *view = currentView(); view && view->history()->canGoBack())
+      view->back();
   });
 
   auto *forward = addNavAction("→", "ถัดไป (Alt+Right)");
+  forward->setObjectName("navForwardAction");
+  forward->setEnabled(false);
   connect(forward, &QAction::triggered, this, [this] {
-    if (currentView())
-      currentView()->forward();
+    if (auto *view = currentView(); view && view->history()->canGoForward())
+      view->forward();
   });
 
   auto *reload = addNavAction("↻", "รีเฟรชหน้าเว็บ (Ctrl+R)");
@@ -553,8 +619,9 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
                                   QLineEdit::LeadingPosition);
   sslAction_->setToolTip("LiteWave Dashboard");
 
-  urlBar_->setPlaceholderText("ค้นหาด้วย Google หรือระบุ URL...");
-  urlBar_->setClearButtonEnabled(false);
+  urlBar_->setPlaceholderText("ค้นหาเว็บหรือพิมพ์ URL");
+  urlBar_->setToolTip("ค้นหาเว็บหรือพิมพ์ที่อยู่เว็บไซต์ (Ctrl+L)");
+  urlBar_->setClearButtonEnabled(true);
   urlBar_->setMinimumHeight(34);
   toolbar_->addWidget(urlBar_);
   connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
@@ -801,6 +868,10 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
       wakeTab(currentView());
       tabLastActiveTime_[currentView()] = QDateTime::currentMSecsSinceEpoch();
       updateCurrentUrl(currentView()->url());
+      if (auto *back = findChild<QAction *>("navBackAction"))
+        back->setEnabled(currentView()->history()->canGoBack());
+      if (auto *forward = findChild<QAction *>("navForwardAction"))
+        forward->setEnabled(currentView()->history()->canGoForward());
       setWindowTitle(currentView()->title() +
                      (privateMode_ ? " — Private · LiteWave" : " — LiteWave"));
       if (findBar_) {
@@ -824,10 +895,19 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     tabStack_->setCurrentIndex(to);
   });
 
-  // Sleeping Tabs Manager: check every 60s to freeze/discard inactive background tabs
+  // Sleeping Tabs Manager: check every 60s to freeze/discard inactive background tabs.
+  // Session autosave runs independently so an unexpected process/OS shutdown loses
+  // at most a small amount of tab-state history.
   tabSleepTimer_ = new QTimer(this);
   connect(tabSleepTimer_, &QTimer::timeout, this, &MainWindow::checkSleepingTabs);
   tabSleepTimer_->start(60000);
+
+  if (!privateMode_) {
+    auto *sessionSaveTimer = new QTimer(this);
+    sessionSaveTimer->setInterval(30000);
+    connect(sessionSaveTimer, &QTimer::timeout, this, &MainWindow::saveSession);
+    sessionSaveTimer->start();
+  }
 
   setupShortcuts();
   applyTheme();
@@ -836,16 +916,39 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   statusBar()->setVisible(startupSettings.value("showStatusBar", true).toBool());
 
   const QString startupOpt = startupSettings.value("startupOption", "home").toString();
+  const bool previousCleanExit =
+      startupSettings.value("session/cleanExit", true).toBool();
+  if (!privateMode_) {
+    // Mark the session dirty as soon as the window starts. A normal close will
+    // flip it back to true; if the process/OS crashes it remains false.
+    startupSettings.setValue("session/cleanExit", false);
+    startupSettings.sync();
+  }
+
   if (!privateMode_ && startupOpt == "restore") {
     const QStringList savedTabs =
         startupSettings.value("session/openTabs").toStringList();
-    if (!savedTabs.isEmpty()) {
-      for (const QString &u : savedTabs) {
-        createView(QUrl(u));
-      }
-    } else {
-      newTab();
+    bool shouldRestore = !savedTabs.isEmpty();
+
+    if (!previousCleanExit && !savedTabs.isEmpty()) {
+      QMessageBox recoveryBox(this);
+      recoveryBox.setWindowTitle("กู้คืนเซสชัน LiteWave");
+      recoveryBox.setIcon(QMessageBox::Information);
+      recoveryBox.setText("<b>LiteWave ปิดไม่สมบูรณ์ในครั้งก่อน</b>");
+      recoveryBox.setInformativeText(
+          QString("พบ %1 แท็บจากเซสชันก่อนหน้า ต้องการกู้คืนหรือไม่?")
+              .arg(savedTabs.size()));
+      auto *restoreBtn =
+          recoveryBox.addButton("กู้คืนแท็บ", QMessageBox::AcceptRole);
+      recoveryBox.addButton("เริ่มใหม่", QMessageBox::RejectRole);
+      recoveryBox.exec();
+      shouldRestore = recoveryBox.clickedButton() == restoreBtn;
     }
+
+    if (shouldRestore)
+      restoreSession();
+    if (tabStack_->count() == 0)
+      newTab();
   } else if (!privateMode_ && startupOpt == "custom") {
     const QString customUrl =
         startupSettings.value("customStartupUrl", "").toString().trimmed();
@@ -873,6 +976,15 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
       watched == tabBar_) {
     if (event->type() == QEvent::MouseButtonPress) {
       auto *mouseEvent = static_cast<QMouseEvent *>(event);
+
+      if (watched == tabBar_ && mouseEvent->button() == Qt::MiddleButton) {
+        const int tabIndex = tabBar_->tabAt(mouseEvent->pos());
+        if (tabIndex >= 0) {
+          closeTab(tabIndex);
+          return true;
+        }
+      }
+
       if (mouseEvent->button() == Qt::LeftButton) {
         if (watched == tabBar_ && tabBar_->tabAt(mouseEvent->pos()) != -1) {
           return false;
@@ -903,6 +1015,11 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
 void MainWindow::closeEvent(QCloseEvent *event) {
   saveSession();
   saveDownloadRecords();
+  if (!privateMode_) {
+    QSettings st("LiteWave", "LiteWave");
+    st.setValue("session/cleanExit", true);
+    st.sync();
+  }
   QMainWindow::closeEvent(event);
 }
 
@@ -946,7 +1063,10 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   s->setAttribute(QWebEngineSettings::PluginsEnabled, true);
   s->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, false);
   s->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, false);
-  s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, false);
+  // Allow user-initiated Clipboard API writes such as Copy buttons on
+  // GitHub/ChatGPT. Clipboard reads remain permission-gated below.
+  s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, true);
+  s->setAttribute(QWebEngineSettings::JavascriptCanPaste, false);
   s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, false);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
   s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
@@ -1049,6 +1169,9 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
             case QWebEnginePermission::PermissionType::Notifications:
               capability = "notifications";
               break;
+            case QWebEnginePermission::PermissionType::ClipboardReadWrite:
+              capability = "คลิปบอร์ด";
+              break;
             case QWebEnginePermission::PermissionType::DesktopVideoCapture:
             case QWebEnginePermission::PermissionType::DesktopAudioVideoCapture:
               capability = "screen capture";
@@ -1057,12 +1180,18 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
               permission.deny();
               return;
             }
-            const auto answer = QMessageBox::question(
-                this, "Site permission",
-                permission.origin().toDisplayString() + "\nAllow access to " +
-                    capability + "?",
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-            if (answer == QMessageBox::Yes)
+            QMessageBox box(this);
+            box.setWindowTitle("สิทธิ์เว็บไซต์");
+            box.setIcon(QMessageBox::Question);
+            box.setText(QString("<b>%1</b> ต้องการใช้ %2")
+                            .arg(permission.origin().host().toHtmlEscaped(),
+                                 capability.toHtmlEscaped()));
+            box.setInformativeText(
+                "อนุญาตเฉพาะเว็บไซต์ที่คุณเชื่อถือ คุณสามารถปฏิเสธได้โดยไม่กระทบแท็บอื่น");
+            auto *allowBtn = box.addButton("อนุญาต", QMessageBox::AcceptRole);
+            box.addButton("ไม่อนุญาต", QMessageBox::RejectRole);
+            box.exec();
+            if (box.clickedButton() == allowBtn)
               permission.grant();
             else
               permission.deny();
@@ -1097,13 +1226,20 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
                                      QWebEnginePage::PermissionDeniedByUser);
           return;
         }
-        const auto answer = QMessageBox::question(
-            this, "Site permission",
-            origin.toDisplayString() + "\nAllow access to " + capability + "?",
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        QMessageBox box(this);
+        box.setWindowTitle("สิทธิ์เว็บไซต์");
+        box.setIcon(QMessageBox::Question);
+        box.setText(QString("<b>%1</b> ต้องการใช้ %2")
+                        .arg(origin.host().toHtmlEscaped(),
+                             capability.toHtmlEscaped()));
+        box.setInformativeText(
+            "อนุญาตเฉพาะเว็บไซต์ที่คุณเชื่อถือ คุณสามารถปฏิเสธได้โดยไม่กระทบแท็บอื่น");
+        auto *allowBtn = box.addButton("อนุญาต", QMessageBox::AcceptRole);
+        box.addButton("ไม่อนุญาต", QMessageBox::RejectRole);
+        box.exec();
         page->setFeaturePermission(
             origin, feature,
-            answer == QMessageBox::Yes
+            box.clickedButton() == allowBtn
                 ? QWebEnginePage::PermissionGrantedByUser
                 : QWebEnginePage::PermissionDeniedByUser);
       });
@@ -1181,8 +1317,13 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
           });
 
   connect(view, &QWebEngineView::urlChanged, this, [this, view](const QUrl &u) {
-    if (view == currentView())
+    if (view == currentView()) {
       updateCurrentUrl(u);
+      if (auto *back = findChild<QAction *>("navBackAction"))
+        back->setEnabled(view->history()->canGoBack());
+      if (auto *forward = findChild<QAction *>("navForwardAction"))
+        forward->setEnabled(view->history()->canGoForward());
+    }
   });
   connect(view, &QWebEngineView::titleChanged, this,
           &MainWindow::updateTabTitle);
@@ -1293,6 +1434,14 @@ void MainWindow::setupShortcuts() {
   key("Ctrl+L", [this] {
     urlBar_->setFocus();
     urlBar_->selectAll();
+  });
+  key("Alt+Left", [this] {
+    if (auto *view = currentView(); view && view->history()->canGoBack())
+      view->back();
+  });
+  key("Alt+Right", [this] {
+    if (auto *view = currentView(); view && view->history()->canGoForward())
+      view->forward();
   });
   auto reload = [this] { reloadCurrentView(); };
   key("Ctrl+R", reload);
@@ -1551,7 +1700,7 @@ void MainWindow::updateTabTitle(const QString &title) {
   QString displayTitle =
       title.trimmed().isEmpty() ? QStringLiteral("LiteWave") : title.left(22);
   if (view->page() && view->page()->lifecycleState() == QWebEnginePage::LifecycleState::Discarded) {
-    displayTitle += " 💤";
+    displayTitle += " ·";
   }
   if (index >= 0) {
     tabBar_->setTabText(index, displayTitle);
@@ -1867,7 +2016,7 @@ void MainWindow::refreshShieldUi() {
     const QString mode =
         adBlocker_->mode() == AdBlocker::Mode::Aggressive ? "เข้มงวด" : "มาตรฐาน";
     shieldBtn_->setToolTip(
-        QString("Shield %1 — บล็อกแล้ว %2 รายการ\nคลิกเพื่อเปลี่ยนโหมดหรือปิดเฉพาะเว็บ")
+        QString("Shield %1 — บล็อกแล้ว %2 รายการในเซสชันนี้\nคลิกเพื่อเปลี่ยนโหมดหรือปิดเฉพาะเว็บ")
             .arg(mode)
             .arg(count));
   } else {
@@ -1956,12 +2105,12 @@ void MainWindow::applyTheme() {
                 qproperty-drawBase: 0;
             }
             QTabBar::scroller {
-                width: 0px;
-                height: 0px;
+                width: 24px;
+                height: 24px;
             }
             QTabBar::left-button, QTabBar::right-button {
-                width: 0px;
-                height: 0px;
+                width: 22px;
+                height: 22px;
             }
             QTabBar::tab {
                 background-color: transparent;
@@ -1973,7 +2122,7 @@ void MainWindow::applyTheme() {
                 margin-right: 3px;
                 margin-top: 3px;
                 font-size: 13px;
-                min-width: 130px;
+                min-width: 96px;
                 max-width: 220px;
             }
             QTabBar::tab:hover {
@@ -2011,7 +2160,7 @@ void MainWindow::applyTheme() {
                 color: #ffffff;
                 border-radius: 9px;
             }
-            QToolButton#newTabButton {
+            QToolButton#tabSearchButton, QToolButton#newTabButton {
                 background-color: transparent;
                 color: #9e9ea0;
                 border: none;
@@ -2024,7 +2173,7 @@ void MainWindow::applyTheme() {
                 min-height: 26px;
                 max-height: 26px;
             }
-            QToolButton#newTabButton:hover {
+            QToolButton#tabSearchButton:hover, QToolButton#newTabButton:hover {
                 background-color: #2b2d35;
                 color: #ffffff;
             }
@@ -2271,12 +2420,12 @@ void MainWindow::applyTheme() {
                 qproperty-drawBase: 0;
             }
             QTabBar::scroller {
-                width: 0px;
-                height: 0px;
+                width: 24px;
+                height: 24px;
             }
             QTabBar::left-button, QTabBar::right-button {
-                width: 0px;
-                height: 0px;
+                width: 22px;
+                height: 22px;
             }
             QTabBar::tab {
                 background-color: transparent;
@@ -2288,7 +2437,7 @@ void MainWindow::applyTheme() {
                 margin-right: 3px;
                 margin-top: 3px;
                 font-size: 13px;
-                min-width: 130px;
+                min-width: 96px;
                 max-width: 220px;
             }
             QTabBar::tab:hover {
@@ -2326,7 +2475,7 @@ void MainWindow::applyTheme() {
                 color: #ffffff;
                 border-radius: 9px;
             }
-            QToolButton#newTabButton {
+            QToolButton#tabSearchButton, QToolButton#newTabButton {
                 background-color: transparent;
                 color: #64748b;
                 border: none;
@@ -2339,7 +2488,7 @@ void MainWindow::applyTheme() {
                 min-height: 26px;
                 max-height: 26px;
             }
-            QToolButton#newTabButton:hover {
+            QToolButton#tabSearchButton:hover, QToolButton#newTabButton:hover {
                 background-color: #ffffff;
                 color: #1e1e1e;
             }
@@ -6361,18 +6510,39 @@ void MainWindow::openDevToolsUndocked(QWebEngineView *targetView) {
 }
 
 void MainWindow::saveSession() {
-  if (privateMode_)
+  if (privateMode_ || !tabStack_)
     return;
 
   QSettings st("LiteWave", "LiteWave");
   QStringList urls;
+  urls.reserve(tabStack_->count());
+
   for (int i = 0; i < tabStack_->count(); ++i) {
     auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(i));
-    if (view && !view->url().isEmpty() && view->url().host() != "litewave.home") {
-      urls.append(view->url().toString());
+    if (!view)
+      continue;
+
+    const QUrl url = view->url();
+    if (url.isEmpty() || url.toString() == "about:blank")
+      continue;
+
+    // Preserve LiteWave home tabs as an explicit internal URL so the restored
+    // tab order matches what the user actually had open.
+    if (url.scheme() == "litewave" || url.host() == "litewave.home") {
+      urls.append(QStringLiteral("litewave://home"));
+    } else if (url.scheme() == "http" || url.scheme() == "https" ||
+               url.scheme() == "file") {
+      urls.append(url.toString(QUrl::FullyEncoded));
     }
   }
+
   st.setValue("session/openTabs", urls);
+  const int savedTabCount = static_cast<int>(urls.size());
+  st.setValue("session/activeIndex",
+              savedTabCount > 0
+                  ? std::clamp(tabStack_->currentIndex(), 0, savedTabCount - 1)
+                  : 0);
+  st.setValue("session/savedAtMs", QDateTime::currentMSecsSinceEpoch());
   st.sync();
 }
 
@@ -6389,8 +6559,34 @@ void MainWindow::restoreSession() {
   if (urls.isEmpty())
     return;
 
-  for (const QString &u : urls) {
-    createView(QUrl(u));
+  // Avoid pathological startup if a damaged settings file contains thousands
+  // of entries. 50 restored tabs is still generous for a desktop browser.
+  const int restoreCount =
+      std::min(static_cast<int>(urls.size()), 50);
+  for (int i = 0; i < restoreCount; ++i) {
+    const QString raw = urls.at(i).trimmed();
+    if (raw.isEmpty())
+      continue;
+
+    if (raw == QStringLiteral("litewave://home")) {
+      newTab();
+      continue;
+    }
+
+    const QUrl url(raw);
+    if (url.isValid() &&
+        (url.scheme() == "http" || url.scheme() == "https" ||
+         url.scheme() == "file")) {
+      createView(url);
+    }
+  }
+
+  if (tabStack_->count() > 0) {
+    const int requestedIndex = st.value("session/activeIndex", 0).toInt();
+    const int activeIndex =
+        std::clamp(requestedIndex, 0, tabStack_->count() - 1);
+    tabBar_->setCurrentIndex(activeIndex);
+    tabStack_->setCurrentIndex(activeIndex);
   }
 }
 
@@ -6440,6 +6636,14 @@ void MainWindow::saveDownloadRecords() {
 void MainWindow::checkSleepingTabs() {
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
   const int currentIdx = tabStack_->currentIndex();
+
+  QSettings perfSettings("LiteWave", "LiteWave");
+  const int freezeMinutes =
+      std::clamp(perfSettings.value("performance/tabFreezeMinutes", 10).toInt(),
+                 2, 120);
+  const int discardMinutes =
+      std::clamp(perfSettings.value("performance/tabDiscardMinutes", 30).toInt(),
+                 freezeMinutes + 1, 240);
   for (int i = 0; i < tabStack_->count(); ++i) {
     if (i == currentIdx)
       continue;
@@ -6462,18 +6666,20 @@ void MainWindow::checkSleepingTabs() {
     const qint64 lastActive = tabLastActiveTime_.value(view, now);
     const qint64 idleSeconds = (now - lastActive) / 1000;
 
-    // After 15 minutes of background inactivity: Discard tab (fully unloads renderer memory, saves 75-85% RAM)
-    // After 5 minutes of background inactivity: Freeze tab (stops JS timers and CSS animations, 0% CPU)
-    if (idleSeconds >= 15 * 60) {
+    // Freeze first to stop background timers without throwing away the page.
+    // Discard only after a longer idle period so forms/web-app state is less
+    // likely to be interrupted during normal tab switching.
+    if (idleSeconds >= static_cast<qint64>(discardMinutes) * 60) {
       if (view->page()->lifecycleState() != QWebEnginePage::LifecycleState::Discarded) {
         view->page()->setLifecycleState(QWebEnginePage::LifecycleState::Discarded);
         const QString cur = tabBar_->tabText(i);
-        if (!cur.endsWith(" 💤")) {
-          tabBar_->setTabText(i, cur + " 💤");
+        if (!cur.endsWith(" ·")) {
+          tabBar_->setTabText(i, cur + " ·");
         }
-        tabBar_->setTabToolTip(i, cur + " (จำศีลเพื่อประหยัด RAM - คลิกเพื่อเปิดต่อทันที)");
+        tabBar_->setTabToolTip(
+            i, cur + " — แท็บพักการทำงานเพื่อประหยัด RAM; คลิกเพื่อเปิดต่อ");
       }
-    } else if (idleSeconds >= 5 * 60) {
+    } else if (idleSeconds >= static_cast<qint64>(freezeMinutes) * 60) {
       if (view->page()->lifecycleState() == QWebEnginePage::LifecycleState::Active) {
         view->page()->setLifecycleState(QWebEnginePage::LifecycleState::Frozen);
       }
@@ -6489,8 +6695,8 @@ void MainWindow::wakeTab(QWebEngineView *view) {
     const int idx = tabStack_->indexOf(view);
     if (idx >= 0) {
       QString text = tabBar_->tabText(idx);
-      if (text.endsWith(" 💤")) {
-        text.chop(3);
+      if (text.endsWith(" ·")) {
+        text.chop(2);
         tabBar_->setTabText(idx, text);
       }
       tabBar_->setTabToolTip(idx, text);

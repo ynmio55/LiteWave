@@ -2,6 +2,9 @@ name: Build LiteWave
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -138,13 +141,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
-          name: LiteWave Latest (v1.1.0)
+          name: LiteWave Latest (v1.2.0)
           prerelease: false
           make_latest: true
           target_commitish: ${{ github.sha }}
           fail_on_unmatched_files: true
           body: |
-            LiteWave v1.1.0 built from commit ${{ github.sha }}.
+            LiteWave v1.2.0 built from commit ${{ github.sha }}.
             LiteWave Shield Standard is included: it blocks known third-party
             advertising endpoints while preserving main-page navigation,
             verification, and per-site compatibility controls. Use the Shield
