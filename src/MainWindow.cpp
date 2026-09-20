@@ -5486,21 +5486,39 @@ void MainWindow::downloadAndInstallUpdate(const QString &downloadUrl, const QStr
       return;
     }
 
-    // Save installed update metadata into QSettings so subsequent checks know it is up-to-date
-    QSettings st("LiteWave", "LiteWave");
-    if (!newVersion.isEmpty()) {
-      st.setValue("update/installedVersion", newVersion);
-    }
-    if (!newCommit.isEmpty()) {
-      st.setValue("update/installedCommit", newCommit);
+#ifdef Q_OS_WIN
+    // Windows updates are installed in-place with the same Inno Setup AppId.
+    // Do not mark the update as installed before Setup succeeds; the compiled
+    // application version is the source of truth after relaunch.
+    QMessageBox::information(
+        this, "พร้อมอัปเดต",
+        QString("ดาวน์โหลด LiteWave v%1 เรียบร้อยแล้ว\n"
+                "โปรแกรมจะปิด ติดตั้งการอัปเดตอัตโนมัติ และเปิดกลับมาอีกครั้ง")
+            .arg(newVersion));
+
+    const QStringList setupArgs = {
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/CLOSEAPPLICATIONS",
+        "/RESTARTAPPLICATIONS"
+    };
+
+    if (!QProcess::startDetached(savePath, setupArgs)) {
+      QMessageBox::critical(
+          this, "อัปเดตไม่สำเร็จ",
+          "ไม่สามารถเปิดตัวติดตั้งอัปเดตได้ กรุณาลองใหม่อีกครั้ง");
+      return;
     }
 
-#ifdef Q_OS_WIN
-    QMessageBox::information(this, "ดาวน์โหลดเสร็จสมบูรณ์",
-                             "ดาวน์โหลดตัวอัปเดตเรียบร้อยแล้ว!\nระบบจะเปิดหน้าต่างติดตั้งและปิด LiteWave เพื่อทำการอัปเดตทันที");
-    QProcess::startDetached(savePath, QStringList());
     qApp->quit();
 #else
+    // Linux archive updates remain manual for now.
+    QSettings st("LiteWave", "LiteWave");
+    if (!newVersion.isEmpty())
+      st.setValue("update/downloadedVersion", newVersion);
+    if (!newCommit.isEmpty())
+      st.setValue("update/downloadedCommit", newCommit);
     QMessageBox::information(this, "ดาวน์โหลดเสร็จสมบูรณ์",
                              QString("ดาวน์โหลดไฟล์อัปเดตเรียบร้อยแล้ว:\n%1\n\nระบบจะเปิดโฟลเดอร์ไฟล์ให้เพื่อทำการแตกไฟล์ใช้งาน").arg(savePath));
     QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(savePath).absolutePath()));
