@@ -94,16 +94,18 @@ void configureSecureDns(QSettings &settings)
 
 int main(int argc, char *argv[])
 {
-    qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
-            "--enable-gpu-rasterization "
-            "--enable-zero-copy "
-            "--ignore-gpu-blocklist "
-            "--enable-quic "
-            "--enable-tcp-fastopen "
-            "--enable-async-dns "
-            "--renderer-process-limit=8 "
-            "--enable-features=ParallelDownloading,NetworkServiceInProcess,VaapiVideoDecoder,BackForwardCache "
-            "--disable-blink-features=AutomationControlled");
+    // Keep LiteWave fast without forcing risky GPU/network flags on every machine.
+    // Respect a user/admin supplied Chromium flag set so broken GPU drivers can
+    // be worked around without recompiling the browser.
+    if (qEnvironmentVariableIsEmpty("QTWEBENGINE_CHROMIUM_FLAGS")) {
+        qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
+                "--enable-gpu-rasterization "
+                "--enable-zero-copy "
+                "--enable-quic "
+                "--renderer-process-limit=8 "
+                "--enable-features=ParallelDownloading,BackForwardCache "
+                "--disable-blink-features=AutomationControlled");
+    }
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
     QApplication::setOrganizationName("LiteWave");
