@@ -10,4 +10,11 @@ export QTWEBENGINEPROCESS_PATH="$app_dir/libexec/QtWebEngineProcess"
 export QTWEBENGINE_RESOURCES_PATH="$app_dir/resources"
 export QTWEBENGINE_LOCALES_PATH="$app_dir/translations/qtwebengine_locales"
 
+# Prefer the desktop portal theme when the bundled Qt build provides it.
+# This makes file open/save dialogs follow the host desktop (GNOME/KDE)
+# instead of falling back to Qt's generic dialog.
+if [ -z "${QT_QPA_PLATFORMTHEME:-}" ] && [ -f "$app_dir/plugins/platformthemes/libqxdgdesktopportal.so" ]; then
+  export QT_QPA_PLATFORMTHEME=xdgdesktopportal
+fi
+
 exec "$app_dir/bin/LiteWave" "$@"
