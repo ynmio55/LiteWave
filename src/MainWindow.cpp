@@ -84,7 +84,7 @@
 #include <algorithm>
 
 #ifndef LITEWAVE_APP_VERSION
-#define LITEWAVE_APP_VERSION "1.2.1"
+#define LITEWAVE_APP_VERSION "1.2.2"
 #endif
 
 #ifndef LITEWAVE_GIT_COMMIT
