@@ -94,6 +94,15 @@ void configureSecureDns(QSettings &settings)
 
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_LINUX
+    // Prefer the desktop portal theme on Linux so file open/save dialogs use
+    // the host desktop's modern native picker (GNOME/KDE) instead of Qt's
+    // generic fallback. Respect an explicit user/admin override.
+    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORMTHEME")) {
+        qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
+    }
+#endif
+
     // Keep LiteWave fast without forcing risky GPU/network flags on every machine.
     // Respect a user/admin supplied Chromium flag set so broken GPU drivers can
     // be worked around without recompiling the browser.
