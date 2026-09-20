@@ -31,4 +31,7 @@ Name: "{commondesktop}\LiteWave"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 Name: "desktopicon"; Description: "สร้างไอคอน LiteWave บน Desktop"; GroupDescription: "ไอคอนเพิ่มเติม:"
 
 [Run]
+; Interactive fresh install: keep the familiar "Launch LiteWave" checkbox.
 Filename: "{app}\{#AppExeName}"; Description: "เปิด LiteWave"; Flags: nowait postinstall skipifsilent
+; Silent in-place updater: relaunch automatically after Setup replaces files.
+Filename: "{app}\{#AppExeName}"; Flags: nowait runascurrentuser skipifnotsilent
