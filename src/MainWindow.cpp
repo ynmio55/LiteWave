@@ -495,8 +495,8 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     for (int i = 0; i < tabBar_->count(); ++i) {
       auto *view = qobject_cast<QWebEngineView *>(tabStack_->widget(i));
       QString title = tabBar_->tabText(i);
-      if (title.endsWith(" 💤"))
-        title.chop(3);
+      if (title.endsWith(" ·"))
+        title.chop(2);
       if (title.trimmed().isEmpty())
         title = QStringLiteral("แท็บใหม่");
 
@@ -904,8 +904,37 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   statusBar()->setVisible(startupSettings.value("showStatusBar", true).toBool());
 
   const QString startupOpt = startupSettings.value("startupOption", "home").toString();
+  const bool previousCleanExit =
+      startupSettings.value("session/cleanExit", true).toBool();
+  if (!privateMode_) {
+    // Mark the session dirty as soon as the window starts. A normal close will
+    // flip it back to true; if the process/OS crashes it remains false.
+    startupSettings.setValue("session/cleanExit", false);
+    startupSettings.sync();
+  }
+
   if (!privateMode_ && startupOpt == "restore") {
-    restoreSession();
+    const QStringList savedTabs =
+        startupSettings.value("session/openTabs").toStringList();
+    bool shouldRestore = !savedTabs.isEmpty();
+
+    if (!previousCleanExit && !savedTabs.isEmpty()) {
+      QMessageBox recoveryBox(this);
+      recoveryBox.setWindowTitle("กู้คืนเซสชัน LiteWave");
+      recoveryBox.setIcon(QMessageBox::Information);
+      recoveryBox.setText("<b>LiteWave ปิดไม่สมบูรณ์ในครั้งก่อน</b>");
+      recoveryBox.setInformativeText(
+          QString("พบ %1 แท็บจากเซสชันก่อนหน้า ต้องการกู้คืนหรือไม่?")
+              .arg(savedTabs.size()));
+      auto *restoreBtn =
+          recoveryBox.addButton("กู้คืนแท็บ", QMessageBox::AcceptRole);
+      recoveryBox.addButton("เริ่มใหม่", QMessageBox::RejectRole);
+      recoveryBox.exec();
+      shouldRestore = recoveryBox.clickedButton() == restoreBtn;
+    }
+
+    if (shouldRestore)
+      restoreSession();
     if (tabStack_->count() == 0)
       newTab();
   } else if (!privateMode_ && startupOpt == "custom") {
@@ -974,6 +1003,11 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
 void MainWindow::closeEvent(QCloseEvent *event) {
   saveSession();
   saveDownloadRecords();
+  if (!privateMode_) {
+    QSettings st("LiteWave", "LiteWave");
+    st.setValue("session/cleanExit", true);
+    st.sync();
+  }
   QMainWindow::closeEvent(event);
 }
 
@@ -1635,7 +1669,7 @@ void MainWindow::updateTabTitle(const QString &title) {
   QString displayTitle =
       title.trimmed().isEmpty() ? QStringLiteral("LiteWave") : title.left(22);
   if (view->page() && view->page()->lifecycleState() == QWebEnginePage::LifecycleState::Discarded) {
-    displayTitle += " 💤";
+    displayTitle += " ·";
   }
   if (index >= 0) {
     tabBar_->setTabText(index, displayTitle);
@@ -6608,10 +6642,11 @@ void MainWindow::checkSleepingTabs() {
       if (view->page()->lifecycleState() != QWebEnginePage::LifecycleState::Discarded) {
         view->page()->setLifecycleState(QWebEnginePage::LifecycleState::Discarded);
         const QString cur = tabBar_->tabText(i);
-        if (!cur.endsWith(" 💤")) {
-          tabBar_->setTabText(i, cur + " 💤");
+        if (!cur.endsWith(" ·")) {
+          tabBar_->setTabText(i, cur + " ·");
         }
-        tabBar_->setTabToolTip(i, cur + " (จำศีลเพื่อประหยัด RAM - คลิกเพื่อเปิดต่อทันที)");
+        tabBar_->setTabToolTip(
+            i, cur + " — แท็บพักการทำงานเพื่อประหยัด RAM; คลิกเพื่อเปิดต่อ");
       }
     } else if (idleSeconds >= static_cast<qint64>(freezeMinutes) * 60) {
       if (view->page()->lifecycleState() == QWebEnginePage::LifecycleState::Active) {
@@ -6629,8 +6664,8 @@ void MainWindow::wakeTab(QWebEngineView *view) {
     const int idx = tabStack_->indexOf(view);
     if (idx >= 0) {
       QString text = tabBar_->tabText(idx);
-      if (text.endsWith(" 💤")) {
-        text.chop(3);
+      if (text.endsWith(" ·")) {
+        text.chop(2);
         tabBar_->setTabText(idx, text);
       }
       tabBar_->setTabToolTip(idx, text);
