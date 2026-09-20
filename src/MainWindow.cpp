@@ -69,6 +69,7 @@
 #include <QWebEngineCertificateError>
 #include <QWebEngineDownloadRequest>
 #include <QWebEngineFullScreenRequest>
+#include <QWebEngineHistory>
 #include <QWebEngineNewWindowRequest>
 #include <QWebEnginePage>
 #include <QWindow>
