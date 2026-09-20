@@ -84,7 +84,7 @@
 #include <algorithm>
 
 #ifndef LITEWAVE_APP_VERSION
-#define LITEWAVE_APP_VERSION "1.1.0"
+#define LITEWAVE_APP_VERSION "1.2.1"
 #endif
 
 #ifndef LITEWAVE_GIT_COMMIT
@@ -5357,30 +5357,29 @@ void MainWindow::checkForUpdates(bool silentIfUpToDate) {
       }
     }
 
-    // Check saved update records in QSettings
+    // The compiled binary version is the source of truth. Persistent update
+    // records are informational only; stale QSettings must never make an older
+    // binary believe it is already updated.
+    const bool sameCommit =
+        !targetCommit.isEmpty() && !localCommit.isEmpty() &&
+        localCommit != "dev" &&
+        (targetCommit.startsWith(localCommit) ||
+         localCommit.startsWith(targetCommit));
+
+    // If the binary version is older, always offer the update when a platform
+    // asset exists. Commit equality only matters when versions are already equal.
+    const bool hasNewVersion =
+        isNewerVersion && !targetAssetUrl.isEmpty();
+
+    // Clean stale bookkeeping left by older updater versions.
     QSettings st("LiteWave", "LiteWave");
-    QString installedCommit = st.value("update/installedCommit").toString().trimmed();
-    QString installedVersion = st.value("update/installedVersion").toString().trimmed();
-
-    bool sameCommit = false;
-    if (!targetCommit.isEmpty()) {
-      if (!localCommit.isEmpty() && localCommit != "dev" &&
-          (targetCommit.startsWith(localCommit) || localCommit.startsWith(targetCommit))) {
-        sameCommit = true;
-      }
-      if (!installedCommit.isEmpty() &&
-          (targetCommit.startsWith(installedCommit) || installedCommit.startsWith(targetCommit))) {
-        sameCommit = true;
-      }
+    const QString installedVersion =
+        st.value("update/installedVersion").toString().trimmed();
+    if (!installedVersion.isEmpty() && installedVersion != localVer) {
+      st.remove("update/installedVersion");
+      st.remove("update/installedCommit");
+      st.sync();
     }
-
-    bool alreadyUpdated = false;
-    if (!installedVersion.isEmpty() && !remoteVerClean.isEmpty() && installedVersion == remoteVerClean) {
-      alreadyUpdated = true;
-    }
-
-    // Only prompt if remote is strictly newer, not already on same commit/version, and asset exists
-    bool hasNewVersion = isNewerVersion && !sameCommit && !alreadyUpdated && !targetAssetUrl.isEmpty();
 
     if (!hasNewVersion) {
       if (!silentIfUpToDate) {
