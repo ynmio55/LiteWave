@@ -14,6 +14,7 @@ private slots:
     void siteExceptionRestoresCompatibility();
     void popupBlocksAreCounted();
     void bundledEasyListBlocksAdServer();
+    void youtubeShieldIncludesPlayerResponseGuards();
     void searchEngineManagerBuildsCorrectUrls();
     void searchEngineManagerSupportsEnginesAndFallback();
 };
@@ -80,6 +81,21 @@ void ShieldTests::bundledEasyListBlocksAdServer()
         QUrl("https://000491b06a.com/ad.js"),
         QUrl("https://news.example.com/article"),
         QWebEngineUrlRequestInfo::ResourceTypeScript));
+}
+
+void ShieldTests::youtubeShieldIncludesPlayerResponseGuards()
+{
+    const QString script = AdBlocker::youtubeAdSkipScript();
+
+    QVERIFY(script.contains("/youtubei/v1/player"));
+    QVERIFY(script.contains("sanitizePlayerPayload"));
+    QVERIFY(script.contains("adPlacements"));
+    QVERIFY(script.contains("playerAds"));
+    QVERIFY(script.contains("adSlots"));
+    QVERIFY(script.contains("__litewave_yt_fetch_guard_installed"));
+    QVERIFY(script.contains("ytInitialPlayerResponse"));
+    QVERIFY(script.contains("yt-navigate-finish"));
+    QVERIFY(script.contains("restorePlayback"));
 }
 
 void ShieldTests::popupBlocksAreCounted()
