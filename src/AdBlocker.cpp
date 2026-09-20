@@ -370,6 +370,153 @@ QString AdBlocker::youtubeAdSkipScript()
         return window.__litewave_shield_disabled === true;
     }
 
+    function sanitizePlayerPayload(payload) {
+        if (shieldDisabled() || !payload || typeof payload !== 'object')
+            return payload;
+
+        // Keep this intentionally narrow. These keys are ad scheduling/payload
+        // containers in YouTube player responses; do not touch streamingData,
+        // captions, formats, playbackTracking, DRM or account data.
+        const adKeys = [
+            'adPlacements',
+            'playerAds',
+            'adSlots',
+            'adBreakHeartbeatParams',
+            'adBreakParams'
+        ];
+
+        for (const key of adKeys) {
+            try {
+                if (Object.prototype.hasOwnProperty.call(payload, key))
+                    delete payload[key];
+            } catch (e) {}
+        }
+
+        // Some response variants keep ad containers inside playerResponse-ish
+        // nested objects. Walk only a shallow set of known containers instead
+        // of recursively rewriting arbitrary YouTube JSON.
+        const knownContainers = [
+            payload.playerResponse,
+            payload.response,
+            payload.data
+        ];
+        for (const child of knownContainers) {
+            if (!child || typeof child !== 'object' || child === payload)
+                continue;
+            for (const key of adKeys) {
+                try {
+                    if (Object.prototype.hasOwnProperty.call(child, key))
+                        delete child[key];
+                } catch (e) {}
+            }
+        }
+
+        return payload;
+    }
+
+    function isPlayerApiUrl(value) {
+        try {
+            const raw = typeof value === 'string'
+                ? value
+                : (value && typeof value.url === 'string' ? value.url : '');
+            if (!raw) return false;
+            const u = new URL(raw, location.href);
+            return /(^|\\.)youtube\\.com$/i.test(u.hostname) &&
+                   u.pathname.indexOf('/youtubei/v1/player') !== -1;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function installFetchPlayerGuard() {
+        try {
+            if (window.__litewave_yt_fetch_guard_installed || typeof window.fetch !== 'function')
+                return;
+            window.__litewave_yt_fetch_guard_installed = true;
+
+            const originalFetch = window.fetch;
+            window.fetch = function(input, init) {
+                return originalFetch.apply(this, arguments).then(function(response) {
+                    if (shieldDisabled() || !isPlayerApiUrl(input) || !response)
+                        return response;
+
+                    try {
+                        const originalJson = response.json;
+                        if (typeof originalJson === 'function') {
+                            Object.defineProperty(response, 'json', {
+                                configurable: true,
+                                value: function() {
+                                    return originalJson.call(response).then(sanitizePlayerPayload);
+                                }
+                            });
+                        }
+                    } catch (e) {}
+
+                    try {
+                        const originalText = response.text;
+                        if (typeof originalText === 'function') {
+                            Object.defineProperty(response, 'text', {
+                                configurable: true,
+                                value: function() {
+                                    return originalText.call(response).then(function(text) {
+                                        try {
+                                            const parsed = JSON.parse(text);
+                                            return JSON.stringify(sanitizePlayerPayload(parsed));
+                                        } catch (e) {
+                                            return text;
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    } catch (e) {}
+
+                    return response;
+                });
+            };
+        } catch (e) {}
+    }
+
+    function installInitialPlayerGuard() {
+        try {
+            if (window.__litewave_yt_initial_guard_installed)
+                return;
+            window.__litewave_yt_initial_guard_installed = true;
+
+            let initialValue;
+            try { initialValue = window.ytInitialPlayerResponse; } catch (e) {}
+
+            Object.defineProperty(window, 'ytInitialPlayerResponse', {
+                configurable: true,
+                enumerable: true,
+                get: function() {
+                    return initialValue;
+                },
+                set: function(value) {
+                    initialValue = sanitizePlayerPayload(value);
+                }
+            });
+
+            if (initialValue && typeof initialValue === 'object')
+                initialValue = sanitizePlayerPayload(initialValue);
+        } catch (e) {}
+    }
+
+    function sanitizeLiveInitialPayload() {
+        if (shieldDisabled()) return;
+        try {
+            if (window.ytInitialPlayerResponse &&
+                typeof window.ytInitialPlayerResponse === 'object') {
+                sanitizePlayerPayload(window.ytInitialPlayerResponse);
+            }
+        } catch (e) {}
+    }
+
+    // Install response guards immediately at DocumentCreation, before the
+    // YouTube application starts issuing player API requests.
+    installFetchPlayerGuard();
+    installInitialPlayerGuard();
+
     function installCosmetics() {
         try {
             if (document.getElementById('litewave-youtube-shield-style')) return;
@@ -503,6 +650,7 @@ QString AdBlocker::youtubeAdSkipScript()
         }
 
         installCosmetics();
+        sanitizeLiveInitialPayload();
 
         const player = currentPlayer();
         if (!player) {
@@ -602,6 +750,8 @@ QString AdBlocker::youtubeAdSkipScript()
 
     window.addEventListener('yt-navigate-finish', function() {
         LW.player = null;
+        installFetchPlayerGuard();
+        sanitizeLiveInitialPayload();
         init();
     }, { passive: true });
 
