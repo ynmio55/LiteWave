@@ -469,11 +469,15 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   tabBar_->setDrawBase(false);
   tabBar_->setDocumentMode(true);
   tabBar_->setExpanding(false);
+  // Keep the tab strip only as wide as its tabs so the + button follows the
+  // last visible tab. The strip may still shrink when space runs out, at which
+  // point QTabBar's scroll buttons handle overflow.
+  tabBar_->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
   tabBar_->setIconSize(QSize(16, 16));
   tabBar_->setUsesScrollButtons(true);
   tabBar_->setElideMode(Qt::ElideRight);
 
-  tabBarLayout->addWidget(tabBar_, 1);
+  tabBarLayout->addWidget(tabBar_);
 
   // Tab search / switcher for crowded tab strips.
   auto *tabSearchBtn = new QToolButton(this);
