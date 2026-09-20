@@ -528,8 +528,6 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
       });
     }
   });
-  tabBarLayout->addWidget(tabSearchBtn);
-
   // '+' New Tab Button right next to the tabs (ชิดแท็บ)
   auto *newTabBtn = new QToolButton(this);
   newTabBtn->setObjectName("newTabButton");
@@ -540,6 +538,7 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   connect(newTabBtn, &QToolButton::clicked, this, &MainWindow::newTab);
   tabBarLayout->addWidget(newTabBtn);
   tabBarLayout->addStretch(); // Keeps + button right next to the tabs!
+  tabBarLayout->addWidget(tabSearchBtn);
 
   // Window Controls on far right of Tab Bar Row (Minimize, Maximize/Restore, Close)
   minWinBtn_ = new QToolButton(this);
@@ -586,15 +585,19 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   };
 
   auto *back = addNavAction("←", "ย้อนกลับ (Alt+Left)");
+  back->setObjectName("navBackAction");
+  back->setEnabled(false);
   connect(back, &QAction::triggered, this, [this] {
-    if (currentView())
-      currentView()->back();
+    if (auto *view = currentView(); view && view->history()->canGoBack())
+      view->back();
   });
 
   auto *forward = addNavAction("→", "ถัดไป (Alt+Right)");
+  forward->setObjectName("navForwardAction");
+  forward->setEnabled(false);
   connect(forward, &QAction::triggered, this, [this] {
-    if (currentView())
-      currentView()->forward();
+    if (auto *view = currentView(); view && view->history()->canGoForward())
+      view->forward();
   });
 
   auto *reload = addNavAction("↻", "รีเฟรชหน้าเว็บ (Ctrl+R)");
@@ -860,6 +863,10 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
       wakeTab(currentView());
       tabLastActiveTime_[currentView()] = QDateTime::currentMSecsSinceEpoch();
       updateCurrentUrl(currentView()->url());
+      if (auto *back = findChild<QAction *>("navBackAction"))
+        back->setEnabled(currentView()->history()->canGoBack());
+      if (auto *forward = findChild<QAction *>("navForwardAction"))
+        forward->setEnabled(currentView()->history()->canGoForward());
       setWindowTitle(currentView()->title() +
                      (privateMode_ ? " — Private · LiteWave" : " — LiteWave"));
       if (findBar_) {
@@ -1051,7 +1058,10 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   s->setAttribute(QWebEngineSettings::PluginsEnabled, true);
   s->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, false);
   s->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, false);
-  s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, false);
+  // Allow user-initiated Clipboard API writes such as Copy buttons on
+  // GitHub/ChatGPT. Clipboard reads remain permission-gated below.
+  s->setAttribute(QWebEngineSettings::JavascriptCanAccessClipboard, true);
+  s->setAttribute(QWebEngineSettings::JavascriptCanPaste, false);
   s->setAttribute(QWebEngineSettings::AllowWindowActivationFromJavaScript, false);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
   s->setAttribute(QWebEngineSettings::ScreenCaptureEnabled, true);
@@ -1153,6 +1163,9 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
               break;
             case QWebEnginePermission::PermissionType::Notifications:
               capability = "notifications";
+              break;
+            case QWebEnginePermission::PermissionType::ClipboardReadWrite:
+              capability = "คลิปบอร์ด";
               break;
             case QWebEnginePermission::PermissionType::DesktopVideoCapture:
             case QWebEnginePermission::PermissionType::DesktopAudioVideoCapture:
@@ -1299,8 +1312,13 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
           });
 
   connect(view, &QWebEngineView::urlChanged, this, [this, view](const QUrl &u) {
-    if (view == currentView())
+    if (view == currentView()) {
       updateCurrentUrl(u);
+      if (auto *back = findChild<QAction *>("navBackAction"))
+        back->setEnabled(view->history()->canGoBack());
+      if (auto *forward = findChild<QAction *>("navForwardAction"))
+        forward->setEnabled(view->history()->canGoForward());
+    }
   });
   connect(view, &QWebEngineView::titleChanged, this,
           &MainWindow::updateTabTitle);
@@ -1411,6 +1429,14 @@ void MainWindow::setupShortcuts() {
   key("Ctrl+L", [this] {
     urlBar_->setFocus();
     urlBar_->selectAll();
+  });
+  key("Alt+Left", [this] {
+    if (auto *view = currentView(); view && view->history()->canGoBack())
+      view->back();
+  });
+  key("Alt+Right", [this] {
+    if (auto *view = currentView(); view && view->history()->canGoForward())
+      view->forward();
   });
   auto reload = [this] { reloadCurrentView(); };
   key("Ctrl+R", reload);
