@@ -1,5 +1,5 @@
 #define AppName "LiteWave"
-#define AppVersion "1.2.0"
+#define AppVersion "1.2.1"
 #define AppPublisher "Yanaphat Ngaolakhorn (ynmio55)"
 #define AppExeName "LiteWave.exe"
 
