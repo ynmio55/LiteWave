@@ -185,6 +185,34 @@ QVector<SuggestionItem> SearchSuggestionPopup::getHistorySuggestions(const QStri
   const QVariantList history = st.value("history").toList();
 
   const QString qLower = query.toLower();
+
+  // Always provide an explicit action for what the user typed. This makes the
+  // omnibox predictable even while remote suggestions are still loading.
+  const bool looksLikeUrl =
+      query.contains('.') || query.startsWith("http://", Qt::CaseInsensitive) ||
+      query.startsWith("https://", Qt::CaseInsensitive) ||
+      query.startsWith("localhost", Qt::CaseInsensitive);
+
+  if (looksLikeUrl) {
+    const QUrl directUrl = QUrl::fromUserInput(query);
+    if (directUrl.isValid() && !directUrl.host().isEmpty()) {
+      SuggestionItem direct;
+      direct.type = SuggestionItem::Website;
+      direct.text = query;
+      direct.urlOrQuery = directUrl.toString();
+      direct.subtitle = "เปิดเว็บไซต์";
+      items.append(direct);
+    }
+  } else {
+    SuggestionItem search;
+    search.type = SuggestionItem::SearchSuggestion;
+    search.text = query;
+    search.urlOrQuery = query;
+    search.subtitle = QString("ค้นหาด้วย %1")
+                          .arg(SearchEngineManager::instance().currentEngine().name);
+    items.append(search);
+  }
+
   int count = 0;
 
   for (const auto &var : history) {
@@ -220,9 +248,13 @@ QVector<SuggestionItem> SearchSuggestionPopup::getHistorySuggestions(const QStri
       }
     }
 
-    // Match domain or title
-    if (!title.isEmpty() && title.toLower().contains(qLower)) {
-      const QString host = url.host().isEmpty() ? urlStr : url.host();
+    // Match page title, host, or the complete URL. This lets users type a
+    // domain fragment and get the page immediately instead of only matching
+    // previously recorded titles.
+    const QString host = url.host().isEmpty() ? urlStr : url.host();
+    if ((!title.isEmpty() && title.toLower().contains(qLower)) ||
+        host.toLower().contains(qLower) ||
+        urlStr.toLower().contains(qLower)) {
       if (!host.isEmpty()) {
         bool already = false;
         for (const auto &it : items) {
