@@ -6391,9 +6391,11 @@ void MainWindow::saveSession() {
   }
 
   st.setValue("session/openTabs", urls);
+  const int savedTabCount = static_cast<int>(urls.size());
   st.setValue("session/activeIndex",
-              std::clamp(tabStack_->currentIndex(), 0,
-                         std::max(0, urls.size() - 1)));
+              savedTabCount > 0
+                  ? std::clamp(tabStack_->currentIndex(), 0, savedTabCount - 1)
+                  : 0);
   st.setValue("session/savedAtMs", QDateTime::currentMSecsSinceEpoch());
   st.sync();
 }
@@ -6413,7 +6415,8 @@ void MainWindow::restoreSession() {
 
   // Avoid pathological startup if a damaged settings file contains thousands
   // of entries. 50 restored tabs is still generous for a desktop browser.
-  const int restoreCount = std::min(urls.size(), 50);
+  const int restoreCount =
+      std::min(static_cast<int>(urls.size()), 50);
   for (int i = 0; i < restoreCount; ++i) {
     const QString raw = urls.at(i).trimmed();
     if (raw.isEmpty())
