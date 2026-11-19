@@ -88,7 +88,7 @@
 #include <algorithm>
 
 #ifndef LITEWAVE_APP_VERSION
-#define LITEWAVE_APP_VERSION "1.3.0"
+#define LITEWAVE_APP_VERSION "1.3.1"
 #endif
 
 #ifndef LITEWAVE_GIT_COMMIT
@@ -181,6 +181,9 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
     p.drawEllipse(QPointF(10, 4.5), 1.8, 1.8);
     p.drawEllipse(QPointF(10, 10), 1.8, 1.8);
     p.drawEllipse(QPointF(10, 15.5), 1.8, 1.8);
+  } else if (name == "search") {
+    p.drawEllipse(QPointF(8.5, 8.5), 5.2, 5.2);
+    p.drawLine(QPointF(12.4, 12.4), QPointF(16.5, 16.5));
   } else if (name == "star" || name == "star_filled") {
     QPolygonF star;
     for (int i = 0; i < 10; ++i) {
@@ -1891,7 +1894,7 @@ void MainWindow::updateCurrentUrl(const QUrl &url) {
   if (sslAction_) {
     const QColor col = darkMode_ ? QColor("#9ca3af") : QColor("#64748b");
     if (isHome) {
-      sslAction_->setIcon(createMenuIcon("search", col));
+      sslAction_->setIcon(createToolbarIcon("search", col));
       sslAction_->setToolTip("ค้นหาหรือพิมพ์ URL");
     } else if (currentUrl.scheme() == "https") {
       sslAction_->setIcon(createToolbarIcon("lock_https", QColor("#10b981")));
@@ -1945,6 +1948,11 @@ void MainWindow::updateBookmarkStarState() {
     return;
   auto *view = currentView();
   const QColor outline = darkMode_ ? QColor("#9ca3af") : QColor("#5f6368");
+  // Like Chrome, there is nothing to bookmark on the new tab page.
+  const QUrl pageUrl = view ? view->url() : QUrl();
+  bookmarkAction_->setVisible(view && !pageUrl.isEmpty() &&
+                              !pageUrl.toString().contains("litewave.home") &&
+                              pageUrl.scheme() != "litewave");
   if (!view) {
     bookmarkAction_->setIcon(createToolbarIcon("star", outline));
     bookmarkAction_->setToolTip("บันทึกหน้าเว็บนี้ (Ctrl+D)");

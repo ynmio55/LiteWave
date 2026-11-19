@@ -141,15 +141,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
-          name: LiteWave Latest (v1.3.0)
+          name: LiteWave Latest (v1.3.1)
           prerelease: false
           make_latest: true
           target_commitish: ${{ github.sha }}
           fail_on_unmatched_files: true
           body: |
-            LiteWave v1.3.0 built from commit ${{ github.sha }}.
+            LiteWave v1.3.1 built from commit ${{ github.sha }}.
 
-            What's new
+            v1.3.1: the new tab page shows the search icon in the address bar
+            again and no longer offers a bookmark star.
+
+            What's new in 1.3
             - LiteWave Shield now uses the full EasyList (plus EasyPrivacy in
               Aggressive mode), honours filter exceptions, hides leftover ad
               slots with EasyList element-hiding rules, and updates its rules
