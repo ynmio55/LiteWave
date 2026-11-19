@@ -215,7 +215,7 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     QApplication::setOrganizationName("LiteWave");
     QApplication::setApplicationName("LiteWave");
-    QApplication::setApplicationVersion("1.2.3");
+    QApplication::setApplicationVersion(LITEWAVE_APP_VERSION);
     QGuiApplication::setDesktopFileName("LiteWave");
     QIcon appIcon;
     appIcon.addFile(":/icons/litewave.png");

@@ -141,17 +141,30 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
-          name: LiteWave Latest (v1.2.3)
+          name: LiteWave Latest (v1.3.0)
           prerelease: false
           make_latest: true
           target_commitish: ${{ github.sha }}
           fail_on_unmatched_files: true
           body: |
-            LiteWave v1.2.3 built from commit ${{ github.sha }}.
-            LiteWave Shield Standard is included: it blocks known third-party
-            advertising endpoints while preserving main-page navigation,
-            verification, and per-site compatibility controls. Use the Shield
-            menu to choose Standard, Aggressive, or disable filtering for one site.
+            LiteWave v1.3.0 built from commit ${{ github.sha }}.
+
+            What's new
+            - LiteWave Shield now uses the full EasyList (plus EasyPrivacy in
+              Aggressive mode), honours filter exceptions, hides leftover ad
+              slots with EasyList element-hiding rules, and updates its rules
+              automatically every 4 days.
+            - Chrome-style interface: compact omnibox (hides https://, star
+              inside the address bar), stop/reload button, link-preview status
+              bubble instead of a status bar, downloads button that appears
+              when needed, and the ⋮ menu.
+            - Chrome keyboard shortcuts: Alt+D/F6/Ctrl+K, Ctrl+Enter,
+              Ctrl+PgUp/PgDown, Ctrl+U, Ctrl+Shift+R hard reload, Esc to stop.
+            - Links from other apps open in the running LiteWave window.
+            - Fixes: sign-in popups now close themselves, middle-click opens
+              background tabs, the address bar no longer overwrites typing,
+              closing a tab shows the correct URL, smoother toolbar.
+
             Windows: download the Setup EXE and run it. Linux archive is built on Ubuntu 24.04;
             Fedora users should follow the source-build instructions in README.
           files: |
