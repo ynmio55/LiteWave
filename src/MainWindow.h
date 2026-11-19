@@ -115,6 +115,19 @@ private:
     QList<ActiveDownload> activeDownloads_;
     QList<BookmarkItem> bookmarks_;
     QAction *bookmarkAction_ = nullptr;
+    QAction *reloadAction_ = nullptr;
+    QAction *downloadsAction_ = nullptr;
+    QLabel *statusBubble_ = nullptr;
+    QTimer *statusBubbleTimer_ = nullptr;
+    QString urlBarFullText_;
+    QString shieldUiKey_;
+
+    static QString displayUrl(const QString &fullUrl);
+    void updateReloadAction();
+    void restoreStatusBar();
+    void showStatusMessage(const QString &message, int timeoutMs = 4000);
+    void showStatusBubble(const QString &text, int timeoutMs);
+    void positionStatusBubble();
     QToolButton *downloadsBtn_ = nullptr;
     QPointer<QWidget> downloadPopup_;
     QToolButton *menuBtn_ = nullptr;

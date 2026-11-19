@@ -6,6 +6,7 @@
 #include "FindBar.h"
 #include "SearchSuggestionPopup.h"
 
+#include <cmath>
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -87,7 +88,7 @@
 #include <algorithm>
 
 #ifndef LITEWAVE_APP_VERSION
-#define LITEWAVE_APP_VERSION "1.2.3"
+#define LITEWAVE_APP_VERSION "1.3.0"
 #endif
 
 #ifndef LITEWAVE_GIT_COMMIT
@@ -174,11 +175,22 @@ static QIcon createToolbarIcon(const QString &name, const QColor &color) {
     path.closeSubpath();
     p.drawPath(path);
   } else if (name == "menu") {
-    // Crisp modern vector hamburger icon with rounded caps
-    p.setPen(QPen(color, 2.0, Qt::SolidLine, Qt::RoundCap));
-    p.drawLine(3, 5, 17, 5);
-    p.drawLine(3, 10, 17, 10);
-    p.drawLine(3, 15, 17, 15);
+    // Chrome-style vertical "more" menu
+    p.setPen(Qt::NoPen);
+    p.setBrush(color);
+    p.drawEllipse(QPointF(10, 4.5), 1.8, 1.8);
+    p.drawEllipse(QPointF(10, 10), 1.8, 1.8);
+    p.drawEllipse(QPointF(10, 15.5), 1.8, 1.8);
+  } else if (name == "star" || name == "star_filled") {
+    QPolygonF star;
+    for (int i = 0; i < 10; ++i) {
+      const double r = (i % 2 == 0) ? 7.6 : 3.3;
+      const double a = 1.5707963267948966 + i * 0.6283185307179586; // pi/2 + i*pi/5
+      star << QPointF(10 + r * std::cos(a), 10.6 - r * std::sin(a));
+    }
+    p.setPen(QPen(color, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.setBrush(name == "star_filled" ? QBrush(color) : QBrush(Qt::NoBrush));
+    p.drawPolygon(star);
   }
 
   return QIcon(pix);
@@ -613,8 +625,14 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
       view->forward();
   });
 
-  auto *reload = addNavAction("↻", "รีเฟรชหน้าเว็บ (Ctrl+R)");
-  connect(reload, &QAction::triggered, this, [this] { reloadCurrentView(); });
+  reloadAction_ = addNavAction("↻", "รีเฟรชหน้าเว็บ (Ctrl+R)");
+  connect(reloadAction_, &QAction::triggered, this, [this] {
+    auto *view = currentView();
+    if (view && view->property("lwLoading").toBool())
+      view->stop();
+    else
+      reloadCurrentView();
+  });
 
   auto *home = addNavAction("⌂", "ไปยังหน้าแรก (Alt+Home)");
   connect(home, &QAction::triggered, this, [this] {
@@ -629,7 +647,13 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
 
   urlBar_->setPlaceholderText("ค้นหาเว็บหรือพิมพ์ URL");
   urlBar_->setToolTip("ค้นหาเว็บหรือพิมพ์ที่อยู่เว็บไซต์ (Ctrl+L)");
-  urlBar_->setClearButtonEnabled(true);
+  urlBar_->setClearButtonEnabled(false);
+  // Chrome keeps the bookmark star inside the omnibox.
+  bookmarkAction_ = urlBar_->addAction(
+      createToolbarIcon("star", darkMode_ ? QColor("#9ca3af") : QColor("#5f6368")),
+      QLineEdit::TrailingPosition);
+  bookmarkAction_->setToolTip("บันทึกหน้าเว็บนี้ (Ctrl+D)");
+  connect(bookmarkAction_, &QAction::triggered, this, &MainWindow::addBookmark);
   urlBar_->setMinimumHeight(34);
   toolbar_->addWidget(urlBar_);
   connect(urlBar_, &QLineEdit::returnPressed, this, &MainWindow::navigate);
@@ -661,8 +685,6 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
             }
           });
 
-  bookmarkAction_ = addNavAction("☆", "บันทึกหน้าเว็บนี้ (Ctrl+D)");
-  connect(bookmarkAction_, &QAction::triggered, this, &MainWindow::addBookmark);
 
   // Shield has one clear menu: Standard, Aggressive, Off, plus a per-site
   // compatibility escape hatch. It reports only requests actually blocked.
@@ -756,26 +778,23 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   // Downloads Button (Toolbar indicator & flyout trigger)
   downloadsBtn_ = new QToolButton(this);
   downloadsBtn_->setObjectName("downloadsButton");
-  downloadsBtn_->setText("⭳");
+  downloadsBtn_->setIcon(createMenuIcon("download", darkMode_ ? QColor("#f1f5f9") : QColor("#475569")));
+  downloadsBtn_->setIconSize(QSize(18, 18));
+  downloadsBtn_->setToolButtonStyle(Qt::ToolButtonIconOnly);
   downloadsBtn_->setToolTip("รายการดาวน์โหลด (Ctrl+J)");
   downloadsBtn_->setCursor(Qt::PointingHandCursor);
   connect(downloadsBtn_, &QToolButton::clicked, this, &MainWindow::showDownloadPopup);
-  toolbar_->addWidget(downloadsBtn_);
-
-  // Theme Toggle Button
-  themeBtn_ = new QToolButton(this);
-  themeBtn_->setObjectName("themeButton");
-  themeBtn_->setToolTip("สลับโหมดมืด/สว่าง");
-  themeBtn_->setCursor(Qt::PointingHandCursor);
-  connect(themeBtn_, &QToolButton::clicked, this, &MainWindow::toggleTheme);
-  toolbar_->addWidget(themeBtn_);
+  // Like Chrome, the downloads button only appears once there is something
+  // to show. The theme toggle lives in the main menu.
+  downloadsAction_ = toolbar_->addWidget(downloadsBtn_);
+  downloadsAction_->setVisible(false);
 
   // Main Menu Button (Brave style main menu)
   menuBtn_ = new QToolButton(this);
   menuBtn_->setObjectName("mainMenuButton");
   menuBtn_->setIcon(createToolbarIcon("menu", darkMode_ ? QColor("#f1f5f9") : QColor("#475569")));
   menuBtn_->setIconSize(QSize(20, 20));
-  menuBtn_->setToolTip("เมนูหลัก (LiteWave)");
+  menuBtn_->setToolTip("ปรับแต่งและควบคุม LiteWave");
   menuBtn_->setPopupMode(QToolButton::InstantPopup);
   menuBtn_->setCursor(Qt::PointingHandCursor);
   menuBtn_->setMenu(createMainMenu());
@@ -921,7 +940,14 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
   applyTheme();
 
   QSettings startupSettings("LiteWave", "LiteWave");
-  statusBar()->setVisible(startupSettings.value("showStatusBar", true).toBool());
+  // v1.3 adopts Chrome's layout: link targets and notices use a status
+  // bubble, so retire the always-on status bar once (it can be re-enabled
+  // in Settings).
+  if (!startupSettings.value("ui/chromeLayoutV1", false).toBool()) {
+    startupSettings.setValue("showStatusBar", false);
+    startupSettings.setValue("ui/chromeLayoutV1", true);
+  }
+  statusBar()->setVisible(startupSettings.value("showStatusBar", false).toBool());
 
   const QString startupOpt = startupSettings.value("startupOption", "home").toString();
   const bool previousCleanExit =
@@ -976,6 +1002,26 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
       auto *keyEvent = static_cast<QKeyEvent *>(event);
       if (suggestionPopup_ && suggestionPopup_->handleKeyPress(keyEvent->key())) {
         return true;
+      }
+      // Ctrl+Enter completes "example" to www.example.com, as in Chrome.
+      if ((keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) &&
+          keyEvent->modifiers() == Qt::ControlModifier) {
+        const QString word = urlBar_->text().trimmed();
+        if (!word.isEmpty() && !word.contains('.') && !word.contains(' ') &&
+            !word.contains('/')) {
+          openUrl("https://www." + word + ".com/");
+          return true;
+        }
+      }
+    } else if (event->type() == QEvent::FocusIn) {
+      if (!urlBar_->isModified() && urlBar_->text() != urlBarFullText_)
+        urlBar_->setText(urlBarFullText_);
+      // Select everything after the click that focused the field lands.
+      QTimer::singleShot(0, urlBar_, [this] { urlBar_->selectAll(); });
+    } else if (event->type() == QEvent::FocusOut) {
+      if (!urlBar_->isModified()) {
+        urlBar_->setText(displayUrl(urlBarFullText_));
+        urlBar_->setCursorPosition(0);
       }
     }
   }
@@ -1033,6 +1079,8 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
 void MainWindow::resizeEvent(QResizeEvent *event) {
   QMainWindow::resizeEvent(event);
+  if (statusBubble_ && statusBubble_->isVisible())
+    positionStatusBubble();
   if (suggestionPopup_ && suggestionPopup_->isVisible()) {
     suggestionPopup_->reposition();
   }
@@ -1118,7 +1166,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
               showNormal();
               if (headerWidget_)
                 headerWidget_->show();
-              statusBar()->show();
+              restoreStatusBar();
             }
           });
 
@@ -1139,7 +1187,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
             // Aggressive also blocks cross-site tabs created by ad-click traps.
             if (shieldProtectsPage && (automaticPopup || aggressiveCrossSitePopup)) {
               adBlocker_->recordBlockedPopup();
-              statusBar()->showMessage(
+              showStatusMessage(
                   automaticPopup
                       ? QStringLiteral("Shield บล็อกป๊อปอัปอัตโนมัติแล้ว")
                       : QStringLiteral("Shield เข้มงวดบล็อกแท็บโฆษณาข้ามเว็บแล้ว"),
@@ -1148,8 +1196,13 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
               return;
             }
 
+            const int openerIndex = tabBar_->currentIndex();
             auto *newView = createView(QUrl());
             request.openIn(newView->page());
+            // Middle-click / Ctrl+click keep the user on the current tab.
+            if (request.destination() ==
+                QWebEngineNewWindowRequest::InNewBackgroundTab)
+              tabBar_->setCurrentIndex(openerIndex);
           });
 
   // Qt 6.4 uses the legacy feature signal; Qt 6.6+ uses the richer
@@ -1269,6 +1322,17 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
             }
           });
 
+  // OAuth / "Sign in with Google" popups open as tabs and finish with
+  // window.close(); honour it so they do not linger.
+  connect(page, &QWebEnginePage::windowCloseRequested, this, [this, view] {
+    QTimer::singleShot(0, this, [this, guard = QPointer<QWebEngineView>(view)] {
+      if (!guard)
+        return;
+      const int idx = tabStack_->indexOf(guard);
+      if (idx >= 0)
+        closeTab(idx);
+    });
+  });
   connect(page, &QWebEnginePage::renderProcessTerminated, this,
           [this, view](QWebEnginePage::RenderProcessTerminationStatus status, int exitCode) {
             if (status == QWebEnginePage::NormalTerminationStatus)
@@ -1300,7 +1364,7 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
 </html>
 )HTML").arg(exitCode);
             view->setHtml(crashHtml);
-            statusBar()->showMessage(QStringLiteral("แท็บขัดข้อง (Exit code %1)").arg(exitCode), 4000);
+            showStatusMessage(QStringLiteral("แท็บขัดข้อง (Exit code %1)").arg(exitCode), 4000);
           });
 
   connect(page, &QWebEnginePage::certificateError, this,
@@ -1336,7 +1400,15 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   connect(view, &QWebEngineView::titleChanged, this,
           &MainWindow::updateTabTitle);
 
+  connect(view->page(), &QWebEnginePage::linkHovered, this,
+          [this, view](const QString &url) {
+            if (view == currentView())
+              showStatusBubble(url, 0);
+          });
   connect(view, &QWebEngineView::loadStarted, this, [this, view] {
+    view->setProperty("lwLoading", true);
+    if (view == currentView())
+      updateReloadAction();
     if (view == currentView()) {
       progress_->setValue(0);
       progress_->show();
@@ -1352,6 +1424,9 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
     }
   });
   connect(view, &QWebEngineView::loadFinished, this, [this, view](bool) {
+    view->setProperty("lwLoading", false);
+    if (view == currentView())
+      updateReloadAction();
     applyShieldCosmetics(view);
     // Re-scan once lazily injected content (feeds, ad slots) has settled.
     QTimer::singleShot(3000, view, [this, view] { applyShieldCosmetics(view); });
@@ -1382,10 +1457,15 @@ void MainWindow::closeTab(int index) {
   closedTabs_.append(view->url());
   if (closedTabs_.size() > 20)
     closedTabs_.removeFirst();
-  tabBar_->removeTab(index);
+  // Drop the page from the stack first so the tab bar's currentChanged (fired
+  // by removeTab) maps to the right widget and refreshes the omnibox for it.
   tabStack_->removeWidget(view);
+  tabBar_->removeTab(index);
   tabLastActiveTime_.remove(view);
-  delete view;
+  // The close may be triggered from one of the view's own signals (for
+  // example window.close()), so let the event loop finish with it first.
+  view->hide();
+  view->deleteLater();
   if (!tabBar_->count())
     newTab();
   tabBar_->setVisible(!isFullScreen());
@@ -1441,10 +1521,35 @@ void MainWindow::setupShortcuts() {
     if (tabBar_->count() > 0)
       tabBar_->setCurrentIndex(tabBar_->count() - 1);
   });
-  key("Ctrl+L", [this] {
-    urlBar_->setFocus();
+  auto focusOmnibox = [this] {
+    urlBar_->setFocus(Qt::ShortcutFocusReason);
     urlBar_->selectAll();
+  };
+  key("Ctrl+L", focusOmnibox);
+  key("Alt+D", focusOmnibox);
+  key("F6", focusOmnibox);
+  key("Ctrl+K", focusOmnibox);
+  key("Ctrl+E", focusOmnibox);
+  key("Alt+Home", [this] {
+    if (currentView())
+      loadHome(currentView());
   });
+  key("Ctrl+PgDown", [this] {
+    if (tabBar_->count() > 0)
+      tabBar_->setCurrentIndex((tabBar_->currentIndex() + 1) % tabBar_->count());
+  });
+  key("Ctrl+PgUp", [this] {
+    if (tabBar_->count() > 0)
+      tabBar_->setCurrentIndex(
+          (tabBar_->currentIndex() + tabBar_->count() - 1) % tabBar_->count());
+  });
+  key("Ctrl+U", [this] {
+    auto *view = currentView();
+    if (view && (view->url().scheme() == "http" || view->url().scheme() == "https"))
+      createView(QUrl("view-source:" + view->url().toString()));
+  });
+  key("Ctrl+Shift+W", [this] { close(); });
+  key("Ctrl+Shift+Q", [] { QApplication::closeAllWindows(); });
   key("Alt+Left", [this] {
     if (auto *view = currentView(); view && view->history()->canGoBack())
       view->back();
@@ -1456,7 +1561,13 @@ void MainWindow::setupShortcuts() {
   auto reload = [this] { reloadCurrentView(); };
   key("Ctrl+R", reload);
   key("F5", reload);
-  auto hard = [this] { reloadCurrentView(); };
+  auto hard = [this] {
+    auto *view = currentView();
+    if (view && !view->url().toString().contains("litewave.home") && !view->url().isEmpty())
+      view->triggerPageAction(QWebEnginePage::ReloadAndBypassCache);
+    else
+      reloadCurrentView();
+  };
   key("Ctrl+Shift+R", hard);
   key("Shift+F5", hard);
   key("Ctrl+D", [this] { addBookmark(); });
@@ -1477,7 +1588,7 @@ void MainWindow::setupShortcuts() {
                   ->url()
                   .toString();
     st.setValue(group + "/urls", urls);
-    statusBar()->showMessage("Saved " + QString::number(urls.size()) + " tabs",
+    showStatusMessage("Saved " + QString::number(urls.size()) + " tabs",
                              3000);
   });
   key("Ctrl+F", [this] {
@@ -1549,7 +1660,7 @@ void MainWindow::setupShortcuts() {
       showNormal();
       if (headerWidget_)
         headerWidget_->show();
-      statusBar()->show();
+      restoreStatusBar();
     } else {
       if (headerWidget_)
         headerWidget_->hide();
@@ -1558,14 +1669,25 @@ void MainWindow::setupShortcuts() {
     }
   });
   key("Escape", [this] {
-    if (!isFullScreen())
+    if (!isFullScreen()) {
+      // Chrome: Esc in the omnibox reverts the edit; otherwise it stops a load.
+      if (urlBar_->hasFocus()) {
+        if (suggestionPopup_)
+          suggestionPopup_->hide();
+        urlBar_->setText(urlBarFullText_);
+        urlBar_->selectAll();
+      } else if (auto *view = currentView();
+                 view && view->property("lwLoading").toBool()) {
+        view->stop();
+      }
       return;
+    }
     if (currentView())
       currentView()->triggerPageAction(QWebEnginePage::ExitFullScreen);
     showNormal();
     if (headerWidget_)
       headerWidget_->show();
-    statusBar()->show();
+    restoreStatusBar();
   });
 }
 
@@ -1602,6 +1724,83 @@ void MainWindow::handleHomeNavigation(const QUrl &url, QWebEngineView *view) {
   }
 
   loadHome(view);
+}
+
+QString MainWindow::displayUrl(const QString &fullUrl) {
+  // Chrome hides the https:// scheme and a bare trailing slash until the
+  // omnibox is focused; insecure schemes stay visible.
+  QString text = fullUrl;
+  if (text.startsWith(QLatin1String("https://")))
+    text.remove(0, 8);
+  const QUrl url(fullUrl);
+  if (url.scheme() == "https" && (url.path() == "/" || url.path().isEmpty()) &&
+      !url.hasQuery() && !url.hasFragment() && text.endsWith('/'))
+    text.chop(1);
+  return text;
+}
+
+void MainWindow::updateReloadAction() {
+  if (!reloadAction_)
+    return;
+  auto *view = currentView();
+  const bool loading = view && view->property("lwLoading").toBool();
+  reloadAction_->setText(loading ? QStringLiteral("✕") : QStringLiteral("↻"));
+  reloadAction_->setToolTip(loading ? QStringLiteral("หยุดโหลดหน้านี้ (Esc)")
+                                    : QStringLiteral("รีเฟรชหน้าเว็บ (Ctrl+R)"));
+}
+
+void MainWindow::restoreStatusBar() {
+  QSettings st("LiteWave", "LiteWave");
+  statusBar()->setVisible(st.value("showStatusBar", false).toBool());
+}
+
+void MainWindow::showStatusMessage(const QString &message, int timeoutMs) {
+  if (statusBar()->isVisible())
+    statusBar()->showMessage(message, timeoutMs);
+  else
+    showStatusBubble(message, timeoutMs > 0 ? timeoutMs : 4000);
+}
+
+void MainWindow::positionStatusBubble() {
+  if (!statusBubble_ || !tabStack_)
+    return;
+  statusBubble_->adjustSize();
+  statusBubble_->move(0, tabStack_->height() - statusBubble_->height());
+  statusBubble_->raise();
+}
+
+void MainWindow::showStatusBubble(const QString &text, int timeoutMs) {
+  if (!tabStack_)
+    return;
+  if (!statusBubble_) {
+    // Chrome-style status bubble: link targets and short notices appear at
+    // the bottom-left of the page instead of in a permanent status bar.
+    statusBubble_ = new QLabel(tabStack_);
+    statusBubble_->setObjectName("statusBubble");
+    statusBubble_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    statusBubbleTimer_ = new QTimer(this);
+    statusBubbleTimer_->setSingleShot(true);
+    connect(statusBubbleTimer_, &QTimer::timeout, statusBubble_, &QWidget::hide);
+  }
+  statusBubbleTimer_->stop();
+  if (text.isEmpty()) {
+    statusBubble_->hide();
+    return;
+  }
+  statusBubble_->setStyleSheet(
+      darkMode_ ? "QLabel#statusBubble{background:#35363a;color:#e8eaed;"
+                  "border:1px solid #5f6368;border-left:0;border-bottom:0;"
+                  "border-top-right-radius:6px;padding:3px 8px;font-size:12px;}"
+                : "QLabel#statusBubble{background:#f1f3f4;color:#3c4043;"
+                  "border:1px solid #dadce0;border-left:0;border-bottom:0;"
+                  "border-top-right-radius:6px;padding:3px 8px;font-size:12px;}");
+  const QFontMetrics fm(statusBubble_->font());
+  statusBubble_->setText(
+      fm.elidedText(text, Qt::ElideMiddle, qMax(120, tabStack_->width() / 2)));
+  positionStatusBubble();
+  statusBubble_->show();
+  if (timeoutMs > 0)
+    statusBubbleTimer_->start(timeoutMs);
 }
 
 void MainWindow::reloadCurrentView() {
@@ -1676,19 +1875,25 @@ void MainWindow::updateCurrentUrl(const QUrl &url) {
   if (!view)
     return;
   const QUrl currentUrl = url.isValid() ? url : view->url();
+  const bool isHome = currentUrl.isEmpty() || currentUrl.host() == "litewave.home" ||
+                      currentUrl.scheme() == "litewave" ||
+                      currentUrl.toString().contains("litewave.home");
+  urlBarFullText_ = isHome ? QString() : currentUrl.toString();
+  updateReloadAction();
 
-  if (currentUrl.isEmpty() || currentUrl.host() == "litewave.home" ||
-      currentUrl.scheme() == "litewave" ||
-      currentUrl.toString().contains("litewave.home")) {
-    urlBar_->clear();
-  } else {
-    urlBar_->setText(currentUrl.toString());
+  // Never overwrite what the user is typing because a page redirected.
+  if (!(urlBar_->hasFocus() && urlBar_->isModified())) {
+    urlBar_->setText(urlBar_->hasFocus() ? urlBarFullText_
+                                         : displayUrl(urlBarFullText_));
     urlBar_->setCursorPosition(0);
   }
 
   if (sslAction_) {
     const QColor col = darkMode_ ? QColor("#9ca3af") : QColor("#64748b");
-    if (currentUrl.scheme() == "https") {
+    if (isHome) {
+      sslAction_->setIcon(createMenuIcon("search", col));
+      sslAction_->setToolTip("ค้นหาหรือพิมพ์ URL");
+    } else if (currentUrl.scheme() == "https") {
       sslAction_->setIcon(createToolbarIcon("lock_https", QColor("#10b981")));
       sslAction_->setToolTip("การเชื่อมต่อปลอดภัย (HTTPS)");
     } else if (currentUrl.scheme() == "http") {
@@ -1739,8 +1944,9 @@ void MainWindow::updateBookmarkStarState() {
   if (!bookmarkAction_)
     return;
   auto *view = currentView();
+  const QColor outline = darkMode_ ? QColor("#9ca3af") : QColor("#5f6368");
   if (!view) {
-    bookmarkAction_->setText("☆");
+    bookmarkAction_->setIcon(createToolbarIcon("star", outline));
     bookmarkAction_->setToolTip("บันทึกหน้าเว็บนี้ (Ctrl+D)");
     return;
   }
@@ -1752,7 +1958,8 @@ void MainWindow::updateBookmarkStarState() {
       break;
     }
   }
-  bookmarkAction_->setText(bookmarked ? "★" : "☆");
+  bookmarkAction_->setIcon(bookmarked ? createToolbarIcon("star_filled", QColor("#1a73e8"))
+                                      : createToolbarIcon("star", outline));
   bookmarkAction_->setToolTip(bookmarked ? "แก้ไขบุ๊กมาร์กสำหรับหน้านี้ (Ctrl+D)"
                                          : "บันทึกหน้าเว็บนี้ (Ctrl+D)");
 }
@@ -1965,7 +2172,7 @@ void MainWindow::addBookmark() {
         bookmarks_.removeAt(existingIndex);
         saveBookmarks();
         updateBookmarkStarState();
-        statusBar()->showMessage("ลบบุ๊กมาร์กเรียบร้อยแล้ว", 3000);
+        showStatusMessage("ลบบุ๊กมาร์กเรียบร้อยแล้ว", 3000);
       }
       dialog.accept();
     });
@@ -1986,7 +2193,7 @@ void MainWindow::addBookmark() {
       }
       saveBookmarks();
       updateBookmarkStarState();
-      statusBar()->showMessage("บันทึกบุ๊กมาร์กแล้ว: " + item.title, 3000);
+      showStatusMessage("บันทึกบุ๊กมาร์กแล้ว: " + item.title, 3000);
     }
     dialog.accept();
   });
@@ -2008,6 +2215,20 @@ void MainWindow::refreshShieldUi() {
   const bool isDark = darkMode_;
   const QColor activeColor("#ffffff");
   const QColor inactiveColor = isDark ? QColor("#94a3b8") : QColor("#64748b");
+
+  // Polled every 400 ms: repainting the icon and re-polishing the style sheet
+  // on every tick makes the toolbar stutter, so only redo it on change.
+  const QString stateKey =
+      QStringLiteral("%1|%2|%3|%4|%5|%6")
+          .arg(adBlocker_->isEnabled())
+          .arg(enabledForSite)
+          .arg(count)
+          .arg(static_cast<int>(adBlocker_->mode()))
+          .arg(isDark)
+          .arg(enabledForSite ? QString() : pageUrl.host());
+  if (stateKey == shieldUiKey_)
+    return;
+  shieldUiKey_ = stateKey;
 
   if (!adBlocker_->isEnabled()) {
     shieldBtn_->setIcon(createToolbarIcon("shield", inactiveColor));
@@ -2116,6 +2337,9 @@ void MainWindow::toggleTheme() {
 
 void MainWindow::applyTheme() {
   const QColor iconCol = darkMode_ ? QColor("#f1f5f9") : QColor("#475569");
+  if (downloadsBtn_)
+    downloadsBtn_->setIcon(createMenuIcon("download", iconCol));
+  updateBookmarkStarState();
   if (themeBtn_) {
     themeBtn_->setIcon(createToolbarIcon(darkMode_ ? "sun" : "moon", iconCol));
     themeBtn_->setToolTip(darkMode_ ? "เปลี่ยนเป็นโหมดสว่าง" : "เปลี่ยนเป็นโหมดมืด");
@@ -2275,7 +2499,7 @@ void MainWindow::applyTheme() {
                 color: #f1f5f9;
                 border: 1px solid #33363f;
                 border-radius: 17px;
-                padding: 4px 12px 4px 32px;
+                padding: 4px 32px 4px 32px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
@@ -2292,7 +2516,7 @@ void MainWindow::applyTheme() {
                 border: none;
                 border-radius: 9px;
                 padding: 0px;
-                margin: -13px 4px 0px 4px;
+                margin: -13px 0px 0px 0px;
                 min-width: 20px;
                 max-width: 20px;
                 min-height: 20px;
@@ -2590,7 +2814,7 @@ void MainWindow::applyTheme() {
                 color: #0f172a;
                 border: 1px solid #e2e8f0;
                 border-radius: 17px;
-                padding: 4px 12px 4px 32px;
+                padding: 4px 32px 4px 32px;
                 font-size: 13px;
                 selection-background-color: #2563eb;
             }
@@ -2607,7 +2831,7 @@ void MainWindow::applyTheme() {
                 border: none;
                 border-radius: 9px;
                 padding: 0px;
-                margin: -13px 4px 0px 4px;
+                margin: -13px 0px 0px 0px;
                 min-width: 20px;
                 max-width: 20px;
                 min-height: 20px;
@@ -4206,7 +4430,7 @@ void MainWindow::populateHistoryMenu(QMenu *historyMenu) {
   connect(clearHist, &QAction::triggered, this, [this] {
     QSettings st("LiteWave", "LiteWave");
     st.remove("history");
-    statusBar()->showMessage("ล้างประวัติการใช้เว็บเรียบร้อยแล้ว", 3000);
+    showStatusMessage("ล้างประวัติการใช้เว็บเรียบร้อยแล้ว", 3000);
   });
   historyMenu->addSeparator();
 
@@ -4281,7 +4505,7 @@ void MainWindow::populateBookmarksMenu(QMenu *bookmarksMenu) {
         bookmarks_.clear();
         saveBookmarks();
         updateBookmarkStarState();
-        statusBar()->showMessage("ลบบุ๊กมาร์กทั้งหมดเรียบร้อยแล้ว", 3000);
+        showStatusMessage("ลบบุ๊กมาร์กทั้งหมดเรียบร้อยแล้ว", 3000);
       }
     });
   }
@@ -4337,26 +4561,34 @@ void MainWindow::updateDownloadsButtonUi() {
     if (totalSize > 0) {
       pct = static_cast<int>((totalRecvd * 100) / totalSize);
     }
-    downloadsBtn_->setText(QString("⭳ %1%").arg(pct));
+    if (downloadsAction_)
+      downloadsAction_->setVisible(true);
+    downloadsBtn_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    downloadsBtn_->setText(QString("%1%").arg(pct));
     downloadsBtn_->setToolTip(QString("กำลังดาวน์โหลด %1 ไฟล์\nไฟล์: %2 (%3%)\nความเร็ว: %4\nขนาด: %5 / %6\n%7")
         .arg(activeCount).arg(topFileName).arg(pct)
         .arg(formatSpeed(totalSpeed)).arg(formatBytes(totalRecvd))
         .arg(totalSize > 0 ? formatBytes(totalSize) : "ไม่ทราบขนาด")
         .arg(totalSize > 0 ? formatEta(totalSize - totalRecvd, totalSpeed) : ""));
 
-    statusBar()->showMessage(QString("กำลังดาวน์โหลด: %1 (%2%) · %3 · %4")
+    showStatusMessage(QString("กำลังดาวน์โหลด: %1 (%2%) · %3 · %4")
         .arg(topFileName).arg(pct).arg(formatSpeed(totalSpeed))
         .arg(totalSize > 0 ? formatEta(totalSize - totalRecvd, totalSpeed) : ""), 2000);
   } else {
     downloadsBtn_->setProperty("active", false);
     downloadsBtn_->style()->unpolish(downloadsBtn_);
     downloadsBtn_->style()->polish(downloadsBtn_);
-    downloadsBtn_->setText("⭳");
+    downloadsBtn_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    downloadsBtn_->setText(QString());
     downloadsBtn_->setToolTip("รายการดาวน์โหลด (Ctrl+J)");
+    if (downloadsAction_ && !activeDownloads_.isEmpty())
+      downloadsAction_->setVisible(true);
   }
 }
 
 void MainWindow::showDownloadPopup() {
+  if (downloadsAction_)
+    downloadsAction_->setVisible(true);
   if (downloadPopup_ && downloadPopup_->isVisible()) {
     downloadPopup_->close();
     return;
@@ -4856,7 +5088,7 @@ void MainWindow::handleDownloadRequested(QWebEngineDownloadRequest *download) {
       download, &QWebEngineDownloadRequest::stateChanged, this,
       [this, download, name](QWebEngineDownloadRequest::DownloadState state) {
         if (state == QWebEngineDownloadRequest::DownloadCompleted) {
-          statusBar()->showMessage("✓ ดาวน์โหลดเสร็จแล้ว: " + name, 6000);
+          showStatusMessage("✓ ดาวน์โหลดเสร็จแล้ว: " + name, 6000);
           for (auto &a : activeDownloads_) {
             if (a.request == download) {
               a.completed = true;
@@ -4900,7 +5132,7 @@ void MainWindow::handleDownloadRequested(QWebEngineDownloadRequest *download) {
             }
           }
           saveDownloadRecords();
-          statusBar()->showMessage("✕ ยกเลิกการดาวน์โหลด: " + name, 5000);
+          showStatusMessage("✕ ยกเลิกการดาวน์โหลด: " + name, 5000);
           updateDownloadsButtonUi();
         } else if (state == QWebEngineDownloadRequest::DownloadInterrupted) {
           for (auto &a : activeDownloads_) {
@@ -4921,13 +5153,13 @@ void MainWindow::handleDownloadRequested(QWebEngineDownloadRequest *download) {
             }
           }
           saveDownloadRecords();
-          statusBar()->showMessage("✕ การดาวน์โหลดล้มเหลว: " + name, 5000);
+          showStatusMessage("✕ การดาวน์โหลดล้มเหลว: " + name, 5000);
           updateDownloadsButtonUi();
         }
       });
 
   download->accept();
-  statusBar()->showMessage("เริ่มการดาวน์โหลด: " + name, 3000);
+  showStatusMessage("เริ่มการดาวน์โหลด: " + name, 3000);
   showDownloadPopup();
 }
 
@@ -5125,7 +5357,7 @@ void MainWindow::clearBrowsingDataDialog() {
     if (profile_) {
       profile_->clearHttpCache();
     }
-    statusBar()->showMessage("ล้างประวัติ แคช และข้อมูลการท่องเว็บเรียบร้อยแล้ว", 5000);
+    showStatusMessage("ล้างประวัติ แคช และข้อมูลการท่องเว็บเรียบร้อยแล้ว", 5000);
   }
 }
 
@@ -5203,7 +5435,7 @@ QMenu *MainWindow::createMainMenu() {
       showNormal();
       if (headerWidget_)
         headerWidget_->show();
-      statusBar()->show();
+      restoreStatusBar();
     } else {
       if (headerWidget_)
         headerWidget_->hide();
@@ -5306,7 +5538,7 @@ void MainWindow::checkForUpdates(bool silentIfUpToDate) {
   }
 
   if (!silentIfUpToDate) {
-    statusBar()->showMessage("กำลังตรวจสอบการอัปเดต...", 3000);
+    showStatusMessage("กำลังตรวจสอบการอัปเดต...", 3000);
   }
 
   QNetworkRequest request(QUrl("https://api.github.com/repos/ynmio55/LiteWave/releases/latest"));
@@ -6312,7 +6544,7 @@ void MainWindow::showSettingsDialog(int initialPage) {
       stReset.clear();
       if (darkMode_)
         toggleTheme();
-      statusBar()->show();
+      restoreStatusBar();
       if (adBlocker_) {
         adBlocker_->setEnabled(true);
         adBlocker_->setMode(AdBlocker::Mode::Standard);
@@ -6450,7 +6682,7 @@ void MainWindow::showSettingsDialog(int initialPage) {
           "เพื่อให้ LiteWave ใช้ DNS-over-HTTPS จริง ให้ปิด LiteWave ทุกหน้าต่าง "
           "แล้วเปิดโปรแกรมใหม่หนึ่งครั้ง");
     }
-    statusBar()->showMessage("บันทึกการตั้งค่าเรียบร้อยแล้ว", 3000);
+    showStatusMessage("บันทึกการตั้งค่าเรียบร้อยแล้ว", 3000);
   }
 }
 
