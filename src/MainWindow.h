@@ -28,6 +28,8 @@ class QResizeEvent;
 class QSplitter;
 class QNetworkAccessManager;
 
+class FilterListUpdater;
+
 class MainWindow final : public QMainWindow
 {
     Q_OBJECT
@@ -36,6 +38,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr, bool privateMode = false);
     ~MainWindow() override;
     QWebEngineView *createView(const QUrl &url);
+    bool isPrivateWindow() const { return privateMode_; }
     void loadHome(QWebEngineView *view);
     void handleHomeNavigation(const QUrl &url, QWebEngineView *view);
     void reloadCurrentView();
@@ -73,6 +76,7 @@ private:
     bool darkMode_ = false;
     bool privateMode_ = false;
     QWebEngineProfile *profile_ = nullptr;
+    FilterListUpdater *filterUpdater_ = nullptr;
     AdBlocker *adBlocker_ = nullptr;
     QList<QUrl> closedTabs_;
     QString findQuery_;

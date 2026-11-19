@@ -3,21 +3,38 @@
 
 #include <QtTest>
 
+#include <algorithm>
+
 class ShieldTests final : public QObject
 {
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void standardBlocksKnownThirdPartyAdvertising();
     void standardKeepsNavigationAndUnknownResources();
     void aggressiveAddsTrackerBlocking();
     void siteExceptionRestoresCompatibility();
     void popupBlocksAreCounted();
     void bundledEasyListBlocksAdServer();
+    void cosmeticSelectorsComeFromEasyList();
+    void cosmeticSelectorsRespectSiteAllowlist();
     void youtubeShieldIncludesPlayerResponseGuards();
     void searchEngineManagerBuildsCorrectUrls();
     void searchEngineManagerSupportsEnginesAndFallback();
 };
+
+void ShieldTests::initTestCase()
+{
+    // The filter lists compile on a background thread at first use.
+    AdBlocker blocker(nullptr, false);
+    QElapsedTimer timer;
+    timer.start();
+    while (!AdBlocker::rulesReady() && timer.elapsed() < 15000)
+        QThread::msleep(20);
+    QVERIFY(AdBlocker::rulesReady());
+    QVERIFY(blocker.ruleCount() > 50000);
+}
 
 void ShieldTests::standardBlocksKnownThirdPartyAdvertising()
 {
@@ -81,6 +98,28 @@ void ShieldTests::bundledEasyListBlocksAdServer()
         QUrl("https://000491b06a.com/ad.js"),
         QUrl("https://news.example.com/article"),
         QWebEngineUrlRequestInfo::ResourceTypeScript));
+}
+
+void ShieldTests::cosmeticSelectorsComeFromEasyList()
+{
+    AdBlocker blocker(nullptr, false);
+    const QStringList selectors = blocker.cosmeticSelectors(
+        QUrl("https://news.example.com/article"),
+        QStringLiteral("adsbygoogle\nordinary-content"), QString());
+    QVERIFY(std::any_of(selectors.begin(), selectors.end(), [](const QString &s) {
+        return s.contains("adsbygoogle");
+    }));
+    QVERIFY(std::none_of(selectors.begin(), selectors.end(), [](const QString &s) {
+        return s.contains("ordinary-content");
+    }));
+}
+
+void ShieldTests::cosmeticSelectorsRespectSiteAllowlist()
+{
+    AdBlocker blocker(nullptr, false);
+    const QUrl site("https://news.example.com/article");
+    blocker.setSiteAllowed(site, true);
+    QVERIFY(blocker.cosmeticSelectors(site, QStringLiteral("adsbygoogle"), QString()).isEmpty());
 }
 
 void ShieldTests::youtubeShieldIncludesPlayerResponseGuards()

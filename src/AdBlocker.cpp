@@ -1,7 +1,9 @@
 #include "AdBlocker.h"
+#include "BrowserIdentity.h"
 #include "LiteWaveFilterEngine.h"
 
 #include <QSettings>
+#include <QThreadPool>
 
 namespace {
 
@@ -64,6 +66,8 @@ AdBlocker::AdBlocker(QObject *parent, bool persistent)
                            : static_cast<int>(Mode::Standard));
 
     dntEnabled_.storeRelease(settings.value("dntEnabled", true).toBool() ? 1 : 0);
+    if (mode() == Mode::Aggressive)
+        preparePrivacyRules();
 
     for (const QString &site : settings.value("shield/allowedSites").toStringList()) {
         const QByteArray key = normalizedHost(site);
@@ -105,6 +109,8 @@ void AdBlocker::setMode(Mode mode)
     if (this->mode() == mode)
         return;
     mode_.storeRelease(static_cast<int>(mode));
+    if (mode == Mode::Aggressive)
+        preparePrivacyRules();
     saveSettings();
     emit configurationChanged();
 }
@@ -232,8 +238,15 @@ bool AdBlocker::shouldBlock(
         const QByteArray requestText = request.toEncoded(QUrl::FullyEncoded);
         const QByteArray sourceText = firstParty.toEncoded(QUrl::FullyEncoded);
         const QByteArray kind = resourceTypeName(resourceType);
-        if (lw_adblock_engine_should_block(engine_, requestText.constData(), sourceText.constData(), kind.constData()))
+        const int verdict = lw_adblock_engine_should_block(
+            engine_, requestText.constData(), sourceText.constData(),
+            kind.constData(), mode() == Mode::Aggressive ? 1 : 0);
+        if (verdict == 1)
             return true;
+        // An @@ exception in the filter lists overrides the built-in domain
+        // sets below, which otherwise act as a safety net.
+        if (verdict == 2)
+            return false;
     }
 
     if (!thirdParty)
@@ -260,18 +273,11 @@ void AdBlocker::interceptRequest(QWebEngineUrlRequestInfo &info)
     if (info.resourceType() == QWebEngineUrlRequestInfo::ResourceTypeMainFrame ||
         host == "accounts.google.com" || host == "google.com" || host == "www.google.com" ||
         host.endsWith(".google.com") || host.endsWith(".youtube.com") || host == "youtube.com") {
-#if defined(Q_OS_WIN)
-        const QByteArray chromeUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-        const QByteArray platform = "\"Windows\"";
-#elif defined(Q_OS_MAC)
-        const QByteArray chromeUa = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-        const QByteArray platform = "\"macOS\"";
-#else
-        const QByteArray chromeUa = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-        const QByteArray platform = "\"Linux\"";
-#endif
+        static const QByteArray chromeUa = BrowserIdentity::userAgent();
+        static const QByteArray chUa = BrowserIdentity::secChUa();
+        static const QByteArray platform = "\"" + BrowserIdentity::platformName() + "\"";
         info.setHttpHeader("User-Agent", chromeUa);
-        info.setHttpHeader("Sec-CH-UA", "\"Chromium\";v=\"130\", \"Google Chrome\";v=\"130\", \"Not?A_Brand\";v=\"99\"");
+        info.setHttpHeader("Sec-CH-UA", chUa);
         info.setHttpHeader("Sec-CH-UA-Mobile", "?0");
         info.setHttpHeader("Sec-CH-UA-Platform", platform);
     }
@@ -303,7 +309,38 @@ void AdBlocker::recordBlockedPopup()
 
 int AdBlocker::ruleCount() const
 {
-    return engine_ ? lw_adblock_engine_rule_count(engine_) : advertisingDomains().size() + trackerDomains().size() + 3;
+    const int listRules = engine_ ? lw_adblock_engine_rule_count(engine_) : 0;
+    return listRules > 0 ? listRules
+                         : advertisingDomains().size() + trackerDomains().size() + 3;
+}
+
+bool AdBlocker::rulesReady()
+{
+    return lw_adblock_engine_is_ready(lw_adblock_engine_create()) != 0;
+}
+
+void AdBlocker::preparePrivacyRules()
+{
+    static QAtomicInt requested = 0;
+    if (requested.testAndSetOrdered(0, 1))
+        QThreadPool::globalInstance()->start([] { lw_adblock_engine_prepare_privacy(); });
+}
+
+QStringList AdBlocker::cosmeticSelectors(const QUrl &page, const QString &classes,
+                                         const QString &ids) const
+{
+    if (!engine_ || !isEnabledForUrl(page))
+        return {};
+    const QByteArray url = page.toEncoded(QUrl::FullyEncoded);
+    const QByteArray classText = classes.toUtf8();
+    const QByteArray idText = ids.toUtf8();
+    char *raw = lw_adblock_engine_cosmetic_selectors(
+        engine_, url.constData(), classText.constData(), idText.constData());
+    if (!raw)
+        return {};
+    const QString text = QString::fromUtf8(raw);
+    lw_adblock_string_free(raw);
+    return text.split('\n', Qt::SkipEmptyParts);
 }
 QByteArray AdBlocker::resourceTypeName(QWebEngineUrlRequestInfo::ResourceType type)
 {

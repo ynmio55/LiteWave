@@ -2,7 +2,10 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDir>
 #include <QIcon>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QSettings>
 #include <QStringList>
 #include <QUrl>
@@ -13,6 +16,99 @@
 #endif
 
 namespace {
+// URLs and files passed on the command line, e.g. by the desktop entry's %U
+// when LiteWave is the default browser. Chromium switches are skipped.
+QStringList urlsFromArguments(const QStringList &arguments)
+{
+    QStringList urls;
+    for (int i = 1; i < arguments.size(); ++i) {
+        const QString &arg = arguments.at(i);
+        if (arg.isEmpty() || arg.startsWith('-'))
+            continue;
+        const QUrl url = QUrl::fromUserInput(arg, QDir::currentPath(),
+                                             QUrl::AssumeLocalFile);
+        if (url.isValid())
+            urls.append(url.toString(QUrl::FullyEncoded));
+    }
+    return urls;
+}
+
+QString instanceServerName()
+{
+    return QStringLiteral("LiteWave-") +
+           QString::number(qHash(QDir::homePath()), 16);
+}
+
+// Hands the URLs to an already running LiteWave. Two processes must not share
+// one persistent Qt WebEngine profile, so a second launch only forwards.
+bool forwardToRunningInstance(const QStringList &urls)
+{
+    QLocalSocket socket;
+    socket.connectToServer(instanceServerName());
+    if (!socket.waitForConnected(500))
+        return false;
+    socket.write((QStringLiteral("open\n") + urls.join('\n')).toUtf8());
+    socket.waitForBytesWritten(1000);
+    socket.disconnectFromServer();
+    if (socket.state() != QLocalSocket::UnconnectedState)
+        socket.waitForDisconnected(1000);
+    return true;
+}
+
+MainWindow *targetWindow(MainWindow *fallback)
+{
+    if (auto *active = qobject_cast<MainWindow *>(QApplication::activeWindow());
+        active && !active->isPrivateWindow())
+        return active;
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        auto *window = qobject_cast<MainWindow *>(widget);
+        if (window && window->isVisible() && !window->isPrivateWindow())
+            return window;
+    }
+    return fallback;
+}
+
+void openUrls(MainWindow *window, const QStringList &urls)
+{
+    for (const QString &url : urls)
+        window->createView(QUrl(url));
+}
+
+void listenForOtherInstances(QLocalServer *server, MainWindow *primary)
+{
+    if (!server->listen(instanceServerName())) {
+        // A crashed instance can leave a stale socket behind.
+        QLocalServer::removeServer(instanceServerName());
+        server->listen(instanceServerName());
+    }
+    QObject::connect(server, &QLocalServer::newConnection, server, [server, primary] {
+        while (QLocalSocket *socket = server->nextPendingConnection()) {
+            auto *buffer = new QByteArray;
+            QObject::connect(socket, &QLocalSocket::readyRead, socket,
+                             [socket, buffer] { buffer->append(socket->readAll()); });
+            QObject::connect(socket, &QLocalSocket::disconnected, socket, [socket, buffer, primary] {
+                buffer->append(socket->readAll());
+                QStringList lines = QString::fromUtf8(*buffer).split('\n', Qt::SkipEmptyParts);
+                delete buffer;
+                socket->deleteLater();
+                if (lines.isEmpty() || lines.takeFirst() != QLatin1String("open"))
+                    return;
+
+                MainWindow *window = targetWindow(primary);
+                if (lines.isEmpty() && window->isVisible()) {
+                    auto *fresh = new MainWindow;
+                    fresh->setAttribute(Qt::WA_DeleteOnClose);
+                    window = fresh;
+                }
+                openUrls(window, lines);
+                window->show();
+                window->raise();
+                window->activateWindow();
+            });
+        }
+    });
+}
+
 QString dohTemplateFor(const QSettings &settings)
 {
     if (!settings.value("secureDnsEnabled", false).toBool())
@@ -126,12 +222,19 @@ int main(int argc, char *argv[])
     appIcon.addFile(":/icons/litewave.svg");
     app.setWindowIcon(appIcon);
 
+    const QStringList startupUrls = urlsFromArguments(app.arguments());
+    if (forwardToRunningInstance(startupUrls))
+        return 0;
+
     QSettings settings("LiteWave", "LiteWave");
     // This runs before MainWindow creates the first QWebEngineProfile, which
     // is the point at which Qt WebEngine starts its resolver.
     configureSecureDns(settings);
 
     MainWindow window;
+    QLocalServer instanceServer;
+    listenForOtherInstances(&instanceServer, &window);
+    openUrls(&window, startupUrls);
     window.show();
     return app.exec();
 }

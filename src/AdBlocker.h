@@ -10,9 +10,9 @@
 
 struct LiteWaveAdblockEngine;
 
-// LiteWave Shield deliberately uses a small, auditable network-rule set.
-// It only blocks known advertising endpoints, and it never blocks main-frame
-// navigation, verification pages, or a site explicitly allowed by the user.
+// LiteWave Shield filters with EasyList (plus EasyPrivacy in Aggressive mode)
+// through adblock-rust. It never blocks main-frame navigation, verification
+// pages, or a site explicitly allowed by the user.
 class AdBlocker final : public QWebEngineUrlRequestInterceptor
 {
     Q_OBJECT
@@ -52,6 +52,13 @@ public:
     void resetBlockedCount();
     void recordBlockedPopup();
     int ruleCount() const;
+    // True once the filter lists have finished compiling in the background.
+    static bool rulesReady();
+
+    // EasyList element-hiding selectors for `page`, given the class names and
+    // ids present in its DOM (newline separated). Honours #@# exceptions.
+    QStringList cosmeticSelectors(const QUrl &page, const QString &classes,
+                                  const QString &ids) const;
 
     // Cosmetic rules only hide elements that identify a known ad endpoint or
     // an explicit ad slot. Network matching remains the source of truth.
@@ -72,6 +79,7 @@ private:
                                           const QUrl &firstParty);
 
     void saveSettings() const;
+    static void preparePrivacyRules();
 
     QAtomicInt enabled_ = 1;
     QAtomicInt mode_ = static_cast<int>(Mode::Standard);

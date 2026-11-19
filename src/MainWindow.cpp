@@ -1,5 +1,7 @@
 #include "MainWindow.h"
 #include "AdBlocker.h"
+#include "BrowserIdentity.h"
+#include "FilterListUpdater.h"
 #include "SearchEngineManager.h"
 #include "FindBar.h"
 #include "SearchSuggestionPopup.h"
@@ -34,6 +36,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QLocale>
 #include <QPointer>
 #include <QPrintDialog>
 #include <QPrinter>
@@ -305,6 +308,12 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     normalProfile->setHttpCacheMaximumSize(256 * 1024 * 1024); // 256 MB optimal cache
   }
   static AdBlocker *normalShield = new AdBlocker(qApp, true);
+  static FilterListUpdater *filterUpdater = [] {
+    auto *updater = new FilterListUpdater(qApp);
+    updater->start();
+    return updater;
+  }();
+  filterUpdater_ = filterUpdater;
   profile_ = privateMode_ ? new QWebEngineProfile(this) : normalProfile;
   if (privateMode_) {
     profile_->setHttpCacheType(QWebEngineProfile::MemoryHttpCache);
@@ -375,31 +384,31 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
     try {
         const mockData = {
             brands: [
-                { brand: 'Chromium', version: '130' },
-                { brand: 'Google Chrome', version: '130' },
+                { brand: 'Chromium', version: '%CHROME_MAJOR%' },
+                { brand: 'Google Chrome', version: '%CHROME_MAJOR%' },
                 { brand: 'Not?A_Brand', version: '99' }
             ],
             mobile: false,
-            platform: 'Linux',
+            platform: '%PLATFORM%',
             getHighEntropyValues: function() {
                 return Promise.resolve({
                     architecture: 'x86',
                     bitness: '64',
                     brands: [
-                        { brand: 'Chromium', version: '130.0.6723.69' },
-                        { brand: 'Google Chrome', version: '130.0.6723.69' },
+                        { brand: 'Chromium', version: '%CHROME_FULL%' },
+                        { brand: 'Google Chrome', version: '%CHROME_FULL%' },
                         { brand: 'Not?A_Brand', version: '99.0.0.0' }
                     ],
                     fullVersionList: [
-                        { brand: 'Chromium', version: '130.0.6723.69' },
-                        { brand: 'Google Chrome', version: '130.0.6723.69' },
+                        { brand: 'Chromium', version: '%CHROME_FULL%' },
+                        { brand: 'Google Chrome', version: '%CHROME_FULL%' },
                         { brand: 'Not?A_Brand', version: '99.0.0.0' }
                     ],
                     mobile: false,
                     model: '',
-                    platform: 'Linux',
+                    platform: '%PLATFORM%',
                     platformVersion: '6.5.0',
-                    uaFullVersion: '130.0.6723.69'
+                    uaFullVersion: '%CHROME_FULL%'
                 });
             }
         };
@@ -410,21 +419,20 @@ MainWindow::MainWindow(QWidget *parent, bool privateMode)
         });
     } catch(e) {}
 })();
-)JS"));
+)JS")
+                                       .replace(QStringLiteral("%CHROME_MAJOR%"),
+                                                QString::fromLatin1(BrowserIdentity::chromiumMajorVersion()))
+                                       .replace(QStringLiteral("%CHROME_FULL%"),
+                                                QString::fromLatin1(BrowserIdentity::chromiumFullVersion()))
+                                       .replace(QStringLiteral("%PLATFORM%"),
+                                                QString::fromLatin1(BrowserIdentity::platformName())));
   googleAuthScript.setInjectionPoint(QWebEngineScript::DocumentCreation);
   googleAuthScript.setWorldId(QWebEngineScript::MainWorld);
   googleAuthScript.setRunsOnSubFrames(false);
   profile_->scripts()->insert(googleAuthScript);
 
   profile_->setHttpAcceptLanguage("th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7");
-#if defined(Q_OS_WIN)
-  const QString defaultUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-#elif defined(Q_OS_MAC)
-  const QString defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-#else
-  const QString defaultUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-#endif
-  profile_->setHttpUserAgent(defaultUA);
+  profile_->setHttpUserAgent(QString::fromLatin1(BrowserIdentity::userAgent()));
 
   auto *webSettings = profile_->settings();
   webSettings->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
@@ -1345,6 +1353,8 @@ QWebEngineView *MainWindow::createView(const QUrl &url) {
   });
   connect(view, &QWebEngineView::loadFinished, this, [this, view](bool) {
     applyShieldCosmetics(view);
+    // Re-scan once lazily injected content (feeds, ad slots) has settled.
+    QTimer::singleShot(3000, view, [this, view] { applyShieldCosmetics(view); });
     if (view == currentView()) {
       progress_->setValue(100);
       progress_->hide();
@@ -2054,16 +2064,41 @@ void MainWindow::applyShieldCosmetics(QWebEngineView *view) {
       "(function(){ window.__litewave_shield_disabled = false; })();",
       QWebEngineScript::ApplicationWorld);
 
-  const QString cssJson = QString::fromUtf8(
-      QJsonDocument(QJsonArray{AdBlocker::cosmeticCss()})
-          .toJson(QJsonDocument::Compact));
-  const QString script =
-      "(function(){const id='" + styleId +
-      "';let s=document.getElementById(id);"
-      "if(!s){s=document.createElement('style');s.id=id;"
-      "(document.head||document.documentElement).appendChild(s);}"
-      "s.textContent=" + cssJson + "[0];})();";
-  view->page()->runJavaScript(script, QWebEngineScript::ApplicationWorld);
+  // Collect the page's class names and ids so adblock-rust can return only
+  // the EasyList generic hide rules that can match, plus site-specific ones.
+  static const QString collectScript = QStringLiteral(
+      "(function(){const c=new Set(),i=new Set();"
+      "for(const e of document.querySelectorAll('[class],[id]')){"
+      "if(e.id)i.add(e.id);for(const k of e.classList)c.add(k);"
+      "if(c.size+i.size>8000)break;}"
+      "return [Array.from(c).join('\\n'),Array.from(i).join('\\n')];})();");
+  const QPointer<QWebEngineView> guard(view);
+  const QUrl pageUrl = view->url();
+  view->page()->runJavaScript(
+      collectScript, QWebEngineScript::ApplicationWorld,
+      [this, guard, pageUrl, styleId](const QVariant &result) {
+        if (!guard || !guard->page() || !adBlocker_ || guard->url() != pageUrl)
+          return;
+        const QVariantList parts = result.toList();
+        const QStringList selectors = adBlocker_->cosmeticSelectors(
+            pageUrl, parts.value(0).toString(), parts.value(1).toString());
+
+        // One rule per selector: a single unsupported selector in a grouped
+        // rule would otherwise invalidate the whole group.
+        QString css = AdBlocker::cosmeticCss();
+        for (const QString &selector : selectors)
+          css += selector + QStringLiteral("{display:none!important}\n");
+
+        const QString cssJson = QString::fromUtf8(
+            QJsonDocument(QJsonArray{css}).toJson(QJsonDocument::Compact));
+        const QString script =
+            "(function(){const id='" + styleId +
+            "';let s=document.getElementById(id);"
+            "if(!s){s=document.createElement('style');s.id=id;"
+            "(document.head||document.documentElement).appendChild(s);}"
+            "s.textContent=" + cssJson + "[0];})();";
+        guard->page()->runJavaScript(script, QWebEngineScript::ApplicationWorld);
+      });
 }
 
 void MainWindow::toggleTheme() {
@@ -5874,19 +5909,53 @@ void MainWindow::showSettingsDialog(int initialPage) {
   shieldDescription->setStyleSheet(
       QString("color: %1; font-size: 12px;").arg(subTextColor));
 
-  auto *ruleStatus = new QLabel(
-      QString("ชุดกฎที่ฝังมากับ LiteWave: %1 กฎเครือข่าย")
-          .arg(adBlocker_ ? adBlocker_->ruleCount() : 0),
-      shieldGroup);
+  auto *ruleStatus = new QLabel(shieldGroup);
+  ruleStatus->setWordWrap(true);
   ruleStatus->setStyleSheet(
       QString("color: %1; font-size: 12px; font-weight: 600;")
           .arg(isDark ? "#86efac" : "#15803d"));
+  auto refreshRuleStatus = [this, ruleStatus](const QString &note = {}) {
+    const QDateTime updated =
+        filterUpdater_ ? filterUpdater_->lastUpdated() : QDateTime();
+    const QString when =
+        updated.isValid()
+            ? QLocale().toString(updated.toLocalTime(), QLocale::ShortFormat)
+            : QStringLiteral("ชุดที่มากับโปรแกรม");
+    QString text = QString("EasyList + EasyPrivacy: %1 กฎ · อัปเดตล่าสุด: %2")
+                       .arg(adBlocker_ ? adBlocker_->ruleCount() : 0)
+                       .arg(when);
+    if (!note.isEmpty())
+      text += " · " + note;
+    ruleStatus->setText(text);
+  };
+  refreshRuleStatus();
+  auto *updateRulesButton = new QPushButton("อัปเดตกฎตอนนี้", shieldGroup);
+  updateRulesButton->setEnabled(filterUpdater_ != nullptr);
+  if (filterUpdater_) {
+    connect(updateRulesButton, &QPushButton::clicked, ruleStatus,
+            [this, updateRulesButton, refreshRuleStatus] {
+              updateRulesButton->setEnabled(false);
+              refreshRuleStatus("กำลังดาวน์โหลด…");
+              filterUpdater_->updateNow();
+            });
+    connect(filterUpdater_, &FilterListUpdater::listsUpdated, ruleStatus,
+            [updateRulesButton, refreshRuleStatus](int) {
+              updateRulesButton->setEnabled(true);
+              refreshRuleStatus();
+            });
+    connect(filterUpdater_, &FilterListUpdater::updateFailed, ruleStatus,
+            [updateRulesButton, refreshRuleStatus](const QString &) {
+              updateRulesButton->setEnabled(true);
+              refreshRuleStatus("อัปเดตไม่สำเร็จ");
+            });
+  }
 
   shieldGroupLayout->addWidget(shieldEnabledBox);
   shieldGroupLayout->addWidget(standardShieldRadio);
   shieldGroupLayout->addWidget(aggressiveShieldRadio);
   shieldGroupLayout->addWidget(shieldDescription);
   shieldGroupLayout->addWidget(ruleStatus);
+  shieldGroupLayout->addWidget(updateRulesButton, 0, Qt::AlignLeft);
   shieldLayout->addWidget(shieldGroup);
 
   auto *exceptionsGroup = new QGroupBox(
