@@ -73,7 +73,7 @@ target_link_libraries(LiteWave PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(LiteWave PRIVATE ws2_32 userenv bcrypt ntdll advapi32 shell32 ole32 oleaut32)
+    target_link_libraries(LiteWave PRIVATE ws2_32 userenv bcrypt ntdll advapi32 shell32 ole32 oleaut32 synchronization)
     set_target_properties(LiteWave PROPERTIES WIN32_EXECUTABLE TRUE)
     target_sources(LiteWave PRIVATE assets/litewave.rc)
 endif()
@@ -111,7 +111,7 @@ if(BUILD_TESTING)
         LiteWaveFilterEngine
     )
     if(WIN32)
-        target_link_libraries(ShieldTests PRIVATE ws2_32 userenv bcrypt ntdll advapi32 shell32 ole32 oleaut32)
+        target_link_libraries(ShieldTests PRIVATE ws2_32 userenv bcrypt ntdll advapi32 shell32 ole32 oleaut32 synchronization)
     endif()
     add_dependencies(ShieldTests LiteWaveFilterEngineBuild)
     add_test(NAME ShieldTests COMMAND ShieldTests)
